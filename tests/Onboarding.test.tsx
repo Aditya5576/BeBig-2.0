@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
+import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import WelcomeScreen from '../app/onboarding/welcome';
 import GoalScreen from '../app/onboarding/goal';
 import ExperienceScreen from '../app/onboarding/experience';
@@ -8,7 +8,7 @@ import AuthScreen from '../app/onboarding/auth';
 import HomeScreen from '../app/home';
 import RootIndex from '../app/index';
 import { useOnboardingStore } from '../src/features/onboarding';
-import { authService } from '../src/features/auth';
+import { useAuthStore } from '../src/features/auth';
 
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
@@ -30,10 +30,57 @@ jest.mock('expo-router', () => ({
   }),
 }));
 
-describe('Milestone 2 — Real Onboarding Flow Verification', () => {
+// Mock native expo auth modules
+jest.mock('expo-apple-authentication', () => ({
+  isAvailableAsync: jest.fn().mockResolvedValue(true),
+  signInAsync: jest.fn(),
+  AppleAuthenticationScope: { FULL_NAME: 0, EMAIL: 1 },
+}));
+
+jest.mock('expo-web-browser', () => ({
+  openAuthSessionAsync: jest.fn(),
+}));
+
+jest.mock('expo-linking', () => ({
+  createURL: jest.fn((path: string) => `bebig://${path}`),
+}));
+
+// Mock Supabase
+jest.mock('../src/lib/supabase', () => ({
+  supabase: {
+    auth: {
+      signUp: jest.fn(),
+      signInWithPassword: jest.fn(),
+      signInWithIdToken: jest.fn(),
+      signInWithOAuth: jest.fn(),
+      signOut: jest.fn(),
+      getSession: jest.fn().mockResolvedValue({ data: { session: null } }),
+      onAuthStateChange: jest.fn().mockReturnValue({
+        data: { subscription: { unsubscribe: jest.fn() } },
+      }),
+    },
+    from: jest.fn().mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),
+      upsert: jest.fn().mockReturnThis(),
+      single: jest.fn().mockResolvedValue({ data: null, error: null }),
+    }),
+  },
+  isSupabaseConfigured: jest.fn(() => true),
+}));
+
+describe('Milestone 2 & 3 — Onboarding Flow Verification', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     useOnboardingStore.getState().resetOnboarding();
+    useAuthStore.setState({
+      status: 'unauthenticated',
+      user: null,
+      session: null,
+      isConfigured: true,
+      error: null,
+    });
   });
 
   // 1 & 2: Welcome Screen
@@ -131,32 +178,21 @@ describe('Milestone 2 — Real Onboarding Flow Verification', () => {
     expect(mockPush).toHaveBeenCalledWith('/onboarding/auth');
   });
 
-  // 9 & 10: Auth Screen & Zero Fake Authentication
-  it('9 & 10: renders Auth screen and does NOT perform fake authentication', async () => {
-    const appleSpy = jest.spyOn(authService, 'signInWithApple');
-    const { getByTestId, findByText } = await render(<AuthScreen />);
+  // 9 & 10: Auth Screen Controls & Zero Fake Bypass
+  it('9 & 10: renders production Auth screen and removes dev bypass shortcut', async () => {
+    const { getByTestId, queryByTestId } = await render(<AuthScreen />);
 
     expect(getByTestId('auth-apple-button')).toBeTruthy();
     expect(getByTestId('auth-google-button')).toBeTruthy();
-    expect(getByTestId('auth-email-button')).toBeTruthy();
+    expect(getByTestId('auth-email-input')).toBeTruthy();
+    expect(getByTestId('auth-password-input')).toBeTruthy();
+    expect(getByTestId('auth-email-submit-button')).toBeTruthy();
 
-    // Tapping Apple does NOT fake login
-    fireEvent.press(getByTestId('auth-apple-button'));
-    expect(appleSpy).toHaveBeenCalled();
+    // Dev preview bypass button is removed
+    expect(queryByTestId('complete-onboarding-button')).toBeNull();
 
-    expect(
-      await findByText(/Apple Sign-In is scheduled for Milestone 3 with Supabase/i),
-    ).toBeTruthy();
-
-    // Onboarding completion is NOT marked until explicitly tapped
+    // Onboarding completion is false until real authentication
     expect(useOnboardingStore.getState().hasCompletedOnboarding).toBe(false);
-
-    // Enter app via Milestone 2 development preview action
-    fireEvent.press(getByTestId('complete-onboarding-button'));
-    expect(useOnboardingStore.getState().hasCompletedOnboarding).toBe(true);
-    expect(mockReplace).toHaveBeenCalledWith('/home');
-
-    appleSpy.mockRestore();
   });
 
   // 11: Home screen and state reset
@@ -187,15 +223,24 @@ describe('Milestone 2 — Real Onboarding Flow Verification', () => {
 
   // 12a: Root Gatekeeper redirects un-onboarded user to welcome
   it('12a: redirects un-onboarded users to welcome', async () => {
+    useAuthStore.setState({ status: 'unauthenticated' });
     useOnboardingStore.getState().resetOnboarding();
+
     await render(<RootIndex />);
     expect(mockReplace).toHaveBeenCalledWith('/onboarding/welcome');
   });
 
   // 12b: Root Gatekeeper redirects returning user to home
   it('12b: redirects returning users to home', async () => {
+    useAuthStore.setState({
+      status: 'authenticated',
+      user: { id: 'ret-1', email: 'ret@bebig.app' },
+    });
     useOnboardingStore.getState().completeOnboarding();
+
     await render(<RootIndex />);
-    expect(mockReplace).toHaveBeenCalledWith('/home');
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith('/home');
+    });
   });
 });

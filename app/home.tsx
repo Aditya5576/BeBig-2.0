@@ -3,10 +3,14 @@ import { View, StyleSheet, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ScreenContainer, Text, Button, Card } from '../src/components/ui';
 import { useOnboardingStore } from '../src/features/onboarding';
+import { useAuthStore } from '../src/features/auth';
 import { spacing, colors, radii } from '../src/constants/theme';
 
 export default function HomeScreen() {
   const router = useRouter();
+
+  const user = useAuthStore((state) => state.user);
+  const signOut = useAuthStore((state) => state.signOut);
 
   const goal = useOnboardingStore((state) => state.goal);
   const experienceLevel = useOnboardingStore((state) => state.experienceLevel);
@@ -18,7 +22,13 @@ export default function HomeScreen() {
   const workoutStyle = useOnboardingStore((state) => state.workoutStyle);
   const resetOnboarding = useOnboardingStore((state) => state.resetOnboarding);
 
-  const handleReset = () => {
+  const handleSignOut = async () => {
+    await signOut();
+    resetOnboarding();
+    router.replace('/onboarding/welcome');
+  };
+
+  const handleResetDev = () => {
     resetOnboarding();
     router.replace('/onboarding/welcome');
   };
@@ -41,7 +51,7 @@ export default function HomeScreen() {
           <View style={styles.badgeContainer}>
             <View style={styles.badge}>
               <Text variant="caption" color="accent" style={styles.badgeText}>
-                Milestone 2 Verified
+                {user ? 'Supabase Authenticated' : 'Milestone 3 Verified'}
               </Text>
             </View>
           </View>
@@ -50,10 +60,25 @@ export default function HomeScreen() {
             Welcome to BeBig!
           </Text>
           <Text variant="body" color="secondary">
-            Onboarding completed successfully. Your training preferences are captured below in local
-            state.
+            {user?.email
+              ? `Signed in as ${user.email}. Your profile is synced with the cloud.`
+              : 'Onboarding completed successfully. Your profile is ready.'}
           </Text>
         </View>
+
+        {user && (
+          <Card style={styles.accountCard} testID="account-card">
+            <Text variant="label" color="muted">
+              AUTHENTICATED ACCOUNT
+            </Text>
+            <Text variant="bodyBold" color="primary" testID="user-email">
+              {user.email ?? 'No email associated'}
+            </Text>
+            <Text variant="caption" color="muted">
+              User ID: {user.id}
+            </Text>
+          </Card>
+        )}
 
         <Card style={styles.profileCard}>
           <Text variant="titleMedium" color="primary" style={styles.cardHeader}>
@@ -64,7 +89,7 @@ export default function HomeScreen() {
             <Text variant="label" color="muted">
               Primary Goal:
             </Text>
-            <Text variant="bodyBold" color="accent" testID="summary-goal">
+            <Text variant="bodyBold" color="primary" testID="summary-goal">
               {formatText(goal)}
             </Text>
           </View>
@@ -82,7 +107,7 @@ export default function HomeScreen() {
             <Text variant="label" color="muted">
               Weekly Frequency:
             </Text>
-            <Text variant="bodyBold" color="primary" testID="summary-days">
+            <Text variant="bodyBold" color="primary" testID="summary-frequency">
               {formatText(daysPerWeek)}
             </Text>
           </View>
@@ -133,27 +158,35 @@ export default function HomeScreen() {
           </View>
         </Card>
 
-        <Card style={styles.infoCard}>
-          <Text variant="titleMedium" color="primary">
-            Upcoming Milestones
-          </Text>
-          <Text variant="body" color="secondary">
-            In Milestone 3, Supabase will be integrated for cloud authentication and cross-device
-            profile synchronization.
-          </Text>
-        </Card>
-
+        {/* Account Actions */}
         <View style={styles.actionSection}>
+          <Button
+            testID="sign-out-button"
+            title="Sign Out"
+            onPress={handleSignOut}
+            variant="outline"
+            size="lg"
+            style={styles.signOutButton}
+          />
+
+          <View style={styles.devDivider}>
+            <View style={styles.dividerLine} />
+            <Text variant="caption" color="muted" style={styles.dividerLabel}>
+              DEVELOPMENT TOOLS
+            </Text>
+            <View style={styles.dividerLine} />
+          </View>
+
           <Button
             testID="reset-onboarding-button"
             title="Reset Onboarding (Dev Testing)"
-            onPress={handleReset}
-            variant="outline"
-            size="lg"
+            onPress={handleResetDev}
+            variant="secondary"
+            size="md"
             style={styles.resetButton}
           />
           <Text variant="caption" color="muted" style={styles.resetHint}>
-            Use this button on your iPhone to reset state and test the onboarding flow again.
+            Use this button during local testing to clear local state and run the flow again.
           </Text>
         </View>
       </ScrollView>
@@ -163,7 +196,8 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   scrollContent: {
-    paddingVertical: spacing.lg,
+    flexGrow: 1,
+    paddingVertical: spacing.md,
     gap: spacing.lg,
   },
   header: {
@@ -174,47 +208,66 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   badge: {
-    backgroundColor: colors.dark.surfaceElevated,
-    borderColor: colors.dark.primary,
+    backgroundColor: '#0E291B',
+    borderColor: colors.dark.success,
     borderWidth: 1,
-    borderRadius: radii.full,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.sm + 2,
     paddingVertical: 4,
+    borderRadius: radii.full,
   },
   badgeText: {
-    letterSpacing: 1.2,
+    color: colors.dark.success,
     fontWeight: '700',
-    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  accountCard: {
+    backgroundColor: colors.dark.surfaceElevated,
+    borderColor: colors.dark.borderLight,
+    gap: spacing.xs,
   },
   profileCard: {
-    gap: spacing.md,
+    backgroundColor: colors.dark.surface,
+    borderColor: colors.dark.border,
+    padding: spacing.md,
   },
   cardHeader: {
-    marginBottom: spacing.xs,
+    marginBottom: spacing.sm,
   },
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: spacing.xs,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingVertical: spacing.sm + 2,
+    borderBottomWidth: 1,
     borderBottomColor: colors.dark.border,
   },
   noBorder: {
     borderBottomWidth: 0,
   },
-  infoCard: {
-    gap: spacing.xs,
-    backgroundColor: colors.dark.surfaceSubtle,
-  },
   actionSection: {
-    gap: spacing.xs,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.lg,
+    gap: spacing.md,
+    paddingBottom: spacing.xl,
+  },
+  signOutButton: {
+    borderColor: colors.dark.error,
+  },
+  devDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.dark.border,
+  },
+  dividerLabel: {
+    letterSpacing: 1,
+    fontWeight: '700',
   },
   resetButton: {
     width: '100%',
-    borderColor: colors.dark.borderLight,
   },
   resetHint: {
     textAlign: 'center',
