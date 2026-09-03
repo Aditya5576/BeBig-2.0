@@ -1,0 +1,32 @@
+{
+  "expo": {
+    "name": "BeBig",
+    "slug": "bebig",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "bebig",
+    "userInterfaceStyle": "automatic",
+
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.aditya.bebig",
+      "userInterfaceStyle": "automatic"
+    },
+    "android": {
+      "package": "com.aditya.bebig",
+      "userInterfaceStyle": "automatic",
+      "adaptiveIcon": {
+        "backgroundColor": "#090D16",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": ["expo-router"]
+  }
+}
