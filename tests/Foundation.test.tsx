@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
-import FoundationScreen from '../app/index';
+import FoundationScreen from '../src/components/FoundationScreen';
 import { env } from '../src/config/env';
 import { colors, spacing } from '../src/constants/theme';
 

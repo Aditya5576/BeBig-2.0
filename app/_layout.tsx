@@ -15,7 +15,9 @@ export default function RootLayout() {
           animation: 'fade',
         }}
       >
-        <Stack.Screen name="index" options={{ title: 'BeBig Foundation' }} />
+        <Stack.Screen name="index" />
+        <Stack.Screen name="onboarding" />
+        <Stack.Screen name="home" />
         <Stack.Screen name="+not-found" options={{ title: 'Not Found' }} />
       </Stack>
     </SafeAreaProvider>

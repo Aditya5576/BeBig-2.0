@@ -70,8 +70,12 @@ export function Button({
       testID={testID}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel || title}
-      accessibilityState={{ disabled: !isInteractive, busy: loading }}
-      onPress={isInteractive ? onPress : undefined}
+      disabled={!isInteractive}
+      onPress={() => {
+        if (isInteractive) {
+          onPress();
+        }
+      }}
       style={({ pressed }) => [
         styles.base,
         containerVariantStyle,
