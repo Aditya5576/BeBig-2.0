@@ -10,7 +10,9 @@ export default function HomeScreen() {
   const router = useRouter();
 
   const user = useAuthStore((state) => state.user);
+  const isGuest = useAuthStore((state) => state.isGuest);
   const signOut = useAuthStore((state) => state.signOut);
+  const exitGuestMode = useAuthStore((state) => state.exitGuestMode);
 
   const goal = useOnboardingStore((state) => state.goal);
   const experienceLevel = useOnboardingStore((state) => state.experienceLevel);
@@ -23,9 +25,15 @@ export default function HomeScreen() {
   const resetOnboarding = useOnboardingStore((state) => state.resetOnboarding);
 
   const handleSignOut = async () => {
-    await signOut();
-    resetOnboarding();
-    router.replace('/onboarding/welcome');
+    if (isGuest) {
+      await exitGuestMode();
+      // Onboarding and workout preferences are preserved on device per requirement
+      router.replace('/onboarding/welcome');
+    } else {
+      await signOut();
+      resetOnboarding();
+      router.replace('/onboarding/welcome');
+    }
   };
 
   const handleResetDev = () => {
@@ -44,6 +52,18 @@ export default function HomeScreen() {
       ? preferredTrainingDays.map((d) => d.slice(0, 3).toUpperCase()).join(', ')
       : 'Any day';
 
+  const badgeText = user
+    ? 'Supabase Authenticated'
+    : isGuest
+      ? 'Guest Mode — Local Device'
+      : 'Milestone 3 Verified';
+
+  const subtitleText = user?.email
+    ? `Signed in as ${user.email}. Your profile is synced with the cloud.`
+    : isGuest
+      ? 'Guest Mode — Data stored on this device'
+      : 'Onboarding completed successfully. Your profile is ready.';
+
   return (
     <ScreenContainer>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -51,7 +71,7 @@ export default function HomeScreen() {
           <View style={styles.badgeContainer}>
             <View style={styles.badge}>
               <Text variant="caption" color="accent" style={styles.badgeText}>
-                {user ? 'Supabase Authenticated' : 'Milestone 3 Verified'}
+                {badgeText}
               </Text>
             </View>
           </View>
@@ -60,9 +80,7 @@ export default function HomeScreen() {
             Welcome to BeBig!
           </Text>
           <Text variant="body" color="secondary">
-            {user?.email
-              ? `Signed in as ${user.email}. Your profile is synced with the cloud.`
-              : 'Onboarding completed successfully. Your profile is ready.'}
+            {subtitleText}
           </Text>
         </View>
 
@@ -76,6 +94,21 @@ export default function HomeScreen() {
             </Text>
             <Text variant="caption" color="muted">
               User ID: {user.id}
+            </Text>
+          </Card>
+        )}
+
+        {isGuest && (
+          <Card style={styles.accountCard} testID="guest-account-card">
+            <Text variant="label" color="accent">
+              GUEST MODE
+            </Text>
+            <Text variant="bodyBold" color="primary">
+              Local Device Athlete
+            </Text>
+            <Text variant="caption" color="secondary">
+              Full training features active. All workouts and preferences are stored privately on
+              this device.
             </Text>
           </Card>
         )}
@@ -161,8 +194,8 @@ export default function HomeScreen() {
         {/* Account Actions */}
         <View style={styles.actionSection}>
           <Button
-            testID="sign-out-button"
-            title="Sign Out"
+            testID={isGuest ? 'exit-guest-button' : 'sign-out-button'}
+            title={isGuest ? 'Exit Guest Mode' : 'Sign Out'}
             onPress={handleSignOut}
             variant="outline"
             size="lg"

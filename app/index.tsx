@@ -5,16 +5,18 @@ import { ScreenContainer, Text } from '../src/components/ui';
 import { useAuthStore } from '../src/features/auth';
 import { useOnboardingStore } from '../src/features/onboarding';
 import { profileService } from '../src/features/profile';
+import { guestStorage } from '../src/lib/storage';
 import { colors, spacing } from '../src/constants/theme';
 
 /**
  * Root Index Gatekeeper
  *
  * Responsibilities:
- * 1. Initialize Supabase authentication session on app start.
- * 2. If authenticated, restore cloud profile data (cross-device sync).
- * 3. Route to /home if user is authenticated and onboarding is complete.
- * 4. Route to /onboarding/welcome if user is unauthenticated or has incomplete onboarding.
+ * 1. Initialize authentication session on app start (Supabase cloud or local guest).
+ * 2. If authenticated, restore cloud profile data from Supabase.
+ * 3. If guest, rehydrate local preferences from guestStorage.
+ * 4. Route to /home if user (authenticated or guest) has completed onboarding.
+ * 5. Route to /onboarding/welcome if unauthenticated or onboarding is incomplete.
  */
 export default function Index() {
   const status = useAuthStore((state) => state.status);
@@ -41,7 +43,7 @@ export default function Index() {
   useEffect(() => {
     let isMounted = true;
 
-    async function checkCloudProfile() {
+    async function checkProfileAndStorage() {
       if (status === 'authenticated' && user?.id) {
         try {
           const profile = await profileService.getProfile(user.id);
@@ -57,6 +59,23 @@ export default function Index() {
         } catch {
           // Fallback to local onboarding state
         }
+      } else if (status === 'guest') {
+        try {
+          const storedOnboarding = await guestStorage.getOnboardingData();
+          if (storedOnboarding && isMounted) {
+            if (storedOnboarding.goal) setGoal(storedOnboarding.goal);
+            if (storedOnboarding.experienceLevel)
+              setExperienceLevel(storedOnboarding.experienceLevel);
+            if (storedOnboarding.daysPerWeek) setDaysPerWeek(storedOnboarding.daysPerWeek);
+            if (storedOnboarding.workoutDuration)
+              setWorkoutDuration(storedOnboarding.workoutDuration);
+            if (storedOnboarding.equipment) setEquipment(storedOnboarding.equipment);
+            if (storedOnboarding.workoutStyle) setWorkoutStyle(storedOnboarding.workoutStyle);
+            if (storedOnboarding.hasCompletedOnboarding) completeOnboarding();
+          }
+        } catch {
+          // Fallback to local memory state
+        }
       }
 
       if (isMounted) {
@@ -64,7 +83,7 @@ export default function Index() {
       }
     }
 
-    void checkCloudProfile();
+    void checkProfileAndStorage();
 
     return () => {
       isMounted = false;
@@ -81,8 +100,11 @@ export default function Index() {
     completeOnboarding,
   ]);
 
-  // Loading Screen while initializing auth or checking cloud profile
-  if (status === 'initializing' || (status === 'authenticated' && !profileChecked)) {
+  // Loading Screen while initializing auth or restoring profiles/local data
+  if (
+    status === 'initializing' ||
+    ((status === 'authenticated' || status === 'guest') && !profileChecked)
+  ) {
     return (
       <ScreenContainer style={styles.centerContainer}>
         <View style={styles.loadingContent}>
@@ -103,12 +125,12 @@ export default function Index() {
     );
   }
 
-  // Authenticated & Onboarding Complete -> Home
-  if (status === 'authenticated' && hasCompletedOnboarding) {
+  // Authenticated or Guest & Onboarding Complete -> Home
+  if ((status === 'authenticated' || status === 'guest') && hasCompletedOnboarding) {
     return <Redirect href="/home" />;
   }
 
-  // Authenticated with incomplete onboarding, or Unauthenticated -> Onboarding
+  // Incomplete onboarding or Unauthenticated -> Onboarding
   return <Redirect href="/onboarding/welcome" />;
 }
 

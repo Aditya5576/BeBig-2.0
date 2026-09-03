@@ -14,6 +14,7 @@ export default function AuthScreen() {
   const router = useRouter();
   const completeOnboarding = useOnboardingStore((state) => state.completeOnboarding);
   const setAuthSession = useAuthStore((state) => state.setSession);
+  const enterGuestMode = useAuthStore((state) => state.enterGuestMode);
 
   const [emailMode, setEmailMode] = useState<EmailMode>('sign_in');
   const [email, setEmail] = useState('');
@@ -39,6 +40,24 @@ export default function AuthScreen() {
     setAuthSession(session);
     completeOnboarding();
     router.replace('/home');
+  };
+
+  const handleContinueAsGuest = async () => {
+    setLoading(true);
+    setStatusMessage(null);
+    try {
+      const onboardingState = useOnboardingStore.getState();
+      await enterGuestMode(onboardingState);
+      completeOnboarding();
+      router.replace('/home');
+    } catch (err: any) {
+      setStatusMessage({
+        text: err?.message || 'Failed to start guest session. Please try again.',
+        type: 'error',
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleAppleAuth = async () => {
@@ -297,6 +316,30 @@ export default function AuthScreen() {
             disabled={loading}
             style={styles.submitButton}
           />
+
+          {/* Guest Mode Option */}
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <Text variant="caption" color="muted" style={styles.dividerText}>
+              OR
+            </Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          <View style={styles.guestSection}>
+            <Button
+              testID="continue-as-guest-button"
+              title="Continue as Guest"
+              onPress={handleContinueAsGuest}
+              variant="outline"
+              size="lg"
+              disabled={loading}
+              style={styles.guestButton}
+            />
+            <Text variant="caption" color="muted" style={styles.guestCaption}>
+              Full training features. Data stored locally on this device.
+            </Text>
+          </View>
         </View>
       </ScrollView>
     </ScreenContainer>
@@ -397,5 +440,17 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     marginTop: spacing.xs,
+  },
+  guestSection: {
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  guestButton: {
+    width: '100%',
+    borderColor: colors.dark.borderLight,
+  },
+  guestCaption: {
+    textAlign: 'center',
   },
 });
