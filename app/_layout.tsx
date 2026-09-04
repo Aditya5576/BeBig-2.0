@@ -31,6 +31,7 @@ export default function RootLayout() {
         <Stack.Screen name="workout/history" />
         <Stack.Screen name="workout/history/[id]" />
         <Stack.Screen name="workout/progress/prs" />
+        <Stack.Screen name="workout/progress/exercise/[id]" />
         <Stack.Screen name="+not-found" options={{ title: 'Not Found' }} />
       </Stack>
     </SafeAreaProvider>

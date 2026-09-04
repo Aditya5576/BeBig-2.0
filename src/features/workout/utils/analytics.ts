@@ -323,6 +323,7 @@ export interface ExerciseHistoryEntry {
     weight: number;
     reps: number;
     rir: number;
+    notes?: string;
   }[];
 }
 
@@ -369,6 +370,7 @@ export function getExerciseHistory(
         weight: s.weight,
         reps: s.reps,
         rir: s.rir,
+        notes: s.notes,
       })),
     });
   }
