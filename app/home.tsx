@@ -429,17 +429,28 @@ export default function HomeScreen() {
 
             {/* PRs Card */}
             <Card style={styles.metricCard} testID="metric-prs-card">
-              <Text variant="caption" color="muted" style={styles.metricLabel}>
-                PERSONAL RECORDS
-              </Text>
-              <Text variant="titleLarge" color="primary" style={styles.metricValue}>
-                🏆 {analytics.totalPRsCount}
-              </Text>
-              <Text variant="caption" color="secondary">
-                {analytics.topPRs.length > 0
-                  ? `Top: ${analytics.topPRs[0].exerciseName} (${analytics.topPRs[0].maxWeight}kg)`
-                  : 'Record weights to set PRs'}
-              </Text>
+              <Pressable
+                testID="home-prs-button"
+                onPress={() => router.push('/workout/progress/prs' as any)}
+                style={styles.metricPressable}
+              >
+                <View style={styles.metricHeaderRow}>
+                  <Text variant="caption" color="muted" style={styles.metricLabel}>
+                    PERSONAL RECORDS
+                  </Text>
+                  <Text variant="caption" color="accent" style={styles.viewMoreArrow}>
+                    ›
+                  </Text>
+                </View>
+                <Text variant="titleLarge" color="primary" style={styles.metricValue}>
+                  🏆 {analytics.totalPRsCount}
+                </Text>
+                <Text variant="caption" color="secondary" numberOfLines={1}>
+                  {analytics.topPRs.length > 0
+                    ? `Top: ${analytics.topPRs[0].exerciseName} (${analytics.topPRs[0].maxWeight}kg)`
+                    : 'Record weights to set PRs'}
+                </Text>
+              </Pressable>
             </Card>
 
             {/* Monthly Workouts Card */}
@@ -954,6 +965,18 @@ const styles = StyleSheet.create({
   },
   metricValue: {
     fontSize: 18,
+    fontWeight: '700',
+  },
+  metricPressable: {
+    gap: 4,
+  },
+  metricHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  viewMoreArrow: {
+    fontSize: 16,
     fontWeight: '700',
   },
   templatesSection: {

@@ -417,4 +417,24 @@ describe('Milestone 8 — Home Dashboard Integration Tests', () => {
       { timeout: 3000 },
     );
   });
+
+  // Scenario 10: Tapping Personal Records card navigates to /workout/progress/prs
+  it('Scenario 10: Tapping Personal Records card navigates to /workout/progress/prs', async () => {
+    const { getByTestId } = await render(<HomeScreen />);
+
+    await waitFor(
+      () => {
+        expect(getByTestId('metric-prs-card')).toBeTruthy();
+        expect(getByTestId('home-prs-button')).toBeTruthy();
+      },
+      { timeout: 3000 },
+    );
+
+    const prsBtn = getByTestId('home-prs-button');
+    await act(async () => {
+      fireEvent.press(prsBtn);
+    });
+
+    expect(mockPush).toHaveBeenCalledWith('/workout/progress/prs');
+  });
 });
