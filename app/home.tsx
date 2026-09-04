@@ -191,8 +191,17 @@ export default function HomeScreen() {
           </View>
         </Card>
 
-        {/* Account Actions */}
+        {/* Actions */}
         <View style={styles.actionSection}>
+          <Button
+            testID="browse-exercises-button"
+            title="Browse Exercise Library"
+            onPress={() => router.push('/exercises' as any)}
+            variant="primary"
+            size="lg"
+            style={styles.browseButton}
+          />
+
           <Button
             testID={isGuest ? 'exit-guest-button' : 'sign-out-button'}
             title={isGuest ? 'Exit Guest Mode' : 'Sign Out'}
@@ -280,6 +289,9 @@ const styles = StyleSheet.create({
   actionSection: {
     gap: spacing.md,
     paddingBottom: spacing.xl,
+  },
+  browseButton: {
+    width: '100%',
   },
   signOutButton: {
     borderColor: colors.dark.error,

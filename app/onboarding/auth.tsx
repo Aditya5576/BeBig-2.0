@@ -1,5 +1,13 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, TextInput, Pressable } from 'react-native';
+import {
+  View,
+  StyleSheet,
+  ScrollView,
+  TextInput,
+  Pressable,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { ScreenContainer, Text, Button, Card } from '../../src/components/ui';
 import { OnboardingHeader, useOnboardingStore } from '../../src/features/onboarding';
@@ -147,206 +155,221 @@ export default function AuthScreen() {
     <ScreenContainer>
       <OnboardingHeader currentStep={4} totalSteps={4} onBack={handleBack} canGoBack={true} />
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.headerSection}>
-          <Text variant="display" color="primary">
-            Save Your Profile
-          </Text>
-          <Text variant="body" color="secondary">
-            Connect your account to sync workouts, preserve routines, and access your training
-            history across all your devices.
-          </Text>
-        </View>
-
-        {!configured && (
-          <Card style={styles.unconfiguredCard} testID="supabase-unconfigured-banner">
-            <Text variant="label" color="accent" style={styles.cardBadge}>
-              ⚠️ Supabase Configuration Required
+      <KeyboardAvoidingView
+        testID="auth-keyboard-avoiding-view"
+        style={styles.keyboardAvoiding}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
+          <View style={styles.headerSection}>
+            <Text variant="display" color="primary">
+              Save Your Profile
             </Text>
             <Text variant="body" color="secondary">
-              Set{' '}
-              <Text variant="bodyBold" color="primary">
-                EXPO_PUBLIC_SUPABASE_URL
-              </Text>{' '}
-              and{' '}
-              <Text variant="bodyBold" color="primary">
-                EXPO_PUBLIC_SUPABASE_ANON_KEY
-              </Text>{' '}
-              in your{' '}
-              <Text variant="bodyBold" color="primary">
-                .env
-              </Text>{' '}
-              file to enable cloud accounts.
+              Connect your account to sync workouts, preserve routines, and access your training
+              history across all your devices.
             </Text>
-          </Card>
-        )}
-
-        {statusMessage && (
-          <Card
-            style={[
-              styles.statusCard,
-              statusMessage.type === 'error' && styles.statusCardError,
-              statusMessage.type === 'success' && styles.statusCardSuccess,
-            ]}
-            testID="auth-status-banner"
-          >
-            <Text
-              variant="body"
-              color={
-                statusMessage.type === 'error'
-                  ? 'primary'
-                  : statusMessage.type === 'success'
-                    ? 'accent'
-                    : 'secondary'
-              }
-            >
-              {statusMessage.text}
-            </Text>
-          </Card>
-        )}
-
-        {/* Social Authentication */}
-        <View style={styles.authButtonsSection}>
-          <Button
-            testID="auth-apple-button"
-            title="  Continue with Apple"
-            onPress={handleAppleAuth}
-            variant="secondary"
-            size="lg"
-            disabled={loading}
-            style={styles.appleButton}
-          />
-
-          <Button
-            testID="auth-google-button"
-            title="G  Continue with Google"
-            onPress={handleGoogleAuth}
-            variant="secondary"
-            size="lg"
-            disabled={loading}
-            style={styles.googleButton}
-          />
-        </View>
-
-        <View style={styles.dividerRow}>
-          <View style={styles.dividerLine} />
-          <Text variant="caption" color="muted" style={styles.dividerText}>
-            OR CONTINUE WITH EMAIL
-          </Text>
-          <View style={styles.dividerLine} />
-        </View>
-
-        {/* Email Authentication Form */}
-        <View style={styles.emailSection}>
-          {/* Mode Switcher */}
-          <View style={styles.modeTabs}>
-            <Pressable
-              testID="toggle-signin"
-              onPress={() => {
-                setEmailMode('sign_in');
-                setStatusMessage(null);
-              }}
-              style={[styles.tabButton, emailMode === 'sign_in' && styles.tabButtonActive]}
-            >
-              <Text variant="label" color={emailMode === 'sign_in' ? 'accent' : 'muted'}>
-                Sign In
-              </Text>
-            </Pressable>
-
-            <Pressable
-              testID="toggle-signup"
-              onPress={() => {
-                setEmailMode('sign_up');
-                setStatusMessage(null);
-              }}
-              style={[styles.tabButton, emailMode === 'sign_up' && styles.tabButtonActive]}
-            >
-              <Text variant="label" color={emailMode === 'sign_up' ? 'accent' : 'muted'}>
-                Create Account
-              </Text>
-            </Pressable>
           </View>
 
-          {/* Input Fields */}
-          <View style={styles.inputsContainer}>
-            <View style={styles.inputGroup}>
-              <Text variant="label" color="secondary">
-                Email
+          {!configured && (
+            <Card style={styles.unconfiguredCard} testID="supabase-unconfigured-banner">
+              <Text variant="label" color="accent" style={styles.cardBadge}>
+                ⚠️ Supabase Configuration Required
               </Text>
-              <TextInput
-                testID="auth-email-input"
-                style={styles.input}
-                placeholder="athlete@bebig.app"
-                placeholderTextColor={colors.dark.textMuted}
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!loading}
-              />
-            </View>
+              <Text variant="body" color="secondary">
+                Set{' '}
+                <Text variant="bodyBold" color="primary">
+                  EXPO_PUBLIC_SUPABASE_URL
+                </Text>{' '}
+                and{' '}
+                <Text variant="bodyBold" color="primary">
+                  EXPO_PUBLIC_SUPABASE_ANON_KEY
+                </Text>{' '}
+                in your{' '}
+                <Text variant="bodyBold" color="primary">
+                  .env
+                </Text>{' '}
+                file to enable cloud accounts.
+              </Text>
+            </Card>
+          )}
 
-            <View style={styles.inputGroup}>
-              <Text variant="label" color="secondary">
-                Password
+          {statusMessage && (
+            <Card
+              style={[
+                styles.statusCard,
+                statusMessage.type === 'error' && styles.statusCardError,
+                statusMessage.type === 'success' && styles.statusCardSuccess,
+              ]}
+              testID="auth-status-banner"
+            >
+              <Text
+                variant="body"
+                color={
+                  statusMessage.type === 'error'
+                    ? 'primary'
+                    : statusMessage.type === 'success'
+                      ? 'accent'
+                      : 'secondary'
+                }
+              >
+                {statusMessage.text}
               </Text>
-              <TextInput
-                testID="auth-password-input"
-                style={styles.input}
-                placeholder={emailMode === 'sign_up' ? 'At least 6 characters' : 'Enter password'}
-                placeholderTextColor={colors.dark.textMuted}
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!loading}
-              />
-            </View>
+            </Card>
+          )}
+
+          {/* Social Authentication */}
+          <View style={styles.authButtonsSection}>
+            <Button
+              testID="auth-apple-button"
+              title="  Continue with Apple"
+              onPress={handleAppleAuth}
+              variant="secondary"
+              size="lg"
+              disabled={loading}
+              style={styles.appleButton}
+            />
+
+            <Button
+              testID="auth-google-button"
+              title="G  Continue with Google"
+              onPress={handleGoogleAuth}
+              variant="secondary"
+              size="lg"
+              disabled={loading}
+              style={styles.googleButton}
+            />
           </View>
 
-          <Button
-            testID="auth-email-submit-button"
-            title={emailMode === 'sign_in' ? 'Sign In' : 'Create Account'}
-            onPress={handleEmailSubmit}
-            variant="primary"
-            size="lg"
-            loading={loading}
-            disabled={loading}
-            style={styles.submitButton}
-          />
-
-          {/* Guest Mode Option */}
           <View style={styles.dividerRow}>
             <View style={styles.dividerLine} />
             <Text variant="caption" color="muted" style={styles.dividerText}>
-              OR
+              OR CONTINUE WITH EMAIL
             </Text>
             <View style={styles.dividerLine} />
           </View>
 
-          <View style={styles.guestSection}>
+          {/* Email Authentication Form */}
+          <View style={styles.emailSection}>
+            {/* Mode Switcher */}
+            <View style={styles.modeTabs}>
+              <Pressable
+                testID="toggle-signin"
+                onPress={() => {
+                  setEmailMode('sign_in');
+                  setStatusMessage(null);
+                }}
+                style={[styles.tabButton, emailMode === 'sign_in' && styles.tabButtonActive]}
+              >
+                <Text variant="label" color={emailMode === 'sign_in' ? 'accent' : 'muted'}>
+                  Sign In
+                </Text>
+              </Pressable>
+
+              <Pressable
+                testID="toggle-signup"
+                onPress={() => {
+                  setEmailMode('sign_up');
+                  setStatusMessage(null);
+                }}
+                style={[styles.tabButton, emailMode === 'sign_up' && styles.tabButtonActive]}
+              >
+                <Text variant="label" color={emailMode === 'sign_up' ? 'accent' : 'muted'}>
+                  Create Account
+                </Text>
+              </Pressable>
+            </View>
+
+            {/* Input Fields */}
+            <View style={styles.inputsContainer}>
+              <View style={styles.inputGroup}>
+                <Text variant="label" color="secondary">
+                  Email
+                </Text>
+                <TextInput
+                  testID="auth-email-input"
+                  style={styles.input}
+                  placeholder="athlete@bebig.app"
+                  placeholderTextColor={colors.dark.textMuted}
+                  value={email}
+                  onChangeText={setEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  editable={!loading}
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text variant="label" color="secondary">
+                  Password
+                </Text>
+                <TextInput
+                  testID="auth-password-input"
+                  style={styles.input}
+                  placeholder={emailMode === 'sign_up' ? 'At least 6 characters' : 'Enter password'}
+                  placeholderTextColor={colors.dark.textMuted}
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  editable={!loading}
+                />
+              </View>
+            </View>
+
             <Button
-              testID="continue-as-guest-button"
-              title="Continue as Guest"
-              onPress={handleContinueAsGuest}
-              variant="outline"
+              testID="auth-email-submit-button"
+              title={emailMode === 'sign_in' ? 'Sign In' : 'Create Account'}
+              onPress={handleEmailSubmit}
+              variant="primary"
               size="lg"
+              loading={loading}
               disabled={loading}
-              style={styles.guestButton}
+              style={styles.submitButton}
             />
-            <Text variant="caption" color="muted" style={styles.guestCaption}>
-              Full training features. Data stored locally on this device.
-            </Text>
+
+            {/* Guest Mode Option */}
+            <View style={styles.dividerRow}>
+              <View style={styles.dividerLine} />
+              <Text variant="caption" color="muted" style={styles.dividerText}>
+                OR
+              </Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            <View style={styles.guestSection}>
+              <Button
+                testID="continue-as-guest-button"
+                title="Continue as Guest"
+                onPress={handleContinueAsGuest}
+                variant="outline"
+                size="lg"
+                disabled={loading}
+                style={styles.guestButton}
+              />
+              <Text variant="caption" color="muted" style={styles.guestCaption}>
+                Full training features. Data stored locally on this device.
+              </Text>
+            </View>
           </View>
-        </View>
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
+  keyboardAvoiding: {
+    flex: 1,
+  },
   scrollContent: {
     flexGrow: 1,
     paddingVertical: spacing.md,

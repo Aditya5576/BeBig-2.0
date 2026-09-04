@@ -19,6 +19,9 @@ export default function RootLayout() {
         <Stack.Screen name="onboarding" />
         <Stack.Screen name="home" />
         <Stack.Screen name="auth/callback" />
+        <Stack.Screen name="exercises/index" />
+        <Stack.Screen name="exercises/[id]" />
+        <Stack.Screen name="exercises/new" />
         <Stack.Screen name="+not-found" options={{ title: 'Not Found' }} />
       </Stack>
     </SafeAreaProvider>
