@@ -1,11 +1,23 @@
-import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
+import React, { useState, useCallback, useMemo } from 'react';
+import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { useRouter, useFocusEffect as routerFocusEffect } from 'expo-router';
 import { ScreenContainer, Text, Button, Card } from '../../src/components/ui';
-import { workoutRepository, WorkoutSession } from '../../src/features/workout';
+import {
+  workoutRepository,
+  WorkoutSession,
+  formatDuration,
+  getMonthGroupKey,
+  getMonthGroupLabel,
+} from '../../src/features/workout';
 import { colors, spacing, radii } from '../../src/constants/theme';
 
 const useFocusEffect = routerFocusEffect || React.useEffect;
+
+interface MonthGroup {
+  key: string;
+  label: string;
+  workouts: WorkoutSession[];
+}
 
 export default function WorkoutHistoryScreen() {
   const router = useRouter();
@@ -47,14 +59,60 @@ export default function WorkoutHistoryScreen() {
     });
   };
 
-  const formatDuration = (seconds?: number) => {
-    if (!seconds || seconds <= 0) return '0 min';
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    if (mins > 0 && secs > 0) return `${mins}m ${secs}s`;
-    if (mins > 0) return `${mins} min`;
-    return `${secs}s`;
+  const handleDeleteWorkout = (workout: WorkoutSession) => {
+    Alert.alert(
+      'Delete Workout',
+      `Are you sure you want to delete "${workout.name}"? This action cannot be undone.`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await workoutRepository.deleteCompletedWorkout(workout.id);
+              await loadHistory();
+            } catch {
+              Alert.alert('Error', 'Failed to delete workout. Please try again.');
+            }
+          },
+        },
+      ],
+    );
   };
+
+  const monthGroups = useMemo<MonthGroup[]>(() => {
+    if (workouts.length === 0) return [];
+
+    // Ensure workouts are sorted newest -> oldest
+    const sortedWorkouts = [...workouts].sort((a, b) => {
+      const timeA = new Date(a.finishedAt || a.startedAt).getTime();
+      const timeB = new Date(b.finishedAt || b.startedAt).getTime();
+      return timeB - timeA;
+    });
+
+    const groupMap = new Map<string, MonthGroup>();
+    const groups: MonthGroup[] = [];
+
+    for (const w of sortedWorkouts) {
+      const dateStr = w.finishedAt || w.startedAt;
+      const key = getMonthGroupKey(dateStr);
+      const label = getMonthGroupLabel(dateStr);
+
+      let group = groupMap.get(key);
+      if (!group) {
+        group = { key, label, workouts: [] };
+        groupMap.set(key, group);
+        groups.push(group);
+      }
+      group.workouts.push(w);
+    }
+
+    return groups;
+  }, [workouts]);
 
   return (
     <ScreenContainer>
@@ -116,85 +174,132 @@ export default function WorkoutHistoryScreen() {
             />
           </Card>
         ) : (
-          /* Workouts List (Newest-first) */
-          <View style={styles.listContainer}>
-            {workouts.map((item) => {
-              const exercisesSnippet = item.exercises
-                .map((e) => e.exerciseName)
-                .slice(0, 3)
-                .join(' • ');
+          /* Month-Grouped Workouts List */
+          <View style={styles.listContainer} testID="history-grouped-list">
+            {monthGroups.map((group) => (
+              <View
+                key={group.key}
+                style={styles.monthSection}
+                testID={`history-month-section-${group.key}`}
+              >
+                {/* Month Group Header */}
+                <View style={styles.monthHeader} testID={`history-month-header-${group.key}`}>
+                  <Text variant="titleMedium" color="primary" style={styles.monthTitle}>
+                    {group.label}
+                  </Text>
+                  <View style={styles.monthBadge}>
+                    <Text variant="caption" color="secondary" style={styles.monthBadgeText}>
+                      {group.workouts.length} {group.workouts.length === 1 ? 'workout' : 'workouts'}
+                    </Text>
+                  </View>
+                </View>
 
-              return (
-                <Card key={item.id} style={styles.workoutCard} testID={`history-card-${item.id}`}>
-                  <Pressable
-                    testID={`history-item-${item.id}`}
-                    onPress={() => router.push(`/workout/history/${item.id}` as any)}
-                    style={styles.cardPressable}
-                  >
-                    <View style={styles.cardHeader}>
-                      <Text variant="titleMedium" color="primary" style={styles.workoutName}>
-                        {item.name}
-                      </Text>
-                      <Text variant="caption" color="muted">
-                        {formatCompletedDate(item.finishedAt || item.startedAt)}
-                      </Text>
-                    </View>
+                {/* Workouts in Month */}
+                <View style={styles.monthCardsContainer}>
+                  {group.workouts.map((item) => {
+                    const exercisesSnippet = item.exercises
+                      .map((e) => e.exerciseName)
+                      .slice(0, 3)
+                      .join(' • ');
 
-                    {/* Metrics Row */}
-                    <View style={styles.metricsRow}>
-                      <View style={styles.metricItem}>
-                        <Text variant="caption" color="muted" style={styles.metricLabel}>
-                          DURATION
-                        </Text>
-                        <Text variant="bodyBold" color="primary">
-                          {formatDuration(item.totalDuration)}
-                        </Text>
-                      </View>
+                    return (
+                      <Card key={item.id} style={styles.workoutCard} testID={`history-card-${item.id}`}>
+                        <Pressable
+                          testID={`history-item-${item.id}`}
+                          onPress={() => router.push(`/workout/history/${item.id}` as any)}
+                          style={styles.cardPressable}
+                        >
+                          <View style={styles.cardHeader}>
+                            <Text
+                              variant="titleMedium"
+                              color="primary"
+                              style={styles.workoutName}
+                              numberOfLines={1}
+                            >
+                              {item.name}
+                            </Text>
+                            <Text variant="caption" color="muted">
+                              {formatCompletedDate(item.finishedAt || item.startedAt)}
+                            </Text>
+                          </View>
 
-                      <View style={styles.metricDivider} />
+                          {/* Metrics Row */}
+                          <View style={styles.metricsRow}>
+                            <View style={styles.metricItem}>
+                              <Text variant="caption" color="muted" style={styles.metricLabel}>
+                                DURATION
+                              </Text>
+                              <Text variant="bodyBold" color="primary">
+                                {formatDuration(item.totalDuration)}
+                              </Text>
+                            </View>
 
-                      <View style={styles.metricItem}>
-                        <Text variant="caption" color="muted" style={styles.metricLabel}>
-                          VOLUME
-                        </Text>
-                        <Text variant="bodyBold" color="accent">
-                          {(item.totalVolume ?? 0).toLocaleString()} kg
-                        </Text>
-                      </View>
+                            <View style={styles.metricDivider} />
 
-                      <View style={styles.metricDivider} />
+                            <View style={styles.metricItem}>
+                              <Text variant="caption" color="muted" style={styles.metricLabel}>
+                                VOLUME
+                              </Text>
+                              <Text variant="bodyBold" color="accent">
+                                {(item.totalVolume ?? 0).toLocaleString()} kg
+                              </Text>
+                            </View>
 
-                      <View style={styles.metricItem}>
-                        <Text variant="caption" color="muted" style={styles.metricLabel}>
-                          SETS
-                        </Text>
-                        <Text variant="bodyBold" color="primary">
-                          {item.completedSetsCount ?? 0}
-                        </Text>
-                      </View>
-                    </View>
+                            <View style={styles.metricDivider} />
 
-                    {exercisesSnippet ? (
-                      <Text
-                        variant="caption"
-                        color="secondary"
-                        numberOfLines={1}
-                        style={styles.exerciseList}
-                      >
-                        {exercisesSnippet}
-                        {item.exercises.length > 3 ? '...' : ''}
-                      </Text>
-                    ) : null}
+                            <View style={styles.metricItem}>
+                              <Text variant="caption" color="muted" style={styles.metricLabel}>
+                                SETS
+                              </Text>
+                              <Text variant="bodyBold" color="primary">
+                                {item.completedSetsCount ?? 0}
+                              </Text>
+                            </View>
+                          </View>
 
-                    <View style={styles.detailsRow}>
-                      <Text variant="caption" color="accent" style={styles.viewDetailsText}>
-                        View Details ›
-                      </Text>
-                    </View>
-                  </Pressable>
-                </Card>
-              );
-            })}
+                          {exercisesSnippet ? (
+                            <Text
+                              variant="caption"
+                              color="secondary"
+                              numberOfLines={1}
+                              style={styles.exerciseList}
+                            >
+                              {exercisesSnippet}
+                              {item.exercises.length > 3 ? '...' : ''}
+                            </Text>
+                          ) : null}
+                        </Pressable>
+
+                        {/* Card Actions Row: Delete + View Details */}
+                        <View style={styles.cardActionsRow}>
+                          <Pressable
+                            testID={`delete-workout-${item.id}`}
+                            onPress={() => handleDeleteWorkout(item)}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            style={styles.deleteButton}
+                            accessibilityLabel={`Delete ${item.name}`}
+                            accessibilityRole="button"
+                          >
+                            <Text variant="caption" style={styles.deleteButtonText}>
+                              Delete
+                            </Text>
+                          </Pressable>
+
+                          <Pressable
+                            onPress={() => router.push(`/workout/history/${item.id}` as any)}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          >
+                            <Text variant="caption" color="accent" style={styles.viewDetailsText}>
+                              View Details ›
+                            </Text>
+                          </Pressable>
+                        </View>
+                      </Card>
+                    );
+                  })}
+                </View>
+              </View>
+            ))}
           </View>
         )}
       </ScrollView>
@@ -257,6 +362,36 @@ const styles = StyleSheet.create({
     minWidth: 180,
   },
   listContainer: {
+    gap: spacing.xl,
+  },
+  monthSection: {
+    gap: spacing.sm,
+  },
+  monthHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.xs,
+    paddingBottom: spacing.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.dark.borderLight,
+    marginBottom: spacing.xs,
+  },
+  monthTitle: {
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  monthBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radii.full,
+  },
+  monthBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  monthCardsContainer: {
     gap: spacing.md,
   },
   workoutCard: {
@@ -300,11 +435,28 @@ const styles = StyleSheet.create({
   exerciseList: {
     marginTop: 2,
   },
-  detailsRow: {
-    alignItems: 'flex-end',
+  cardActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.06)',
+    paddingTop: spacing.sm,
     marginTop: 2,
+  },
+  deleteButton: {
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radii.sm,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+  },
+  deleteButtonText: {
+    color: colors.dark.error,
+    fontWeight: '600',
+    fontSize: 12,
   },
   viewDetailsText: {
     fontWeight: '700',
   },
 });
+
