@@ -69,10 +69,14 @@ export default function Index() {
               setWorkoutDuration(storedOnboarding.workoutDuration);
             if (storedOnboarding.equipment) setEquipment(storedOnboarding.equipment);
             if (storedOnboarding.workoutStyle) setWorkoutStyle(storedOnboarding.workoutStyle);
-            if (storedOnboarding.hasCompletedOnboarding) completeOnboarding();
+          }
+          if (isMounted) {
+            completeOnboarding();
           }
         } catch {
-          // Fallback to local memory state
+          if (isMounted) {
+            completeOnboarding();
+          }
         }
       }
 

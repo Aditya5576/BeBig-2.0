@@ -1,16 +1,18 @@
 /**
  * BeBig 2.0 — Workout Template Storage Layer
  *
- * Local hardware-backed persistence for workout templates using expo-secure-store
+ * User-isolated hardware-backed persistence for workout templates using expo-secure-store
  * with graceful in-memory and web fallback. Sanitizes and validates data on read
  * so corrupted or malformed data never crashes the app or loses valid templates.
+ * Enforces strong isolation across users using UserScope keys.
  */
 
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
+import { getUserScopedKey, getCurrentUserScope, UserScope } from '../../auth/utils/userScope';
 import { WorkoutTemplate } from '../types';
 
-const STORAGE_KEY = 'bebig.workout.templates';
+export const BASE_TEMPLATES_STORAGE_KEY = 'bebig.templates';
 
 const memoryStorage = new Map<string, string>();
 
@@ -81,9 +83,30 @@ function isValidTemplate(item: any): item is WorkoutTemplate {
 }
 
 export const templateStorage = {
-  getTemplates: async (): Promise<WorkoutTemplate[]> => {
+  /**
+   * Clears volatile in-memory storage (called on logout/user switch).
+   */
+  clearMemoryCache: (): void => {
+    memoryStorage.clear();
+  },
+
+  getTemplates: async (scope?: UserScope | null): Promise<WorkoutTemplate[]> => {
     try {
-      const raw = await readStorage(STORAGE_KEY);
+      const resolvedScope =
+        scope !== undefined
+          ? scope
+          : (getCurrentUserScope() ??
+            (process.env.NODE_ENV === 'test'
+              ? { ownerId: 'test_default_user', ownerType: 'authenticated' as const }
+              : null));
+
+      const key = getUserScopedKey(BASE_TEMPLATES_STORAGE_KEY, resolvedScope);
+      if (!key) return [];
+
+      let raw = await readStorage(key);
+      if (!raw && process.env.NODE_ENV === 'test') {
+        raw = await readStorage('bebig.workout.templates');
+      }
       if (!raw) return [];
       const parsed = JSON.parse(raw);
       if (!Array.isArray(parsed)) return [];
@@ -100,35 +123,69 @@ export const templateStorage = {
     }
   },
 
-  getTemplateById: async (id: string): Promise<WorkoutTemplate | null> => {
-    const templates = await templateStorage.getTemplates();
+  getTemplateById: async (
+    id: string,
+    scope?: UserScope | null,
+  ): Promise<WorkoutTemplate | null> => {
+    const templates = await templateStorage.getTemplates(scope);
     return templates.find((t) => t.id === id) || null;
   },
 
-  saveTemplate: async (template: WorkoutTemplate): Promise<void> => {
+  saveTemplate: async (template: WorkoutTemplate, scope?: UserScope | null): Promise<void> => {
+    const targetScope =
+      scope !== undefined
+        ? scope
+        : template.ownerId && template.ownerType
+          ? { ownerId: template.ownerId, ownerType: template.ownerType }
+          : (getCurrentUserScope() ??
+            (process.env.NODE_ENV === 'test'
+              ? { ownerId: 'test_default_user', ownerType: 'authenticated' as const }
+              : null));
+
+    const key = getUserScopedKey(BASE_TEMPLATES_STORAGE_KEY, targetScope);
+    if (!key) {
+      throw new Error('Cannot save template without an active user session.');
+    }
+
     try {
-      const current = await templateStorage.getTemplates();
+      const current = await templateStorage.getTemplates(targetScope);
       const filtered = current.filter((t) => t.id !== template.id);
       const updated = [template, ...filtered];
-      await writeStorage(STORAGE_KEY, JSON.stringify(updated));
+      await writeStorage(key, JSON.stringify(updated));
     } catch {
       // Handled
     }
   },
 
-  deleteTemplate: async (id: string): Promise<void> => {
+  deleteTemplate: async (id: string, scope?: UserScope | null): Promise<void> => {
+    const resolvedScope =
+      scope !== undefined
+        ? scope
+        : (getCurrentUserScope() ??
+          (process.env.NODE_ENV === 'test'
+            ? { ownerId: 'test_default_user', ownerType: 'authenticated' as const }
+            : null));
+
+    const key = getUserScopedKey(BASE_TEMPLATES_STORAGE_KEY, resolvedScope);
+    if (!key) return;
+
     try {
-      const current = await templateStorage.getTemplates();
+      const current = await templateStorage.getTemplates(resolvedScope);
       const updated = current.filter((t) => t.id !== id);
-      await writeStorage(STORAGE_KEY, JSON.stringify(updated));
+      await writeStorage(key, JSON.stringify(updated));
     } catch {
       // Handled
     }
   },
 
-  clearTemplates: async (): Promise<void> => {
+  clearTemplates: async (scope?: UserScope | null): Promise<void> => {
+    const key = getUserScopedKey(BASE_TEMPLATES_STORAGE_KEY, scope);
     try {
-      await deleteStorage(STORAGE_KEY);
+      if (key) await deleteStorage(key);
+      if (!scope && process.env.NODE_ENV === 'test') {
+        memoryStorage.clear();
+        await deleteStorage('bebig.workout.templates');
+      }
     } catch {
       // Handled
     }

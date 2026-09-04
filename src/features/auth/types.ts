@@ -46,3 +46,10 @@ export interface AuthState {
   isConfigured: boolean;
   error: string | null;
 }
+
+export type OwnerType = 'authenticated' | 'guest';
+
+export interface UserScope {
+  ownerId: string;
+  ownerType: OwnerType;
+}

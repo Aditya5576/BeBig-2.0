@@ -1,10 +1,13 @@
-import React from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
-import { useRouter } from 'expo-router';
+import React, { useState, useCallback } from 'react';
+import { View, StyleSheet, ScrollView, Alert } from 'react-native';
+import { useRouter, useFocusEffect as routerFocusEffect } from 'expo-router';
 import { ScreenContainer, Text, Button, Card } from '../src/components/ui';
 import { useOnboardingStore } from '../src/features/onboarding';
 import { useAuthStore } from '../src/features/auth';
+import { workoutRepository, WorkoutSession } from '../src/features/workout';
 import { spacing, colors, radii } from '../src/constants/theme';
+
+const useFocusEffect = routerFocusEffect || React.useEffect;
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -24,6 +27,41 @@ export default function HomeScreen() {
   const workoutStyle = useOnboardingStore((state) => state.workoutStyle);
   const resetOnboarding = useOnboardingStore((state) => state.resetOnboarding);
 
+  const [activeWorkout, setActiveWorkout] = useState<WorkoutSession | null>(null);
+
+  const checkActiveWorkout = useCallback(async () => {
+    try {
+      const active = await workoutRepository.getActiveWorkout();
+      setActiveWorkout(active);
+    } catch {
+      setActiveWorkout(null);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void checkActiveWorkout();
+    }, [checkActiveWorkout]),
+  );
+
+  const handleDiscardActiveWorkout = () => {
+    Alert.alert(
+      'Discard Active Workout',
+      'Are you sure you want to discard your current workout? All recorded sets will be lost.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Discard',
+          style: 'destructive',
+          onPress: async () => {
+            await workoutRepository.discardActiveWorkout();
+            setActiveWorkout(null);
+          },
+        },
+      ],
+    );
+  };
+
   const handleSignOut = async () => {
     if (isGuest) {
       await exitGuestMode();
@@ -41,10 +79,22 @@ export default function HomeScreen() {
     router.replace('/onboarding/welcome');
   };
 
-  const formatText = (val: string | number | null | undefined) => {
+  const formatText = (val: string | string[] | number | null | undefined) => {
     if (val === null || val === undefined) return 'Not selected';
     if (typeof val === 'number') return `${val} days / week`;
-    return val.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
+    if (Array.isArray(val)) {
+      if (val.length === 0) return 'Not selected';
+      return val
+        .map((v) =>
+          String(v)
+            .replace(/_/g, ' ')
+            .replace(/\b\w/g, (l) => l.toUpperCase()),
+        )
+        .join(', ');
+    }
+    return String(val)
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, (l) => l.toUpperCase());
   };
 
   const formattedDays =
@@ -191,13 +241,73 @@ export default function HomeScreen() {
           </View>
         </Card>
 
+        {/* Active Workout in Progress Banner */}
+        {activeWorkout && (
+          <Card style={styles.activeWorkoutCard} testID="home-active-workout-banner">
+            <View style={styles.activeBadgeRow}>
+              <View style={styles.activeBadge}>
+                <Text variant="caption" color="accent" style={styles.activeBadgeText}>
+                  ACTIVE WORKOUT IN PROGRESS
+                </Text>
+              </View>
+            </View>
+            <Text variant="titleMedium" color="primary" style={styles.activeWorkoutTitle}>
+              {activeWorkout.name}
+            </Text>
+            <Text variant="caption" color="secondary">
+              Started{' '}
+              {new Date(activeWorkout.startedAt).toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+              })}{' '}
+              • {activeWorkout.exercises.length} Exercises
+            </Text>
+            <View style={styles.activeWorkoutActions}>
+              <Button
+                testID="home-resume-workout-button"
+                title="Resume Workout"
+                onPress={() => router.push('/workout/active' as any)}
+                variant="primary"
+                size="md"
+                style={styles.activeResumeBtn}
+              />
+              <Button
+                testID="home-discard-workout-button"
+                title="Discard"
+                onPress={handleDiscardActiveWorkout}
+                variant="outline"
+                size="md"
+                style={styles.activeDiscardBtn}
+              />
+            </View>
+          </Card>
+        )}
+
         {/* Actions */}
         <View style={styles.actionSection}>
+          <Button
+            testID="start-workout-button"
+            title="Start Workout"
+            onPress={() => router.push('/workout/start' as any)}
+            variant="primary"
+            size="lg"
+            style={styles.actionButton}
+          />
+
+          <Button
+            testID="workout-history-button"
+            title="Workout History"
+            onPress={() => router.push('/workout/history' as any)}
+            variant="secondary"
+            size="lg"
+            style={styles.actionButton}
+          />
+
           <Button
             testID="my-templates-button"
             title="My Workout Templates"
             onPress={() => router.push('/templates' as any)}
-            variant="primary"
+            variant="secondary"
             size="lg"
             style={styles.actionButton}
           />
@@ -275,6 +385,47 @@ const styles = StyleSheet.create({
     backgroundColor: colors.dark.surfaceElevated,
     borderColor: colors.dark.borderLight,
     gap: spacing.xs,
+  },
+  activeWorkoutCard: {
+    backgroundColor: colors.dark.surfaceElevated,
+    borderColor: colors.dark.primary,
+    borderWidth: 1.5,
+    padding: spacing.md,
+    gap: spacing.xs,
+  },
+  activeBadgeRow: {
+    flexDirection: 'row',
+  },
+  activeBadge: {
+    backgroundColor: colors.dark.surface,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    borderRadius: radii.xs,
+    borderWidth: 1,
+    borderColor: colors.dark.primary,
+  },
+  activeBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  activeWorkoutTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  activeWorkoutActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  activeResumeBtn: {
+    flex: 2,
+    minHeight: 44,
+  },
+  activeDiscardBtn: {
+    flex: 1,
+    minHeight: 44,
+    borderColor: colors.dark.error,
   },
   profileCard: {
     backgroundColor: colors.dark.surface,

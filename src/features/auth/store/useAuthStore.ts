@@ -4,6 +4,10 @@ import { isSupabaseConfigured } from '../../../lib/supabase';
 import { OnboardingState } from '../../onboarding/types';
 import { authService } from '../services/authService';
 import { AuthSession, AuthState, GuestSession } from '../types';
+import { purgeLegacyUnscopedStorage } from '../utils/userScope';
+import { workoutStorage } from '../../workout/storage/workoutStorage';
+import { templateStorage } from '../../templates/storage/templateStorage';
+import { customExerciseStorage } from '../../exercises/storage/customExerciseStorage';
 
 interface AuthActions {
   initializeAuth: () => Promise<void>;
@@ -26,6 +30,9 @@ export const useAuthStore = create<AuthState & AuthActions>((set) => ({
   error: null,
 
   initializeAuth: async () => {
+    // Purge legacy unscoped storage records so old global test data is never leaked
+    void purgeLegacyUnscopedStorage();
+
     const configured = isSupabaseConfigured();
     set({ isConfigured: configured });
 
@@ -58,6 +65,9 @@ export const useAuthStore = create<AuthState & AuthActions>((set) => ({
                 guestSession: null,
               });
             } else if (event === 'SIGNED_OUT') {
+              workoutStorage.clearMemoryCache();
+              templateStorage.clearMemoryCache();
+              customExerciseStorage.clearMemoryCache();
               set({
                 status: 'unauthenticated',
                 isGuest: false,
@@ -151,7 +161,10 @@ export const useAuthStore = create<AuthState & AuthActions>((set) => ({
 
     await guestStorage.setGuestSession(guestSession);
     if (onboardingData) {
-      await guestStorage.saveOnboardingData(onboardingData);
+      await guestStorage.saveOnboardingData({
+        ...onboardingData,
+        hasCompletedOnboarding: true,
+      });
     }
 
     set({
@@ -165,6 +178,9 @@ export const useAuthStore = create<AuthState & AuthActions>((set) => ({
   },
 
   exitGuestMode: async () => {
+    workoutStorage.clearMemoryCache();
+    templateStorage.clearMemoryCache();
+    customExerciseStorage.clearMemoryCache();
     await guestStorage.clearGuestSession();
     // Preserves local onboarding and workout preferences per requirement
     set({
@@ -180,6 +196,9 @@ export const useAuthStore = create<AuthState & AuthActions>((set) => ({
   },
 
   signOut: async () => {
+    workoutStorage.clearMemoryCache();
+    templateStorage.clearMemoryCache();
+    customExerciseStorage.clearMemoryCache();
     const state = useAuthStore.getState();
     if (state.isGuest) {
       await guestStorage.clearGuestSession();

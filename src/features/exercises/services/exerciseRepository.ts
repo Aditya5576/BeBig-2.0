@@ -3,6 +3,7 @@ import { ExerciseFilterOptions, ExerciseListResult, IExerciseProvider } from '..
 import { WgerExerciseProvider } from '../providers/wger/WgerExerciseProvider';
 import { customExerciseStorage } from '../storage/customExerciseStorage';
 import { normalizeCategory } from '../providers/wger/wgerMapper';
+import { getCurrentUserScope } from '../../auth/utils/userScope';
 
 export const STANDARD_CATEGORIES: { id: ExerciseCategory; name: string }[] = [
   { id: 'chest', name: 'Chest' },
@@ -125,8 +126,12 @@ export class ExerciseRepository {
       .map((name, idx) => ({ id: `ceq_${idx}`, name: name.trim() }))
       .filter((eq) => eq.name.length > 0);
 
+    const scope = getCurrentUserScope();
+
     const newExercise: Exercise = {
       id,
+      ownerId: scope?.ownerId,
+      ownerType: scope?.ownerType,
       name: trimmedName,
       description: input.description?.trim() || '',
       category: input.category,
@@ -140,8 +145,19 @@ export class ExerciseRepository {
       createdAt: new Date().toISOString(),
     };
 
-    await customExerciseStorage.saveCustomExercise(newExercise);
+    await customExerciseStorage.saveCustomExercise(newExercise, scope);
     return newExercise;
+  }
+
+  async deleteCustomExercise(id: string): Promise<void> {
+    await customExerciseStorage.deleteCustomExercise(id);
+  }
+
+  /**
+   * Invalidates volatile in-memory storage cache on logout/user switch.
+   */
+  clearInMemoryState(): void {
+    customExerciseStorage.clearMemoryCache();
   }
 }
 

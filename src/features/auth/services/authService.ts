@@ -314,9 +314,9 @@ export const authService: IAuthService = {
       try {
         parsedUrl = new URL(urlStr);
       } catch {
-        const fakeBase = 'http://localhost';
+        const fakeBase = 'https://bebig.app';
         const normalized = urlStr.includes('://')
-          ? urlStr.replace(/^[a-zA-Z0-9+.-]+:\/\//, 'http://localhost/')
+          ? urlStr.replace(/^[a-zA-Z0-9+.-]+:\/\//, 'https://bebig.app/')
           : `${fakeBase}/${urlStr}`;
         parsedUrl = new URL(normalized);
       }

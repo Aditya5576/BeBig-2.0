@@ -6,6 +6,8 @@
  * will record actual sets/reps/weight independently.
  */
 
+import { OwnerType } from '../auth';
+
 export interface TemplateExercise {
   exerciseId: string;
   exerciseName: string;
@@ -19,6 +21,8 @@ export interface TemplateExercise {
 
 export interface WorkoutTemplate {
   id: string;
+  ownerId?: string;
+  ownerType?: OwnerType;
   name: string;
   exercises: TemplateExercise[];
   createdAt: string;

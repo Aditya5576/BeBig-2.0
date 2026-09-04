@@ -13,6 +13,7 @@ import {
   UpdateTemplateInput,
 } from '../types';
 import { templateStorage } from '../storage/templateStorage';
+import { getCurrentUserScope } from '../../auth/utils/userScope';
 
 export class TemplateRepository {
   private validateTemplateData(name: string, exercises: Omit<TemplateExercise, 'order'>[]): void {
@@ -81,15 +82,19 @@ export class TemplateRepository {
       targetWeight: ex.targetWeight,
     }));
 
+    const scope = getCurrentUserScope();
+
     const template: WorkoutTemplate = {
       id,
+      ownerId: scope?.ownerId,
+      ownerType: scope?.ownerType,
       name: input.name.trim(),
       exercises: normalizedExercises,
       createdAt: now,
       updatedAt: now,
     };
 
-    await templateStorage.saveTemplate(template);
+    await templateStorage.saveTemplate(template, scope);
     return template;
   }
 
@@ -115,19 +120,30 @@ export class TemplateRepository {
       targetWeight: ex.targetWeight,
     }));
 
+    const scope = getCurrentUserScope();
+
     const updated: WorkoutTemplate = {
       ...existing,
+      ownerId: existing.ownerId || scope?.ownerId,
+      ownerType: existing.ownerType || scope?.ownerType,
       name: updatedName.trim(),
       exercises: normalizedExercises,
       updatedAt: new Date().toISOString(),
     };
 
-    await templateStorage.saveTemplate(updated);
+    await templateStorage.saveTemplate(updated, scope);
     return updated;
   }
 
   async deleteTemplate(id: string): Promise<void> {
     await templateStorage.deleteTemplate(id);
+  }
+
+  /**
+   * Invalidates volatile in-memory storage cache on logout/user switch.
+   */
+  clearInMemoryState(): void {
+    templateStorage.clearMemoryCache();
   }
 }
 

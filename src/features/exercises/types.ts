@@ -5,6 +5,8 @@
  * muscles, equipment, and categories within the BeBig ecosystem.
  */
 
+import { OwnerType } from '../auth';
+
 export type ExerciseCategory =
   'abs' | 'arms' | 'back' | 'calves' | 'cardio' | 'chest' | 'legs' | 'shoulders' | 'other';
 
@@ -30,6 +32,8 @@ export type ExerciseSourceProvider = 'wger' | 'custom' | 'system';
 
 export interface Exercise {
   id: string;
+  ownerId?: string;
+  ownerType?: OwnerType;
   name: string;
   description: string;
   category: ExerciseCategory;

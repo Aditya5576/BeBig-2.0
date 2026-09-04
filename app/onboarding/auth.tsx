@@ -54,9 +54,9 @@ export default function AuthScreen() {
     setLoading(true);
     setStatusMessage(null);
     try {
+      completeOnboarding();
       const onboardingState = useOnboardingStore.getState();
       await enterGuestMode(onboardingState);
-      completeOnboarding();
       router.replace('/home');
     } catch (err: any) {
       setStatusMessage({

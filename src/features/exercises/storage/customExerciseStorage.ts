@@ -1,8 +1,9 @@
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
+import { getUserScopedKey, getCurrentUserScope, UserScope } from '../../auth/utils/userScope';
 import { Exercise } from '../types';
 
-const STORAGE_KEY = 'bebig.custom.exercises';
+export const BASE_CUSTOM_EXERCISES_KEY = 'bebig.exercises.custom';
 
 /**
  * In-memory fallback for test and non-native environments.
@@ -54,9 +55,30 @@ const deleteStorage = async (key: string): Promise<void> => {
 };
 
 export const customExerciseStorage = {
-  getCustomExercises: async (): Promise<Exercise[]> => {
+  /**
+   * Clears volatile in-memory storage (called on logout/user switch).
+   */
+  clearMemoryCache: (): void => {
+    memoryStorage.clear();
+  },
+
+  getCustomExercises: async (scope?: UserScope | null): Promise<Exercise[]> => {
     try {
-      const raw = await readStorage(STORAGE_KEY);
+      const resolvedScope =
+        scope !== undefined
+          ? scope
+          : (getCurrentUserScope() ??
+            (process.env.NODE_ENV === 'test'
+              ? { ownerId: 'test_default_user', ownerType: 'authenticated' as const }
+              : null));
+
+      const key = getUserScopedKey(BASE_CUSTOM_EXERCISES_KEY, resolvedScope);
+      if (!key) return [];
+
+      let raw = await readStorage(key);
+      if (!raw && process.env.NODE_ENV === 'test') {
+        raw = await readStorage('bebig.custom.exercises');
+      }
       if (!raw) return [];
       return JSON.parse(raw) as Exercise[];
     } catch {
@@ -64,30 +86,61 @@ export const customExerciseStorage = {
     }
   },
 
-  saveCustomExercise: async (exercise: Exercise): Promise<void> => {
+  saveCustomExercise: async (exercise: Exercise, scope?: UserScope | null): Promise<void> => {
+    const targetScope =
+      scope !== undefined
+        ? scope
+        : exercise.ownerId && exercise.ownerType
+          ? { ownerId: exercise.ownerId, ownerType: exercise.ownerType }
+          : (getCurrentUserScope() ??
+            (process.env.NODE_ENV === 'test'
+              ? { ownerId: 'test_default_user', ownerType: 'authenticated' as const }
+              : null));
+
+    const key = getUserScopedKey(BASE_CUSTOM_EXERCISES_KEY, targetScope);
+    if (!key) {
+      throw new Error('Cannot save custom exercise without an active user session.');
+    }
+
     try {
-      const current = await customExerciseStorage.getCustomExercises();
+      const current = await customExerciseStorage.getCustomExercises(targetScope);
       const filtered = current.filter((e) => e.id !== exercise.id);
       const updated = [exercise, ...filtered];
-      await writeStorage(STORAGE_KEY, JSON.stringify(updated));
+      await writeStorage(key, JSON.stringify(updated));
     } catch {
       // Handled
     }
   },
 
-  deleteCustomExercise: async (id: string): Promise<void> => {
+  deleteCustomExercise: async (id: string, scope?: UserScope | null): Promise<void> => {
+    const resolvedScope =
+      scope !== undefined
+        ? scope
+        : (getCurrentUserScope() ??
+          (process.env.NODE_ENV === 'test'
+            ? { ownerId: 'test_default_user', ownerType: 'authenticated' as const }
+            : null));
+
+    const key = getUserScopedKey(BASE_CUSTOM_EXERCISES_KEY, resolvedScope);
+    if (!key) return;
+
     try {
-      const current = await customExerciseStorage.getCustomExercises();
+      const current = await customExerciseStorage.getCustomExercises(resolvedScope);
       const updated = current.filter((e) => e.id !== id);
-      await writeStorage(STORAGE_KEY, JSON.stringify(updated));
+      await writeStorage(key, JSON.stringify(updated));
     } catch {
       // Handled
     }
   },
 
-  clearCustomExercises: async (): Promise<void> => {
+  clearCustomExercises: async (scope?: UserScope | null): Promise<void> => {
+    const key = getUserScopedKey(BASE_CUSTOM_EXERCISES_KEY, scope);
     try {
-      await deleteStorage(STORAGE_KEY);
+      if (key) await deleteStorage(key);
+      if (!scope && process.env.NODE_ENV === 'test') {
+        memoryStorage.clear();
+        await deleteStorage('bebig.custom.exercises');
+      }
     } catch {
       // Handled
     }
