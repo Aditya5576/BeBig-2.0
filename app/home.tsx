@@ -194,12 +194,21 @@ export default function HomeScreen() {
         {/* Actions */}
         <View style={styles.actionSection}>
           <Button
+            testID="my-templates-button"
+            title="My Workout Templates"
+            onPress={() => router.push('/templates' as any)}
+            variant="primary"
+            size="lg"
+            style={styles.actionButton}
+          />
+
+          <Button
             testID="browse-exercises-button"
             title="Browse Exercise Library"
             onPress={() => router.push('/exercises' as any)}
-            variant="primary"
+            variant="secondary"
             size="lg"
-            style={styles.browseButton}
+            style={styles.actionButton}
           />
 
           <Button
@@ -290,7 +299,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingBottom: spacing.xl,
   },
-  browseButton: {
+  actionButton: {
     width: '100%',
   },
   signOutButton: {

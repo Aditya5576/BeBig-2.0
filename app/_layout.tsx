@@ -22,6 +22,9 @@ export default function RootLayout() {
         <Stack.Screen name="exercises/index" />
         <Stack.Screen name="exercises/[id]" />
         <Stack.Screen name="exercises/new" />
+        <Stack.Screen name="templates/index" />
+        <Stack.Screen name="templates/new" />
+        <Stack.Screen name="templates/[id]" />
         <Stack.Screen name="+not-found" options={{ title: 'Not Found' }} />
       </Stack>
     </SafeAreaProvider>
