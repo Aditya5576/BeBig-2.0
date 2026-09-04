@@ -3,31 +3,42 @@ import {
   View,
   StyleSheet,
   ScrollView,
-  TextInput,
   Pressable,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { useRouter } from 'expo-router';
-import { ScreenContainer, Text, Button, Card } from '../../src/components/ui';
-import { OnboardingHeader, useOnboardingStore } from '../../src/features/onboarding';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { ScreenContainer, Text, Button, Card, Input } from '../../src/components/ui';
+import { useOnboardingStore } from '../../src/features/onboarding';
 import { authService, useAuthStore } from '../../src/features/auth';
 import { profileService } from '../../src/features/profile';
-import { isSupabaseConfigured } from '../../src/lib/supabase';
+import { supabase, isSupabaseConfigured } from '../../src/lib/supabase';
+import { getAuthRedirectUrl } from '../../src/features/auth/utils/redirect';
 import { spacing, colors, radii } from '../../src/constants/theme';
 
 type EmailMode = 'sign_in' | 'sign_up';
 
-export default function AuthScreen() {
+export interface AuthScreenProps {
+  initialMode?: 'sign_in' | 'sign_up';
+}
+
+export default function AuthScreen({ initialMode }: AuthScreenProps = {}) {
   const router = useRouter();
+  const searchParams = useLocalSearchParams<{ mode?: string }>();
   const completeOnboarding = useOnboardingStore((state) => state.completeOnboarding);
   const setAuthSession = useAuthStore((state) => state.setSession);
   const enterGuestMode = useAuthStore((state) => state.enterGuestMode);
 
-  const [emailMode, setEmailMode] = useState<EmailMode>('sign_in');
+  const [emailMode, setEmailMode] = useState<EmailMode>(
+    initialMode || (searchParams.mode === 'sign_up' ? 'sign_up' : 'sign_in'),
+  );
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{
     text: string;
     type: 'error' | 'info' | 'success';
@@ -36,18 +47,53 @@ export default function AuthScreen() {
   const configured = isSupabaseConfigured();
 
   const handlePostAuthSuccess = async (session: any) => {
-    try {
-      if (session?.user?.id) {
-        // Sync local onboarding selections to Supabase cloud profile
-        await profileService.syncOnboardingProfile(session.user.id, useOnboardingStore.getState());
-      }
-    } catch {
-      // Continue to home even if profile sync fails (can retry in background)
+    if (!session?.user?.id) {
+      setAuthSession(session);
+      router.replace('/home');
+      return;
     }
 
+    const userId = session.user.id;
+    let existingProfile = null;
+
+    try {
+      existingProfile = await profileService.getProfile(userId);
+    } catch {
+      // Ignore network errors; fallback below
+    }
+
+    // 1. New Account Sign-Up: Always reset local onboarding state and route directly to /onboarding/goal
+    if (emailMode === 'sign_up') {
+      useOnboardingStore.getState().resetOnboarding();
+      setAuthSession(session);
+      router.replace('/onboarding/goal');
+      return;
+    }
+
+    // 2. Existing account with completed onboarding:
+    // Restore their saved profile into useOnboardingStore and route directly to Home.
+    if (existingProfile && existingProfile.onboarding_completed) {
+      const store = useOnboardingStore.getState();
+      if (existingProfile.goal) store.setGoal(existingProfile.goal);
+      if (existingProfile.experience_level)
+        store.setExperienceLevel(existingProfile.experience_level);
+      if (existingProfile.days_per_week) store.setDaysPerWeek(existingProfile.days_per_week);
+      if (existingProfile.workout_duration)
+        store.setWorkoutDuration(existingProfile.workout_duration);
+      if (existingProfile.equipment) store.setEquipment(existingProfile.equipment);
+      if (existingProfile.workout_style) store.setWorkoutStyle(existingProfile.workout_style);
+      store.completeOnboarding();
+
+      setAuthSession(session);
+      router.replace('/home');
+      return;
+    }
+
+    // 3. Existing account or social login with incomplete onboarding:
+    // Reset local store to ensure clean slate and route to onboarding questions.
+    useOnboardingStore.getState().resetOnboarding();
     setAuthSession(session);
-    completeOnboarding();
-    router.replace('/home');
+    router.replace('/onboarding/goal');
   };
 
   const handleContinueAsGuest = async () => {
@@ -59,12 +105,11 @@ export default function AuthScreen() {
       await enterGuestMode(onboardingState);
       router.replace('/home');
     } catch (err: any) {
+      setLoading(false);
       setStatusMessage({
         text: err?.message || 'Failed to start guest session. Please try again.',
         type: 'error',
       });
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -73,11 +118,11 @@ export default function AuthScreen() {
     setStatusMessage(null);
 
     const result = await authService.signInWithApple();
-    setLoading(false);
 
     if (result.success && result.session) {
       await handlePostAuthSuccess(result.session);
     } else {
+      setLoading(false);
       setStatusMessage({
         text: result.message,
         type: result.message.includes('cancelled') ? 'info' : 'error',
@@ -90,11 +135,11 @@ export default function AuthScreen() {
     setStatusMessage(null);
 
     const result = await authService.signInWithGoogle();
-    setLoading(false);
 
     if (result.success && result.session) {
       await handlePostAuthSuccess(result.session);
     } else {
+      setLoading(false);
       setStatusMessage({
         text: result.message,
         type: result.message.includes('cancelled') ? 'info' : 'error',
@@ -115,51 +160,126 @@ export default function AuthScreen() {
       setStatusMessage({ text: 'Password must be at least 6 characters.', type: 'error' });
       return;
     }
+    if (emailMode === 'sign_up' && confirmPassword && password !== confirmPassword) {
+      setStatusMessage({ text: 'Passwords do not match.', type: 'error' });
+      return;
+    }
 
     setLoading(true);
     setStatusMessage(null);
 
     if (emailMode === 'sign_up') {
+      useOnboardingStore.getState().resetOnboarding();
       const result = await authService.signUpWithEmail(email, password);
-      setLoading(false);
 
       if (result.success) {
         if (result.session) {
           await handlePostAuthSuccess(result.session);
         } else if (result.requiresEmailConfirmation) {
+          setLoading(false);
           setStatusMessage({
             text: result.message,
             type: 'success',
           });
         }
       } else {
+        setLoading(false);
         setStatusMessage({ text: result.message, type: 'error' });
       }
     } else {
       const result = await authService.signInWithEmail(email, password);
-      setLoading(false);
 
       if (result.success && result.session) {
         await handlePostAuthSuccess(result.session);
       } else {
+        setLoading(false);
         setStatusMessage({ text: result.message, type: 'error' });
       }
     }
   };
 
+  const handleResetPassword = async () => {
+    const targetEmail = (resetEmail || email).trim();
+    if (!targetEmail) {
+      setStatusMessage({
+        text: 'Please enter your email address to reset password.',
+        type: 'error',
+      });
+      return;
+    }
+
+    setResetLoading(true);
+    setStatusMessage(null);
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(targetEmail, {
+        redirectTo: getAuthRedirectUrl(),
+      });
+      if (error) {
+        setStatusMessage({ text: error.message, type: 'error' });
+      } else {
+        setStatusMessage({
+          text: `Password reset instructions have been sent to ${targetEmail}.`,
+          type: 'success',
+        });
+        setShowForgotPassword(false);
+      }
+    } catch (err: any) {
+      setStatusMessage({
+        text: err?.message || 'Failed to send password reset email.',
+        type: 'error',
+      });
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
   const handleBack = () => {
-    router.back();
+    if (showForgotPassword) {
+      setShowForgotPassword(false);
+      return;
+    }
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/onboarding/welcome');
+    }
   };
 
   return (
     <ScreenContainer>
-      <OnboardingHeader currentStep={4} totalSteps={4} onBack={handleBack} canGoBack={true} />
+      {/* Top Header Row with Athletic Branding & Back Navigation */}
+      <View style={styles.topNavRow}>
+        <Pressable
+          onPress={handleBack}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          style={({ pressed }) => [styles.backButton, pressed && styles.backButtonPressed]}
+          testID="auth-back-button"
+        >
+          <Text variant="titleLarge" color="accent" style={styles.backChevron}>
+            ‹
+          </Text>
+          <Text variant="bodyBold" color="accent">
+            Back
+          </Text>
+        </Pressable>
+
+        <View style={styles.brandBadge}>
+          <Text variant="caption" color="accent" style={styles.brandBadgeText}>
+            BEBIG 2.0
+          </Text>
+        </View>
+
+        <View style={styles.topNavPlaceholder} />
+      </View>
 
       <KeyboardAvoidingView
         testID="auth-keyboard-avoiding-view"
         style={styles.keyboardAvoiding}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
       >
         <ScrollView
           contentContainerStyle={styles.scrollContent}
@@ -167,13 +287,15 @@ export default function AuthScreen() {
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
         >
+          {/* Header Section */}
           <View style={styles.headerSection}>
-            <Text variant="display" color="primary">
-              Save Your Profile
+            <Text variant="display" color="primary" style={styles.headingTitle}>
+              {emailMode === 'sign_in' ? 'Welcome Back' : 'Create Your Account'}
             </Text>
-            <Text variant="body" color="secondary">
-              Connect your account to sync workouts, preserve routines, and access your training
-              history across all your devices.
+            <Text variant="body" color="secondary" style={styles.headingSubtitle}>
+              {emailMode === 'sign_in'
+                ? 'Sign in to access your workouts, templates, and progression history.'
+                : 'Join the lifters tracking progression, beating PRs, and building peak physique.'}
             </Text>
           </View>
 
@@ -224,8 +346,205 @@ export default function AuthScreen() {
             </Card>
           )}
 
+          {/* Mode Switcher Tabs */}
+          <View style={styles.modeTabs}>
+            <Pressable
+              testID="toggle-signin"
+              onPress={() => {
+                setEmailMode('sign_in');
+                setShowForgotPassword(false);
+                setStatusMessage(null);
+              }}
+              style={[styles.tabButton, emailMode === 'sign_in' && styles.tabButtonActive]}
+            >
+              <Text
+                variant="label"
+                color={emailMode === 'sign_in' ? 'accent' : 'muted'}
+                style={styles.tabText}
+              >
+                Log In
+              </Text>
+            </Pressable>
+
+            <Pressable
+              testID="toggle-signup"
+              onPress={() => {
+                setEmailMode('sign_up');
+                setShowForgotPassword(false);
+                setStatusMessage(null);
+              }}
+              style={[styles.tabButton, emailMode === 'sign_up' && styles.tabButtonActive]}
+            >
+              <Text
+                variant="label"
+                color={emailMode === 'sign_up' ? 'accent' : 'muted'}
+                style={styles.tabText}
+              >
+                Create Account
+              </Text>
+            </Pressable>
+          </View>
+
+          {/* Forgot Password Sub-Card */}
+          {showForgotPassword ? (
+            <Card style={styles.forgotPasswordCard} testID="forgot-password-card">
+              <View style={styles.forgotPasswordHeader}>
+                <Text variant="titleMedium" color="primary">
+                  Reset Your Password
+                </Text>
+                <Text variant="caption" color="secondary">
+                  Enter your email address and we will send you a recovery link to choose a new
+                  password.
+                </Text>
+              </View>
+
+              <Input
+                testID="forgot-password-email-input"
+                label="ACCOUNT EMAIL"
+                placeholder="athlete@bebig.app"
+                value={resetEmail}
+                onChangeText={setResetEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                editable={!resetLoading}
+              />
+
+              <View style={styles.forgotPasswordActions}>
+                <Button
+                  testID="forgot-password-submit-button"
+                  title="Send Reset Link"
+                  onPress={handleResetPassword}
+                  variant="primary"
+                  size="md"
+                  loading={resetLoading}
+                  disabled={resetLoading}
+                  style={styles.resetSubmitButton}
+                />
+                <Button
+                  testID="forgot-password-cancel-button"
+                  title="Cancel"
+                  onPress={() => setShowForgotPassword(false)}
+                  variant="ghost"
+                  size="md"
+                  disabled={resetLoading}
+                />
+              </View>
+            </Card>
+          ) : (
+            /* Email Authentication Form */
+            <View style={styles.formContainer}>
+              <View style={styles.inputsGroup}>
+                <Input
+                  testID="auth-email-input"
+                  label="Email Address"
+                  placeholder="athlete@bebig.app"
+                  value={email}
+                  onChangeText={setEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  editable={!loading}
+                />
+
+                <Input
+                  testID="auth-password-input"
+                  label="Password"
+                  placeholder={emailMode === 'sign_up' ? 'At least 6 characters' : 'Enter password'}
+                  value={password}
+                  onChangeText={setPassword}
+                  isPassword={true}
+                  toggleTestID="toggle-password-visibility"
+                  editable={!loading}
+                />
+
+                {emailMode === 'sign_up' ? (
+                  <View style={styles.confirmPasswordContainer}>
+                    <Input
+                      testID="auth-confirm-password-input"
+                      label="Confirm Password"
+                      placeholder="Re-enter password"
+                      value={confirmPassword}
+                      onChangeText={setConfirmPassword}
+                      isPassword={true}
+                      toggleTestID="toggle-confirm-password-visibility"
+                      editable={!loading}
+                    />
+                    {confirmPassword.length > 0 ? (
+                      <Text
+                        variant="caption"
+                        color={password === confirmPassword ? 'accent' : 'primary'}
+                        style={styles.matchIndicator}
+                      >
+                        {password === confirmPassword
+                          ? '✓ Passwords match'
+                          : '✕ Passwords do not match'}
+                      </Text>
+                    ) : null}
+                  </View>
+                ) : null}
+
+                {emailMode === 'sign_in' ? (
+                  <View style={styles.forgotPasswordRow}>
+                    <Pressable
+                      testID="auth-forgot-password-button"
+                      onPress={() => {
+                        setResetEmail(email);
+                        setShowForgotPassword(true);
+                      }}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      style={styles.forgotPasswordLink}
+                    >
+                      <Text variant="caption" color="accent" style={styles.forgotPasswordText}>
+                        Forgot Password?
+                      </Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+              </View>
+
+              {/* Primary Action Button */}
+              <Button
+                testID="auth-email-submit-button"
+                title={emailMode === 'sign_in' ? 'Log In' : 'Sign Up'}
+                onPress={handleEmailSubmit}
+                variant="primary"
+                size="lg"
+                loading={loading}
+                disabled={loading}
+                style={styles.submitButton}
+              />
+
+              {/* Navigation toggle link */}
+              <Pressable
+                onPress={() => {
+                  setEmailMode(emailMode === 'sign_in' ? 'sign_up' : 'sign_in');
+                  setStatusMessage(null);
+                }}
+                style={styles.switchModeRow}
+              >
+                <Text variant="caption" color="secondary">
+                  {emailMode === 'sign_in'
+                    ? "Don't have an account? "
+                    : 'Already have an account? '}
+                  <Text variant="caption" color="accent" style={styles.switchModeAccent}>
+                    {emailMode === 'sign_in' ? 'Sign Up' : 'Log In'}
+                  </Text>
+                </Text>
+              </Pressable>
+            </View>
+          )}
+
+          {/* Divider */}
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <Text variant="caption" color="muted" style={styles.dividerText}>
+              OR CONTINUE WITH
+            </Text>
+            <View style={styles.dividerLine} />
+          </View>
+
           {/* Social Authentication */}
-          <View style={styles.authButtonsSection}>
+          <View style={styles.socialButtonsSection}>
             <Button
               testID="auth-apple-button"
               title="  Continue with Apple"
@@ -247,118 +566,20 @@ export default function AuthScreen() {
             />
           </View>
 
-          <View style={styles.dividerRow}>
-            <View style={styles.dividerLine} />
-            <Text variant="caption" color="muted" style={styles.dividerText}>
-              OR CONTINUE WITH EMAIL
-            </Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          {/* Email Authentication Form */}
-          <View style={styles.emailSection}>
-            {/* Mode Switcher */}
-            <View style={styles.modeTabs}>
-              <Pressable
-                testID="toggle-signin"
-                onPress={() => {
-                  setEmailMode('sign_in');
-                  setStatusMessage(null);
-                }}
-                style={[styles.tabButton, emailMode === 'sign_in' && styles.tabButtonActive]}
-              >
-                <Text variant="label" color={emailMode === 'sign_in' ? 'accent' : 'muted'}>
-                  Sign In
-                </Text>
-              </Pressable>
-
-              <Pressable
-                testID="toggle-signup"
-                onPress={() => {
-                  setEmailMode('sign_up');
-                  setStatusMessage(null);
-                }}
-                style={[styles.tabButton, emailMode === 'sign_up' && styles.tabButtonActive]}
-              >
-                <Text variant="label" color={emailMode === 'sign_up' ? 'accent' : 'muted'}>
-                  Create Account
-                </Text>
-              </Pressable>
-            </View>
-
-            {/* Input Fields */}
-            <View style={styles.inputsContainer}>
-              <View style={styles.inputGroup}>
-                <Text variant="label" color="secondary">
-                  Email
-                </Text>
-                <TextInput
-                  testID="auth-email-input"
-                  style={styles.input}
-                  placeholder="athlete@bebig.app"
-                  placeholderTextColor={colors.dark.textMuted}
-                  value={email}
-                  onChangeText={setEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  editable={!loading}
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text variant="label" color="secondary">
-                  Password
-                </Text>
-                <TextInput
-                  testID="auth-password-input"
-                  style={styles.input}
-                  placeholder={emailMode === 'sign_up' ? 'At least 6 characters' : 'Enter password'}
-                  placeholderTextColor={colors.dark.textMuted}
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  editable={!loading}
-                />
-              </View>
-            </View>
-
+          {/* Guest Mode Option */}
+          <View style={styles.guestSection}>
             <Button
-              testID="auth-email-submit-button"
-              title={emailMode === 'sign_in' ? 'Sign In' : 'Create Account'}
-              onPress={handleEmailSubmit}
-              variant="primary"
-              size="lg"
-              loading={loading}
+              testID="continue-as-guest-button"
+              title="Continue as Guest"
+              onPress={handleContinueAsGuest}
+              variant="outline"
+              size="md"
               disabled={loading}
-              style={styles.submitButton}
+              style={styles.guestButton}
             />
-
-            {/* Guest Mode Option */}
-            <View style={styles.dividerRow}>
-              <View style={styles.dividerLine} />
-              <Text variant="caption" color="muted" style={styles.dividerText}>
-                OR
-              </Text>
-              <View style={styles.dividerLine} />
-            </View>
-
-            <View style={styles.guestSection}>
-              <Button
-                testID="continue-as-guest-button"
-                title="Continue as Guest"
-                onPress={handleContinueAsGuest}
-                variant="outline"
-                size="lg"
-                disabled={loading}
-                style={styles.guestButton}
-              />
-              <Text variant="caption" color="muted" style={styles.guestCaption}>
-                Full training features. Data stored locally on this device.
-              </Text>
-            </View>
+            <Text variant="caption" color="muted" style={styles.guestCaption}>
+              Full training features. Data stored locally on this device.
+            </Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -367,16 +588,66 @@ export default function AuthScreen() {
 }
 
 const styles = StyleSheet.create({
+  topNavRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.xs,
+    minHeight: 44,
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    minHeight: 44,
+    minWidth: 44,
+  },
+  backButtonPressed: {
+    opacity: 0.6,
+  },
+  backChevron: {
+    fontSize: 28,
+    lineHeight: 28,
+    marginTop: -2,
+  },
+  brandBadge: {
+    backgroundColor: colors.dark.surfaceElevated,
+    borderWidth: 1,
+    borderColor: colors.dark.borderLight,
+    paddingHorizontal: spacing.sm + 4,
+    paddingVertical: 3,
+    borderRadius: radii.full,
+  },
+  brandBadgeText: {
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    fontSize: 10,
+  },
+  topNavPlaceholder: {
+    width: 44,
+  },
   keyboardAvoiding: {
     flex: 1,
   },
   scrollContent: {
     flexGrow: 1,
-    paddingVertical: spacing.md,
-    gap: spacing.lg,
+    paddingVertical: spacing.sm,
+    paddingBottom: spacing.xxl + 12,
+    gap: spacing.md,
   },
   headerSection: {
     gap: spacing.xs,
+    paddingTop: spacing.xs,
+  },
+  headingTitle: {
+    fontSize: 28,
+    fontWeight: '900',
+    letterSpacing: -0.5,
+  },
+  headingSubtitle: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.dark.textSecondary,
   },
   unconfiguredCard: {
     backgroundColor: colors.dark.surfaceElevated,
@@ -398,16 +669,87 @@ const styles = StyleSheet.create({
     borderColor: colors.dark.success,
     backgroundColor: '#0E291B',
   },
-  authButtonsSection: {
-    gap: spacing.md,
+  modeTabs: {
+    flexDirection: 'row',
+    backgroundColor: colors.dark.surface,
+    borderRadius: radii.lg,
+    padding: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.dark.border,
   },
-  appleButton: {
-    backgroundColor: '#F8FAFC',
+  tabButton: {
+    flex: 1,
+    paddingVertical: spacing.sm + 2,
+    alignItems: 'center',
+    borderRadius: radii.md,
   },
-  googleButton: {
+  tabButtonActive: {
     backgroundColor: colors.dark.surfaceElevated,
     borderColor: colors.dark.borderLight,
     borderWidth: 1,
+  },
+  tabText: {
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    fontWeight: '700',
+  },
+  formContainer: {
+    gap: spacing.md,
+  },
+  inputsGroup: {
+    gap: spacing.sm + 2,
+  },
+  confirmPasswordContainer: {
+    gap: spacing.xs,
+  },
+  matchIndicator: {
+    marginLeft: spacing.xs,
+    fontWeight: '600',
+  },
+  forgotPasswordRow: {
+    alignItems: 'flex-end',
+    marginTop: -2,
+  },
+  forgotPasswordLink: {
+    paddingVertical: spacing.xs,
+  },
+  forgotPasswordText: {
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+  },
+  forgotPasswordCard: {
+    backgroundColor: colors.dark.surface,
+    borderColor: colors.dark.borderLight,
+    gap: spacing.md,
+    padding: spacing.md,
+  },
+  forgotPasswordHeader: {
+    gap: spacing.xs,
+  },
+  forgotPasswordActions: {
+    gap: spacing.xs,
+  },
+  resetSubmitButton: {
+    width: '100%',
+  },
+  submitButton: {
+    width: '100%',
+    minHeight: 52,
+    borderRadius: radii.lg,
+    marginTop: spacing.xs,
+    shadowColor: colors.dark.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  switchModeRow: {
+    alignItems: 'center',
+    paddingVertical: spacing.xs,
+  },
+  switchModeAccent: {
+    fontWeight: '700',
+    textDecorationLine: 'underline',
   },
   dividerRow: {
     flexDirection: 'row',
@@ -421,59 +763,37 @@ const styles = StyleSheet.create({
     backgroundColor: colors.dark.border,
   },
   dividerText: {
-    letterSpacing: 1,
-    fontWeight: '700',
+    letterSpacing: 1.2,
+    fontWeight: '800',
+    fontSize: 10,
   },
-  emailSection: {
-    gap: spacing.md,
-    paddingBottom: spacing.lg,
+  socialButtonsSection: {
+    gap: spacing.sm,
   },
-  modeTabs: {
-    flexDirection: 'row',
-    backgroundColor: colors.dark.surface,
-    borderRadius: radii.md,
-    padding: spacing.xs,
-    borderWidth: 1,
-    borderColor: colors.dark.border,
+  appleButton: {
+    backgroundColor: '#F8FAFC',
+    minHeight: 48,
+    borderRadius: radii.lg,
   },
-  tabButton: {
-    flex: 1,
-    paddingVertical: spacing.sm,
-    alignItems: 'center',
-    borderRadius: radii.sm,
-  },
-  tabButtonActive: {
+  googleButton: {
     backgroundColor: colors.dark.surfaceElevated,
-  },
-  inputsContainer: {
-    gap: spacing.md,
-  },
-  inputGroup: {
-    gap: spacing.xs,
-  },
-  input: {
-    backgroundColor: colors.dark.surface,
-    borderWidth: 1,
     borderColor: colors.dark.borderLight,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 4,
-    color: colors.dark.textPrimary,
-    fontSize: 16,
-  },
-  submitButton: {
-    marginTop: spacing.xs,
+    borderWidth: 1,
+    minHeight: 48,
+    borderRadius: radii.lg,
   },
   guestSection: {
     alignItems: 'center',
-    gap: spacing.sm,
+    gap: spacing.xs,
     marginTop: spacing.xs,
   },
   guestButton: {
     width: '100%',
     borderColor: colors.dark.borderLight,
+    borderRadius: radii.lg,
   },
   guestCaption: {
     textAlign: 'center',
+    fontSize: 11,
   },
 });

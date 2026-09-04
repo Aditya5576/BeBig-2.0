@@ -9,6 +9,7 @@ import HomeScreen from '../app/home';
 import RootIndex from '../app/index';
 import { useOnboardingStore } from '../src/features/onboarding';
 import { useAuthStore } from '../src/features/auth';
+import { supabase } from '../src/lib/supabase';
 
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
@@ -20,6 +21,7 @@ jest.mock('expo-router', () => ({
     replace: mockReplace,
     back: mockBack,
   }),
+  useLocalSearchParams: () => ({}),
   Link: ({ children }: { children: React.ReactNode }) => children,
   Redirect: ({ href }: { href: string }) => {
     mockReplace(href);
@@ -93,7 +95,7 @@ describe('Milestone 2 & 3 — Onboarding Flow Verification', () => {
     const getStartedButton = getByTestId('welcome-get-started-button');
     fireEvent.press(getStartedButton);
 
-    expect(mockPush).toHaveBeenCalledWith('/onboarding/goal');
+    expect(mockPush).toHaveBeenCalledWith('/onboarding/auth?mode=sign_up');
   });
 
   // 3: Goal Selection — Blocked State
@@ -227,7 +229,9 @@ describe('Milestone 2 & 3 — Onboarding Flow Verification', () => {
     useOnboardingStore.getState().resetOnboarding();
 
     await render(<RootIndex />);
-    expect(mockReplace).toHaveBeenCalledWith('/onboarding/welcome');
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith('/onboarding/welcome');
+    });
   });
 
   // 12b: Root Gatekeeper redirects returning user to home
@@ -237,6 +241,14 @@ describe('Milestone 2 & 3 — Onboarding Flow Verification', () => {
       user: { id: 'ret-1', email: 'ret@bebig.app' },
     });
     useOnboardingStore.getState().completeOnboarding();
+    (supabase.from as jest.Mock).mockReturnValueOnce({
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      maybeSingle: jest.fn().mockResolvedValue({
+        data: { id: 'ret-1', onboarding_completed: true },
+        error: null,
+      }),
+    });
 
     await render(<RootIndex />);
     await waitFor(() => {

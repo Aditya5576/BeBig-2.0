@@ -107,6 +107,23 @@ To ensure the confirmation link opens the BeBig mobile app on physical devices:
    - **Production**: Enable "Confirm email". When enabled, BeBig sends the confirmation email with `emailRedirectTo: getAuthRedirectUrl()`. Tapping the link in iOS Mail/Safari directs the user back into BeBig, confirming their account and logging them in automatically.
 4. **Minimum password length**: Supabase defaults to 6 characters, matching BeBig's client validation.
 
+### Step 3: Verify Email Templates
+
+1. Go to **Supabase Dashboard → Authentication → Email Templates**.
+2. Select **Confirm signup**.
+3. Verify the button/link uses the default Supabase confirmation URL variable:
+   ```html
+   <h2>Confirm your signup</h2>
+   <p>Follow this link to confirm your user:</p>
+   <p><a href="{{ .ConfirmationURL }}">Confirm your mail</a></p>
+   ```
+4. **How this works on physical devices**:
+   - Supabase generates `{{ .ConfirmationURL }}` pointing to `https://<project-ref>.supabase.co/auth/v1/verify?token=...&type=signup&redirect_to={{ .RedirectTo }}`.
+   - BeBig passes `emailRedirectTo: getAuthRedirectUrl()` (e.g. `bebig://auth/callback` in production or `exp://...` in Expo Go).
+   - When the athlete taps the link in their mail client, Supabase verifies the token on the server and redirects (HTTP 302) to `bebig://auth/callback?code=...`.
+   - iOS opens the BeBig app directly via its URL scheme (`bebig://`).
+   - If the Redirect URL was NOT whitelisted in Step 1, Supabase falls back to the Site URL (`http://localhost:3000`). Setting Site URL to `bebig://auth/callback` and adding `bebig://**` guarantees it will never redirect to `localhost:3000`.
+
 ---
 
 ## 5. Google OAuth Setup

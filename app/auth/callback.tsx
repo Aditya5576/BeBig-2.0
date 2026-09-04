@@ -19,7 +19,7 @@ export default function AuthCallbackScreen() {
   useEffect(() => {
     let isMounted = true;
 
-    async function processAuthCallback() {
+    async function processAuthCallback(incomingUrl?: string) {
       try {
         // 1. Check if error was passed in search params
         const errorDesc = searchParams.error_description || searchParams.error;
@@ -33,8 +33,7 @@ export default function AuthCallbackScreen() {
         }
 
         // 2. Retrieve initial URL or reconstruct from search params
-        const initialUrl = await Linking.getInitialURL();
-        let urlToProcess = initialUrl;
+        let urlToProcess = incomingUrl || (await Linking.getInitialURL());
 
         // If Linking doesn't provide the full URL, build from params
         if (!urlToProcess || !urlToProcess.includes('auth/callback')) {
@@ -49,19 +48,33 @@ export default function AuthCallbackScreen() {
         if (!isMounted) return;
 
         if (result.success && result.session) {
-          // Sync onboarding profile if present
-          const onboardingState = useOnboardingStore.getState();
-          if (onboardingState.goal) {
-            try {
-              await profileService.syncOnboardingProfile(result.session.user.id, onboardingState);
-              useOnboardingStore.getState().completeOnboarding();
-            } catch {
-              // Proceed to home even if background sync fails
-            }
+          const userId = result.session.user.id;
+          let profile = null;
+          try {
+            profile = await profileService.getProfile(userId);
+          } catch {
+            // Ignore fetch errors; fallback below
           }
 
+          if (profile && profile.onboarding_completed) {
+            const store = useOnboardingStore.getState();
+            if (profile.goal) store.setGoal(profile.goal);
+            if (profile.experience_level) store.setExperienceLevel(profile.experience_level);
+            if (profile.days_per_week) store.setDaysPerWeek(profile.days_per_week);
+            if (profile.workout_duration) store.setWorkoutDuration(profile.workout_duration);
+            if (profile.equipment) store.setEquipment(profile.equipment);
+            if (profile.workout_style) store.setWorkoutStyle(profile.workout_style);
+            store.completeOnboarding();
+
+            setSession(result.session);
+            router.replace('/home');
+            return;
+          }
+
+          // User verified email but hasn't completed onboarding questions:
+          useOnboardingStore.getState().resetOnboarding();
           setSession(result.session);
-          router.replace('/home');
+          router.replace('/onboarding/goal');
         } else {
           setError(result.message || 'Verification link expired or invalid.');
           setLoading(false);
@@ -76,8 +89,18 @@ export default function AuthCallbackScreen() {
 
     void processAuthCallback();
 
+    const sub =
+      typeof Linking.addEventListener === 'function'
+        ? Linking.addEventListener('url', (event) => {
+            if (event?.url && event.url.includes('auth/callback')) {
+              void processAuthCallback(event.url);
+            }
+          })
+        : null;
+
     return () => {
       isMounted = false;
+      sub?.remove?.();
     };
   }, [searchParams, router, setSession]);
 

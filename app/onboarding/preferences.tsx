@@ -12,6 +12,8 @@ import {
   DayOfWeek,
   WorkoutStyle,
 } from '../../src/features/onboarding';
+import { useAuthStore } from '../../src/features/auth';
+import { profileService } from '../../src/features/profile';
 import { spacing, colors, radii } from '../../src/constants/theme';
 
 const DAYS_PER_WEEK_OPTIONS = [
@@ -98,7 +100,7 @@ export default function PreferencesScreen() {
 
   const canContinue = Boolean(daysPerWeek && workoutDuration && equipment && workoutStyle);
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     const state = useOnboardingStore.getState();
     const canProceed = Boolean(
       (daysPerWeek || state.daysPerWeek) &&
@@ -107,6 +109,28 @@ export default function PreferencesScreen() {
       (workoutStyle || state.workoutStyle),
     );
     if (!canProceed) return;
+
+    // If the user is already authenticated (e.g. newly registered user completing onboarding questions),
+    // sync their onboarding answers directly to their Supabase profile and proceed directly to Home.
+    const authState = useAuthStore.getState();
+    if (authState.status === 'authenticated' && authState.user?.id) {
+      try {
+        await profileService.syncOnboardingProfile(authState.user.id, state);
+      } catch {
+        // Continue even if background sync fails
+      }
+      useOnboardingStore.getState().completeOnboarding();
+      router.replace('/home');
+      return;
+    }
+
+    // Guest mode session: complete onboarding and route directly to Home
+    if (authState.status === 'guest' || authState.isGuest) {
+      useOnboardingStore.getState().completeOnboarding();
+      router.replace('/home');
+      return;
+    }
+
     router.push('/onboarding/auth');
   };
 
@@ -116,7 +140,7 @@ export default function PreferencesScreen() {
 
   return (
     <ScreenContainer>
-      <OnboardingHeader currentStep={3} totalSteps={4} onBack={handleBack} canGoBack={true} />
+      <OnboardingHeader currentStep={3} totalSteps={3} onBack={handleBack} canGoBack={true} />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.headerSection}>

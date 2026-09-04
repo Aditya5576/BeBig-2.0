@@ -6,115 +6,171 @@ import { useOnboardingStore } from '../src/features/onboarding';
 import { profileService } from '../src/features/profile';
 import { guestStorage } from '../src/lib/storage';
 
+export interface IndexProps {
+  splashDurationMs?: number;
+}
+
 /**
- * Root Index Gatekeeper
+ * Root Index Gatekeeper & Startup Orchestrator
  *
  * Responsibilities:
- * 1. Initialize authentication session on app start (Supabase cloud or local guest).
- * 2. If authenticated, restore cloud profile data from Supabase.
- * 3. If guest, rehydrate local preferences from guestStorage.
- * 4. Route to /home if user (authenticated or guest) has completed onboarding.
- * 5. Route to /onboarding/welcome if unauthenticated or onboarding is incomplete.
+ * 1. Display mandatory BeBig startup splash screen for ~3.5 seconds on every cold launch/relaunch.
+ * 2. Concurrently initialize authentication (Supabase cloud session or guest session).
+ * 3. Authoritative profile check:
+ *    - If authenticated: check Supabase profiles table for onboarding_completed = true.
+ *      If completed, rehydrate profile into useOnboardingStore and route to /home.
+ *      If missing or incomplete, route to /onboarding/welcome.
+ *    - If guest: check local guestStorage for saved onboarding data.
+ *      If completed, rehydrate and route to /home.
+ *      If not completed, route to /onboarding/welcome.
+ *    - If unauthenticated: route to /onboarding/welcome.
+ * 4. Output dev diagnostic routing logs.
+ * 5. Gatekeeper keeps StartupSplash rendered until BOTH initialization and splash timer finish,
+ *    then executes a single atomic redirection to the final target route.
  */
-export default function Index() {
-  const status = useAuthStore((state) => state.status);
-  const user = useAuthStore((state) => state.user);
-  const initializeAuth = useAuthStore((state) => state.initializeAuth);
+export default function Index({ splashDurationMs }: IndexProps = {}) {
+  const [destination, setDestination] = useState<string | null>(null);
 
-  const hasCompletedOnboarding = useOnboardingStore((state) => state.hasCompletedOnboarding);
-  const setGoal = useOnboardingStore((state) => state.setGoal);
-  const setExperienceLevel = useOnboardingStore((state) => state.setExperienceLevel);
-  const setDaysPerWeek = useOnboardingStore((state) => state.setDaysPerWeek);
-  const setWorkoutDuration = useOnboardingStore((state) => state.setWorkoutDuration);
-  const setEquipment = useOnboardingStore((state) => state.setEquipment);
-  const setWorkoutStyle = useOnboardingStore((state) => state.setWorkoutStyle);
-  const completeOnboarding = useOnboardingStore((state) => state.completeOnboarding);
-
-  const [profileChecked, setProfileChecked] = useState(false);
-
-  useEffect(() => {
-    if (status === 'initializing') {
-      initializeAuth();
-    }
-  }, [status, initializeAuth]);
+  // Default to 3500ms (3.5s) on physical device / production / dev.
+  // In test environments (process.env.NODE_ENV === 'test'), default to 0ms so tests execute
+  // rapidly without timeouts, unless explicitly overridden via splashDurationMs prop.
+  const delayMs =
+    splashDurationMs !== undefined ? splashDurationMs : process.env.NODE_ENV === 'test' ? 0 : 3500;
 
   useEffect(() => {
     let isMounted = true;
 
-    async function checkProfileAndStorage() {
-      if (status === 'authenticated' && user?.id) {
-        try {
-          const profile = await profileService.getProfile(user.id);
-          if (profile && isMounted) {
-            if (profile.goal) setGoal(profile.goal);
-            if (profile.experience_level) setExperienceLevel(profile.experience_level);
-            if (profile.days_per_week) setDaysPerWeek(profile.days_per_week);
-            if (profile.workout_duration) setWorkoutDuration(profile.workout_duration);
-            if (profile.equipment) setEquipment(profile.equipment);
-            if (profile.workout_style) setWorkoutStyle(profile.workout_style);
-            if (profile.onboarding_completed) completeOnboarding();
-          }
-        } catch {
-          // Fallback to local onboarding state
+    async function runStartupGate() {
+      // 1. Minimum splash duration timer
+      const splashTimer = new Promise<void>((resolve) => {
+        if (delayMs <= 0) {
+          resolve();
+        } else {
+          setTimeout(resolve, delayMs);
         }
-      } else if (status === 'guest') {
-        try {
-          const storedOnboarding = await guestStorage.getOnboardingData();
-          if (storedOnboarding && isMounted) {
-            if (storedOnboarding.goal) setGoal(storedOnboarding.goal);
-            if (storedOnboarding.experienceLevel)
-              setExperienceLevel(storedOnboarding.experienceLevel);
-            if (storedOnboarding.daysPerWeek) setDaysPerWeek(storedOnboarding.daysPerWeek);
-            if (storedOnboarding.workoutDuration)
-              setWorkoutDuration(storedOnboarding.workoutDuration);
-            if (storedOnboarding.equipment) setEquipment(storedOnboarding.equipment);
-            if (storedOnboarding.workoutStyle) setWorkoutStyle(storedOnboarding.workoutStyle);
-          }
-          if (isMounted) {
-            completeOnboarding();
-          }
-        } catch {
-          if (isMounted) {
-            completeOnboarding();
-          }
-        }
-      }
+      });
 
-      if (isMounted) {
-        setProfileChecked(true);
+      // 2. Initialization & profile resolution task
+      const initTask = (async (): Promise<string | null> => {
+        let authStatus = useAuthStore.getState().status;
+
+        // If auth is still initializing, wait for session check
+        if (authStatus === 'initializing') {
+          try {
+            await useAuthStore.getState().initializeAuth();
+          } catch {
+            // Ignore init failure; status defaults to unauthenticated
+          }
+          authStatus = useAuthStore.getState().status;
+        }
+
+        // If auth initialization is still pending or stalled, stay on splash screen
+        if (authStatus === 'initializing') {
+          return null;
+        }
+
+        const currentUser = useAuthStore.getState().user;
+        const isGuest = useAuthStore.getState().isGuest;
+        let profile = null;
+        let localOnboardingCompleted = false;
+        let resolvedRoute = '/onboarding/welcome';
+
+        if (authStatus === 'authenticated' && currentUser?.id) {
+          try {
+            profile = await profileService.getProfile(currentUser.id);
+            if (profile && profile.onboarding_completed) {
+              const store = useOnboardingStore.getState();
+              if (profile.goal) store.setGoal(profile.goal);
+              if (profile.experience_level) store.setExperienceLevel(profile.experience_level);
+              if (profile.days_per_week) store.setDaysPerWeek(profile.days_per_week);
+              if (profile.workout_duration) store.setWorkoutDuration(profile.workout_duration);
+              if (profile.equipment) store.setEquipment(profile.equipment);
+              if (profile.workout_style) store.setWorkoutStyle(profile.workout_style);
+              store.completeOnboarding();
+              localOnboardingCompleted = true;
+            }
+          } catch {
+            // Fallback to existing store state
+          }
+
+          if (profile?.onboarding_completed) {
+            resolvedRoute = '/home';
+          } else {
+            useOnboardingStore.getState().resetOnboarding();
+            resolvedRoute = '/onboarding/goal';
+          }
+        } else if (authStatus === 'guest' || isGuest) {
+          try {
+            const guestData = await guestStorage.getOnboardingData();
+            if (guestData) {
+              const store = useOnboardingStore.getState();
+              if (guestData.goal) store.setGoal(guestData.goal);
+              if (guestData.experienceLevel) store.setExperienceLevel(guestData.experienceLevel);
+              if (guestData.daysPerWeek) store.setDaysPerWeek(guestData.daysPerWeek);
+              if (guestData.workoutDuration) store.setWorkoutDuration(guestData.workoutDuration);
+              if (guestData.equipment) store.setEquipment(guestData.equipment);
+              if (guestData.workoutStyle) store.setWorkoutStyle(guestData.workoutStyle);
+              if (guestData.hasCompletedOnboarding) {
+                store.completeOnboarding();
+                localOnboardingCompleted = true;
+              }
+            }
+          } catch {
+            // Fallback to store
+          }
+
+          const hasCompleted = useOnboardingStore.getState().hasCompletedOnboarding;
+          if (localOnboardingCompleted || hasCompleted) {
+            resolvedRoute = '/home';
+          } else {
+            resolvedRoute = '/onboarding/welcome';
+          }
+        } else {
+          // Unauthenticated
+          resolvedRoute = '/onboarding/welcome';
+        }
+
+        const storeCompleted = useOnboardingStore.getState().hasCompletedOnboarding;
+
+        if (__DEV__) {
+          console.log(`[STARTUP] AUTH STATUS: ${authStatus}`);
+          console.log(`[STARTUP] PROFILE USER ID: ${currentUser?.id ?? 'none'}`);
+          console.log(`[STARTUP] PROFILE EXISTS: ${Boolean(profile)}`);
+          console.log(
+            `[STARTUP] PROFILE ONBOARDING COMPLETED: ${Boolean(profile?.onboarding_completed)}`,
+          );
+          console.log(
+            `[STARTUP] LOCAL ONBOARDING COMPLETED: ${Boolean(localOnboardingCompleted || storeCompleted)}`,
+          );
+          console.log(`[STARTUP] GUEST SESSION: ${Boolean(authStatus === 'guest' || isGuest)}`);
+          console.log(`[STARTUP] STARTUP INITIALIZATION COMPLETE: true`);
+        }
+
+        return resolvedRoute;
+      })();
+
+      // Wait for both the minimum splash screen timer AND the initialization task
+      const [, finalTargetRoute] = await Promise.all([splashTimer, initTask]);
+
+      if (isMounted && finalTargetRoute) {
+        if (__DEV__) {
+          console.log(`[STARTUP] SPLASH COMPLETE: true`);
+          console.log(`[STARTUP] FINAL ROUTE: ${finalTargetRoute}`);
+        }
+        setDestination(finalTargetRoute);
       }
     }
 
-    void checkProfileAndStorage();
+    void runStartupGate();
 
     return () => {
       isMounted = false;
     };
-  }, [
-    status,
-    user?.id,
-    setGoal,
-    setExperienceLevel,
-    setDaysPerWeek,
-    setWorkoutDuration,
-    setEquipment,
-    setWorkoutStyle,
-    completeOnboarding,
-  ]);
+  }, [delayMs]);
 
-  // Startup Splash while initializing auth or restoring profiles/local data
-  if (
-    status === 'initializing' ||
-    ((status === 'authenticated' || status === 'guest') && !profileChecked)
-  ) {
+  if (!destination) {
     return <StartupSplash />;
   }
 
-  // Authenticated or Guest & Onboarding Complete -> Home
-  if ((status === 'authenticated' || status === 'guest') && hasCompletedOnboarding) {
-    return <Redirect href="/home" />;
-  }
-
-  // Incomplete onboarding or Unauthenticated -> Onboarding
-  return <Redirect href="/onboarding/welcome" />;
+  return <Redirect href={destination} />;
 }

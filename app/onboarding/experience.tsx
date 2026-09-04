@@ -58,7 +58,7 @@ export default function ExperienceScreen() {
 
   return (
     <ScreenContainer>
-      <OnboardingHeader currentStep={2} totalSteps={4} onBack={handleBack} canGoBack={true} />
+      <OnboardingHeader currentStep={2} totalSteps={3} onBack={handleBack} canGoBack={true} />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.headerSection}>

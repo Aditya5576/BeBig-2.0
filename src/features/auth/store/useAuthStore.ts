@@ -8,6 +8,7 @@ import { purgeLegacyUnscopedStorage } from '../utils/userScope';
 import { workoutStorage } from '../../workout/storage/workoutStorage';
 import { templateStorage } from '../../templates/storage/templateStorage';
 import { customExerciseStorage } from '../../exercises/storage/customExerciseStorage';
+import { profileService } from '../../profile';
 
 interface AuthActions {
   initializeAuth: () => Promise<void>;
@@ -68,6 +69,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set) => ({
               workoutStorage.clearMemoryCache();
               templateStorage.clearMemoryCache();
               customExerciseStorage.clearMemoryCache();
+              profileService.clearMemoryCache();
               set({
                 status: 'unauthenticated',
                 isGuest: false,
@@ -119,6 +121,10 @@ export const useAuthStore = create<AuthState & AuthActions>((set) => ({
               guestSession: null,
             });
           } else if (event === 'SIGNED_OUT') {
+            workoutStorage.clearMemoryCache();
+            templateStorage.clearMemoryCache();
+            customExerciseStorage.clearMemoryCache();
+            profileService.clearMemoryCache();
             set({
               status: 'unauthenticated',
               isGuest: false,
@@ -181,6 +187,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set) => ({
     workoutStorage.clearMemoryCache();
     templateStorage.clearMemoryCache();
     customExerciseStorage.clearMemoryCache();
+    profileService.clearMemoryCache();
     await guestStorage.clearGuestSession();
     // Preserves local onboarding and workout preferences per requirement
     set({
@@ -199,6 +206,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set) => ({
     workoutStorage.clearMemoryCache();
     templateStorage.clearMemoryCache();
     customExerciseStorage.clearMemoryCache();
+    profileService.clearMemoryCache();
     const state = useAuthStore.getState();
     if (state.isGuest) {
       await guestStorage.clearGuestSession();

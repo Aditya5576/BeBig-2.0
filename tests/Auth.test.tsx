@@ -97,6 +97,7 @@ describe('Milestone 3 — Authentication & Supabase Foundation', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockSearchParams = {};
+    profileService.clearMemoryCache();
     useAuthStore.setState({
       status: 'unauthenticated',
       user: null,
@@ -477,7 +478,9 @@ describe('Milestone 3 — Authentication & Supabase Foundation', () => {
       useAuthStore.setState({ status: 'unauthenticated' });
 
       await render(<RootIndex />);
-      expect(mockReplace).toHaveBeenCalledWith('/onboarding/welcome');
+      await waitFor(() => {
+        expect(mockReplace).toHaveBeenCalledWith('/onboarding/welcome');
+      });
     });
 
     it('redirects authenticated user with completed onboarding to home', async () => {
@@ -520,7 +523,7 @@ describe('Milestone 3 — Authentication & Supabase Foundation', () => {
 
       await render(<RootIndex />);
       await waitFor(() => {
-        expect(mockReplace).toHaveBeenCalledWith('/onboarding/welcome');
+        expect(mockReplace).toHaveBeenCalledWith('/onboarding/goal');
       });
     });
   });
@@ -538,6 +541,18 @@ describe('Milestone 3 — Authentication & Supabase Foundation', () => {
           },
         },
         error: null,
+      });
+
+      mockFrom.mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        maybeSingle: jest.fn().mockResolvedValueOnce({
+          data: {
+            id: 'confirmed-user',
+            onboarding_completed: true,
+          },
+          error: null,
+        }),
       });
 
       await render(<AuthCallbackScreen />);
@@ -622,9 +637,16 @@ describe('Milestone 3 — Authentication & Supabase Foundation', () => {
       });
 
       mockFrom.mockReturnValueOnce({
-        upsert: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
-        single: jest.fn().mockResolvedValueOnce({ data: { id: 'user-submit' }, error: null }),
+        eq: jest.fn().mockReturnThis(),
+        maybeSingle: jest.fn().mockResolvedValueOnce({
+          data: { id: 'user-submit', onboarding_completed: true },
+          error: null,
+        }),
+        single: jest.fn().mockResolvedValueOnce({
+          data: { id: 'user-submit', onboarding_completed: true },
+          error: null,
+        }),
       });
 
       const { getByTestId } = await render(<AuthScreen />);
