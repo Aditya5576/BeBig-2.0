@@ -185,9 +185,10 @@ export function calculateWorkoutStreak(workouts: WorkoutSession[], now: Date = n
 export function calculatePersonalRecords(workouts: WorkoutSession[]): {
   totalPRsCount: number;
   topPRs: PersonalRecord[];
+  allPRs: PersonalRecord[];
 } {
   if (!workouts || workouts.length === 0) {
-    return { totalPRsCount: 0, topPRs: [] };
+    return { totalPRsCount: 0, topPRs: [], allPRs: [] };
   }
 
   const prMap = new Map<string, PersonalRecord>();
@@ -219,6 +220,7 @@ export function calculatePersonalRecords(workouts: WorkoutSession[]): {
   return {
     totalPRsCount: records.length,
     topPRs: records.slice(0, 3),
+    allPRs: records,
   };
 }
 
@@ -269,13 +271,7 @@ export function getGreeting(now: Date = new Date()): string {
   return 'Good evening 👋';
 }
 
-/**
- * Formats volume numbers for display (e.g. 14,250 kg).
- */
-export function formatVolume(volumeKg: number): string {
-  if (!volumeKg || isNaN(volumeKg) || volumeKg <= 0) return '0 kg';
-  return `${Math.round(volumeKg).toLocaleString('en-US')} kg`;
-}
+export * from './formatters';
 
 /**
  * Master aggregation function computing all dashboard metrics in a single pass.
@@ -310,4 +306,100 @@ export function calculateDashboardAnalytics(
     weeklyGoalPercent,
     suggestedTemplate,
   };
+}
+
+/**
+ * Represents a single workout session's performance for a specific exercise.
+ */
+export interface ExerciseHistoryEntry {
+  workoutId: string;
+  workoutName: string;
+  date: string; // ISO 8601 timestamp (startedAt of the session)
+  maxWeight: number; // Highest weight in any completed set this session
+  totalReps: number; // Total completed reps across all sets this session
+  volume: number; // Sum of (weight * reps) for all completed sets this session
+  sets: {
+    setNumber: number;
+    weight: number;
+    reps: number;
+    rir: number;
+  }[];
+}
+
+/**
+ * Returns a chronological history (oldest-first) of an exercise across completed workouts.
+ * Only includes sessions where the exercise was actually performed with completed sets.
+ */
+export function getExerciseHistory(
+  workouts: WorkoutSession[],
+  exerciseId: string,
+): ExerciseHistoryEntry[] {
+  if (!workouts || workouts.length === 0 || !exerciseId) return [];
+
+  const entries: ExerciseHistoryEntry[] = [];
+
+  for (const workout of workouts) {
+    if (!workout.exercises) continue;
+
+    const exercise = workout.exercises.find((ex) => ex.exerciseId === exerciseId);
+    if (!exercise || !exercise.actualSets) continue;
+
+    const completedSets = exercise.actualSets.filter((s) => s.completed && s.reps > 0);
+    if (completedSets.length === 0) continue;
+
+    const maxWeight = completedSets.reduce(
+      (max, s) => (s.weight > max ? s.weight : max),
+      completedSets[0].weight,
+    );
+    const totalReps = completedSets.reduce((sum, s) => sum + s.reps, 0);
+    const volume = completedSets.reduce(
+      (sum, s) => sum + (s.weight > 0 ? s.weight * s.reps : 0),
+      0,
+    );
+
+    entries.push({
+      workoutId: workout.id,
+      workoutName: workout.name,
+      date: workout.startedAt,
+      maxWeight,
+      totalReps,
+      volume: Math.round(volume * 100) / 100,
+      sets: completedSets.map((s) => ({
+        setNumber: s.setNumber,
+        weight: s.weight,
+        reps: s.reps,
+        rir: s.rir,
+      })),
+    });
+  }
+
+  // Return oldest-first so progression charts/tables read naturally
+  return entries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+}
+
+/**
+ * Returns a deduplicated list of all exercises ever performed across completed workouts.
+ * Sorted alphabetically by exercise name.
+ */
+export function getAllExercisesFromHistory(
+  workouts: WorkoutSession[],
+): { exerciseId: string; exerciseName: string }[] {
+  if (!workouts || workouts.length === 0) return [];
+
+  const map = new Map<string, string>(); // exerciseId -> exerciseName
+
+  for (const workout of workouts) {
+    if (!workout.exercises) continue;
+    for (const ex of workout.exercises) {
+      if (!ex.exerciseId) continue;
+      const completedSets = ex.actualSets?.filter((s) => s.completed && s.reps > 0) ?? [];
+      if (completedSets.length > 0 && !map.has(ex.exerciseId)) {
+        map.set(ex.exerciseId, ex.exerciseName || 'Unknown Exercise');
+      }
+    }
+  }
+
+  return Array.from(map.entries())
+    .map(([exerciseId, exerciseName]) => ({ exerciseId, exerciseName }))
+    .sort((a, b) => a.exerciseName.localeCompare(b.exerciseName));
 }
