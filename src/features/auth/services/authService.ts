@@ -146,7 +146,19 @@ export const authService: IAuthService = {
       });
 
       if (error) {
-        return { success: false, message: getErrorMessage(error, 'Sign in failed.') };
+        const msg = error.message || '';
+        const isNonExistent =
+          error.code === 'user_not_found' ||
+          error.status === 404 ||
+          /user not found|no user found|account not found|email not found/i.test(msg);
+
+        return {
+          success: false,
+          message: isNonExistent
+            ? "We couldn't find an account with this email. Create an account to get started."
+            : getErrorMessage(error, 'Sign in failed.'),
+          isNonExistentUser: isNonExistent,
+        };
       }
 
       if (!data.session) {
@@ -160,10 +172,19 @@ export const authService: IAuthService = {
         session,
         user: session.user,
       };
-    } catch (err) {
+    } catch (err: any) {
+      const msg = err?.message || '';
+      const isNonExistent =
+        err?.code === 'user_not_found' ||
+        err?.status === 404 ||
+        /user not found|no user found|account not found|email not found/i.test(msg);
+
       return {
         success: false,
-        message: getErrorMessage(err, 'Sign in encountered an unexpected error.'),
+        message: isNonExistent
+          ? "We couldn't find an account with this email. Create an account to get started."
+          : getErrorMessage(err, 'Sign in encountered an unexpected error.'),
+        isNonExistentUser: isNonExistent,
       };
     }
   },

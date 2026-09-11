@@ -1,9 +1,11 @@
-import { Exercise, ExerciseCategory, CreateCustomExerciseInput } from '../types';
+import { Exercise, ExerciseCategory, CreateCustomExerciseInput, UpdateCustomExerciseInput } from '../types';
 import { ExerciseFilterOptions, ExerciseListResult, IExerciseProvider } from '../providers/types';
 import { WgerExerciseProvider } from '../providers/wger/WgerExerciseProvider';
 import { customExerciseStorage } from '../storage/customExerciseStorage';
 import { normalizeCategory } from '../providers/wger/wgerMapper';
-import { getCurrentUserScope } from '../../auth/utils/userScope';
+import { getCurrentUserScope, UserScope } from '../../auth/utils/userScope';
+import { syncMetadataStore, syncLifecycleManager } from '../../../services/sync';
+import { filterAndRankExercises } from '../utils/exerciseSearch';
 
 export const STANDARD_CATEGORIES: { id: ExerciseCategory; name: string }[] = [
   { id: 'chest', name: 'Chest' },
@@ -53,51 +55,91 @@ export class ExerciseRepository {
     return STANDARD_EQUIPMENT;
   }
 
-  async getExercises(options: ExerciseFilterOptions = {}): Promise<ExerciseListResult> {
+  async getExercises(
+    options: ExerciseFilterOptions = {},
+    scope?: UserScope | null,
+  ): Promise<ExerciseListResult> {
     const isFirstPage = !options.offset || options.offset === 0;
+    const hasQuery = Boolean(options.query && options.query.trim().length > 0);
 
     // Retrieve local custom exercises
     let customMatches: Exercise[] = [];
     if (isFirstPage) {
-      const allCustom = await customExerciseStorage.getCustomExercises();
-      customMatches = allCustom.filter((ex) => {
-        if (options.category && ex.category !== options.category) {
-          return false;
-        }
-        if (options.query && options.query.trim().length > 0) {
-          const q = options.query.toLowerCase().trim();
-          const nameMatch = ex.name.toLowerCase().includes(q);
-          const descMatch = ex.description.toLowerCase().includes(q);
-          const catMatch = ex.categoryName.toLowerCase().includes(q);
-          const muscleMatch = ex.primaryMuscles.some((m) => m.name.toLowerCase().includes(q));
-          if (!nameMatch && !descMatch && !catMatch && !muscleMatch) {
+      const allCustom = await customExerciseStorage.getCustomExercises(scope);
+      if (hasQuery) {
+        customMatches = filterAndRankExercises(allCustom, options.query, options.category);
+      } else {
+        customMatches = allCustom.filter((ex) => {
+          if (options.category && ex.category !== options.category) {
             return false;
           }
-        }
-        return true;
-      });
+          return true;
+        });
+      }
     }
 
     // Fetch provider exercises
-    const providerResult = await this.provider.listExercises(options);
+    let providerResult = await this.provider.listExercises(options);
+
+    // If query was provided and provider returned 0 items, attempt tolerant fallback fetch
+    // (e.g., when the provider performs strict SQL/like matching that fails on typos or alternative spacing)
+    if (hasQuery && providerResult.exercises.length === 0) {
+      const qTokens = options.query!.trim().split(/\s+/).filter((t) => t.length >= 3);
+      if (qTokens.length > 0) {
+        try {
+          const fallbackResult = await this.provider.listExercises({
+            ...options,
+            query: qTokens[0],
+            limit: 40,
+          });
+          if (fallbackResult.exercises.length > 0) {
+            const rankedFallback = filterAndRankExercises(
+              fallbackResult.exercises,
+              options.query,
+              options.category,
+            );
+            if (rankedFallback.length > 0) {
+              providerResult = {
+                ...fallbackResult,
+                exercises: rankedFallback,
+              };
+            }
+          }
+        } catch {
+          // Ignore fallback errors and preserve empty provider result
+        }
+      }
+    } else if (hasQuery && providerResult.exercises.length > 0) {
+      providerResult = {
+        ...providerResult,
+        exercises: filterAndRankExercises(providerResult.exercises, options.query, options.category),
+      };
+    }
 
     // Merge custom exercises on the first page
     const combined = isFirstPage
       ? [...customMatches, ...providerResult.exercises]
       : providerResult.exercises;
 
+    // Rank combined results if querying so strongest matches are at the top
+    const finalExercises = hasQuery && isFirstPage
+      ? filterAndRankExercises(combined, options.query, options.category)
+      : combined;
+
     return {
-      exercises: combined,
-      totalCount: providerResult.totalCount + customMatches.length,
+      exercises: finalExercises,
+      totalCount: hasQuery
+        ? finalExercises.length
+        : providerResult.totalCount + customMatches.length,
       hasMore: providerResult.hasMore,
       nextOffset: providerResult.nextOffset,
     };
   }
 
-  async getExerciseById(id: string): Promise<Exercise | null> {
+  async getExerciseById(id: string, scope?: UserScope | null): Promise<Exercise | null> {
     // Check custom exercises first
     if (id.startsWith('custom_')) {
-      const customs = await customExerciseStorage.getCustomExercises();
+      const customs = await customExerciseStorage.getCustomExercises(scope);
       return customs.find((e) => e.id === id) || null;
     }
 
@@ -105,7 +147,10 @@ export class ExerciseRepository {
     return this.provider.getExerciseById(id);
   }
 
-  async createCustomExercise(input: CreateCustomExerciseInput): Promise<Exercise> {
+  async createCustomExercise(
+    input: CreateCustomExerciseInput,
+    scope?: UserScope | null,
+  ): Promise<Exercise> {
     const trimmedName = input.name.trim();
     if (!trimmedName) {
       throw new Error('Exercise name is required.');
@@ -126,12 +171,13 @@ export class ExerciseRepository {
       .map((name, idx) => ({ id: `ceq_${idx}`, name: name.trim() }))
       .filter((eq) => eq.name.length > 0);
 
-    const scope = getCurrentUserScope();
+    const resolvedScope = scope !== undefined ? scope : getCurrentUserScope();
+    const now = new Date().toISOString();
 
     const newExercise: Exercise = {
       id,
-      ownerId: scope?.ownerId,
-      ownerType: scope?.ownerType,
+      ownerId: resolvedScope?.ownerId,
+      ownerType: resolvedScope?.ownerType,
       name: trimmedName,
       description: input.description?.trim() || '',
       category: input.category,
@@ -142,15 +188,154 @@ export class ExerciseRepository {
       images: [],
       sourceProvider: 'custom',
       isCustom: true,
-      createdAt: new Date().toISOString(),
+      createdAt: now,
+      updatedAt: now,
     };
 
-    await customExerciseStorage.saveCustomExercise(newExercise, scope);
+    // 1. Local durable save first (Source of Truth)
+    await customExerciseStorage.saveCustomExercise(newExercise, resolvedScope);
+
+    // 2. Mark pending upload in sync metadata (authenticated only)
+    if (resolvedScope && resolvedScope.ownerType === 'authenticated') {
+      try {
+        await syncMetadataStore.markPendingUpload(
+          'custom_exercise',
+          newExercise.id,
+          newExercise.updatedAt || newExercise.createdAt || now,
+          resolvedScope,
+        );
+      } catch {
+        // Durability: Local save succeeded. Crash recovery scanner will reconstruct missing metadata.
+      }
+
+      // 3. Fire-and-forget sync trigger (asynchronous, non-blocking)
+      void syncLifecycleManager.triggerSync({ reason: 'custom_exercise_saved', scope: resolvedScope }).catch(() => {
+        // Silently caught; sync failure cannot throw or affect caller
+      });
+    }
+
     return newExercise;
   }
 
-  async deleteCustomExercise(id: string): Promise<void> {
-    await customExerciseStorage.deleteCustomExercise(id);
+  async updateCustomExercise(
+    input: UpdateCustomExerciseInput,
+    scope?: UserScope | null,
+  ): Promise<Exercise> {
+    const resolvedScope = scope !== undefined ? scope : getCurrentUserScope();
+    const customs = await customExerciseStorage.getCustomExercises(resolvedScope);
+    const existing = customs.find((e) => e.id === input.id);
+    if (!existing) {
+      throw new Error(`Custom exercise with id "${input.id}" not found.`);
+    }
+
+    const trimmedName = input.name !== undefined ? input.name.trim() : existing.name;
+    if (!trimmedName) {
+      throw new Error('Exercise name is required.');
+    }
+
+    const category = input.category ?? existing.category;
+    const categoryName = input.category
+      ? normalizeCategory(input.category).categoryName
+      : existing.categoryName;
+
+    const primaryMuscles =
+      input.primaryMuscles !== undefined
+        ? input.primaryMuscles
+            .map((name, idx) => ({ id: `cm_${idx}`, name: name.trim() }))
+            .filter((m) => m.name.length > 0)
+        : existing.primaryMuscles;
+
+    const secondaryMuscles =
+      input.secondaryMuscles !== undefined
+        ? input.secondaryMuscles
+            .map((name, idx) => ({ id: `csm_${idx}`, name: name.trim() }))
+            .filter((m) => m.name.length > 0)
+        : existing.secondaryMuscles;
+
+    const equipment =
+      input.equipment !== undefined
+        ? input.equipment
+            .map((name, idx) => ({ id: `ceq_${idx}`, name: name.trim() }))
+            .filter((eq) => eq.name.length > 0)
+        : existing.equipment;
+
+    const now = new Date().toISOString();
+
+    const updated: Exercise = {
+      ...existing,
+      ownerId: existing.ownerId || resolvedScope?.ownerId,
+      ownerType: existing.ownerType || resolvedScope?.ownerType,
+      name: trimmedName,
+      description: input.description !== undefined ? input.description.trim() : existing.description,
+      category,
+      categoryName,
+      primaryMuscles,
+      secondaryMuscles,
+      equipment,
+      isCustom: true,
+      updatedAt: now,
+    };
+
+    // 1. Local durable save first (Source of Truth)
+    await customExerciseStorage.saveCustomExercise(updated, resolvedScope);
+
+    // 2. Mark pending upload in sync metadata (authenticated only)
+    if (resolvedScope && resolvedScope.ownerType === 'authenticated') {
+      try {
+        await syncMetadataStore.markPendingUpload(
+          'custom_exercise',
+          updated.id,
+          updated.updatedAt,
+          resolvedScope,
+        );
+      } catch {
+        // Durability: Local save succeeded. Crash recovery scanner will reconstruct missing metadata.
+      }
+
+      // 3. Fire-and-forget sync trigger (asynchronous, non-blocking)
+      void syncLifecycleManager.triggerSync({ reason: 'custom_exercise_saved', scope: resolvedScope }).catch(() => {
+        // Silently caught; sync failure cannot throw or affect caller
+      });
+    }
+
+    return updated;
+  }
+
+  /**
+   * Deletes a specific custom exercise.
+   * Produces a durable pending_delete tombstone if authenticated and previously synced.
+   * Safely cleans up local-only unsynced creations without sending unnecessary cloud tombstones.
+   */
+  async deleteCustomExercise(id: string, scope?: UserScope | null): Promise<void> {
+    const resolvedScope = scope !== undefined ? scope : getCurrentUserScope();
+    if (resolvedScope && resolvedScope.ownerType === 'authenticated') {
+      const existingMeta = await syncMetadataStore.getRecord('custom_exercise', id, resolvedScope);
+      const isUnsyncedLocalCreate =
+        (!existingMeta || existingMeta.syncStatus === 'pending_upload') &&
+        !existingMeta?.lastSyncedServerUpdatedAt;
+
+      if (isUnsyncedLocalCreate) {
+        // Unsynced local create -> delete: remove local entity and clear pending upload record
+        await customExerciseStorage.deleteCustomExercise(id, resolvedScope);
+        if (existingMeta) {
+          await syncMetadataStore.removeRecord('custom_exercise', id, resolvedScope);
+        }
+        return;
+      }
+
+      // Durable tombstone first to prevent ID/sync loss on crash
+      const now = new Date().toISOString();
+      await syncMetadataStore.markPendingDelete('custom_exercise', id, now, now, resolvedScope);
+      await customExerciseStorage.deleteCustomExercise(id, resolvedScope);
+
+      // Fire-and-forget sync trigger (asynchronous, non-blocking)
+      void syncLifecycleManager.triggerSync({ reason: 'local_delete', scope: resolvedScope }).catch(() => {
+        // Silently caught; sync failure cannot throw or affect caller
+      });
+    } else {
+      // Guest or unauthenticated: strictly local-only delete
+      await customExerciseStorage.deleteCustomExercise(id, resolvedScope);
+    }
   }
 
   /**

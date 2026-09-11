@@ -73,7 +73,7 @@ export function Button({
       disabled={!isInteractive}
       onPress={() => {
         if (isInteractive) {
-          onPress();
+          return onPress();
         }
       }}
       style={({ pressed }) => [

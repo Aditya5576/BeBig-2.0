@@ -18,11 +18,27 @@ import { spacing, colors, radii } from '../../src/constants/theme';
 
 type EmailMode = 'sign_in' | 'sign_up';
 
-export interface AuthScreenProps {
-  initialMode?: 'sign_in' | 'sign_up';
+export interface AuthStatusMessage {
+  text: string;
+  type: 'error' | 'info' | 'success';
+  title?: string;
+  action?: {
+    label: string;
+    onPress: () => void;
+  };
 }
 
-export default function AuthScreen({ initialMode }: AuthScreenProps = {}) {
+export interface AuthScreenProps {
+  initialMode?: 'sign_in' | 'sign_up';
+  initialStatusMessage?: AuthStatusMessage | null;
+  initialEmail?: string;
+}
+
+export default function AuthScreen({
+  initialMode,
+  initialStatusMessage = null,
+  initialEmail = '',
+}: AuthScreenProps = {}) {
   const router = useRouter();
   const searchParams = useLocalSearchParams<{ mode?: string }>();
   const completeOnboarding = useOnboardingStore((state) => state.completeOnboarding);
@@ -32,17 +48,14 @@ export default function AuthScreen({ initialMode }: AuthScreenProps = {}) {
   const [emailMode, setEmailMode] = useState<EmailMode>(
     initialMode || (searchParams.mode === 'sign_up' ? 'sign_up' : 'sign_in'),
   );
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
   const [resetLoading, setResetLoading] = useState(false);
-  const [statusMessage, setStatusMessage] = useState<{
-    text: string;
-    type: 'error' | 'info' | 'success';
-  } | null>(null);
+  const [statusMessage, setStatusMessage] = useState<AuthStatusMessage | null>(initialStatusMessage);
 
   const configured = isSupabaseConfigured();
 
@@ -205,7 +218,22 @@ export default function AuthScreen({ initialMode }: AuthScreenProps = {}) {
         await handlePostAuthSuccess(result.session);
       } else {
         setLoading(false);
-        setStatusMessage({ text: result.message, type: 'error' });
+        if (result.isNonExistentUser) {
+          setStatusMessage({
+            title: 'No account found',
+            text: "We couldn't find an account with this email. Create an account to get started.",
+            type: 'error',
+            action: {
+              label: 'Create Account',
+              onPress: () => {
+                setEmailMode('sign_up');
+                setStatusMessage(null);
+              },
+            },
+          });
+        } else {
+          setStatusMessage({ text: result.message, type: 'error' });
+        }
       }
     }
   };
@@ -343,6 +371,16 @@ export default function AuthScreen({ initialMode }: AuthScreenProps = {}) {
               ]}
               testID="auth-status-banner"
             >
+              {statusMessage.title ? (
+                <Text
+                  variant="titleMedium"
+                  color="primary"
+                  style={styles.statusBannerTitle}
+                  testID="auth-status-banner-title"
+                >
+                  {statusMessage.title}
+                </Text>
+              ) : null}
               <Text
                 variant="body"
                 color={
@@ -355,6 +393,16 @@ export default function AuthScreen({ initialMode }: AuthScreenProps = {}) {
               >
                 {statusMessage.text}
               </Text>
+              {statusMessage.action ? (
+                <Button
+                  testID="auth-status-action-button"
+                  title={statusMessage.action.label}
+                  onPress={statusMessage.action.onPress}
+                  variant="primary"
+                  size="sm"
+                  style={styles.statusActionButton}
+                />
+              ) : null}
             </Card>
           )}
 
@@ -679,7 +727,14 @@ const styles = StyleSheet.create({
   },
   statusCardSuccess: {
     borderColor: colors.dark.success,
-    backgroundColor: '#0E291B',
+    backgroundColor: '#0F291E',
+  },
+  statusBannerTitle: {
+    marginBottom: 4,
+  },
+  statusActionButton: {
+    marginTop: spacing.sm,
+    minHeight: 44,
   },
   modeTabs: {
     flexDirection: 'row',
