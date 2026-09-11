@@ -1,61 +1,22 @@
-import * as SecureStore from 'expo-secure-store';
-import { Platform } from 'react-native';
 import { GuestSession } from '../../features/auth/types';
 import { OnboardingState } from '../../features/onboarding/types';
+import { platformStorage } from './platformStorage';
 
 const STORAGE_KEYS = {
   GUEST_SESSION: 'bebig.guest.session',
   GUEST_ONBOARDING: 'bebig.guest.onboarding',
 } as const;
 
-/**
- * In-memory fallback for environments where native SecureStore is unavailable
- * (e.g. Jest tests, SSR, or headless web).
- */
-const memoryStorage = new Map<string, string>();
-
 const readStorage = async (key: string): Promise<string | null> => {
-  try {
-    if (Platform.OS === 'web' || process.env.NODE_ENV === 'test') {
-      if (typeof localStorage !== 'undefined') {
-        return localStorage.getItem(key);
-      }
-      return memoryStorage.get(key) ?? null;
-    }
-    return await SecureStore.getItemAsync(key);
-  } catch {
-    return memoryStorage.get(key) ?? null;
-  }
+  return platformStorage.getItem(key);
 };
 
 const writeStorage = async (key: string, value: string): Promise<void> => {
-  memoryStorage.set(key, value);
-  try {
-    if (Platform.OS === 'web' || process.env.NODE_ENV === 'test') {
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem(key, value);
-      }
-      return;
-    }
-    await SecureStore.setItemAsync(key, value);
-  } catch {
-    // memoryStorage already populated
-  }
+  await platformStorage.setItem(key, value);
 };
 
 const deleteStorage = async (key: string): Promise<void> => {
-  memoryStorage.delete(key);
-  try {
-    if (Platform.OS === 'web' || process.env.NODE_ENV === 'test') {
-      if (typeof localStorage !== 'undefined') {
-        localStorage.removeItem(key);
-      }
-      return;
-    }
-    await SecureStore.deleteItemAsync(key);
-  } catch {
-    // memoryStorage already cleared
-  }
+  await platformStorage.removeItem(key);
 };
 
 /**

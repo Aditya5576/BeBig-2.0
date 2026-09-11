@@ -7,50 +7,22 @@
  * Enforces strong isolation across users using UserScope keys.
  */
 
-import * as SecureStore from 'expo-secure-store';
-import { Platform } from 'react-native';
 import { getUserScopedKey, getCurrentUserScope, UserScope } from '../../auth/utils/userScope';
 import { WorkoutTemplate } from '../types';
+import { platformStorage } from '../../../lib/storage';
 
 export const BASE_TEMPLATES_STORAGE_KEY = 'bebig.templates';
 
-const memoryStorage = new Map<string, string>();
-
 const readStorage = async (key: string): Promise<string | null> => {
-  try {
-    const val = await SecureStore.getItemAsync(key);
-    if (val !== null && val !== undefined) return val;
-  } catch {
-    // fallback to memory
-  }
-  if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
-    return localStorage.getItem(key);
-  }
-  return memoryStorage.get(key) ?? null;
+  return platformStorage.getItem(key);
 };
 
 const writeStorage = async (key: string, value: string): Promise<void> => {
-  memoryStorage.set(key, value);
-  try {
-    await SecureStore.setItemAsync(key, value);
-  } catch {
-    // Handled in memoryStorage
-  }
-  if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
-    localStorage.setItem(key, value);
-  }
+  await platformStorage.setItem(key, value);
 };
 
 const deleteStorage = async (key: string): Promise<void> => {
-  memoryStorage.delete(key);
-  try {
-    await SecureStore.deleteItemAsync(key);
-  } catch {
-    // Handled in memoryStorage
-  }
-  if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
-    localStorage.removeItem(key);
-  }
+  await platformStorage.removeItem(key);
 };
 
 /**
@@ -87,7 +59,7 @@ export const templateStorage = {
    * Clears volatile in-memory storage (called on logout/user switch).
    */
   clearMemoryCache: (): void => {
-    memoryStorage.clear();
+    platformStorage.clearMemoryCache();
   },
 
   getTemplates: async (scope?: UserScope | null): Promise<WorkoutTemplate[]> => {
@@ -183,7 +155,7 @@ export const templateStorage = {
     try {
       if (key) await deleteStorage(key);
       if (!scope && process.env.NODE_ENV === 'test') {
-        memoryStorage.clear();
+        platformStorage.clearMemoryCache();
         await deleteStorage('bebig.workout.templates');
       }
     } catch {

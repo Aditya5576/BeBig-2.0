@@ -1,57 +1,19 @@
-import * as SecureStore from 'expo-secure-store';
-import { Platform } from 'react-native';
 import { getUserScopedKey, getCurrentUserScope, UserScope } from '../../auth/utils/userScope';
 import { Exercise } from '../types';
+import { platformStorage } from '../../../lib/storage';
 
 export const BASE_CUSTOM_EXERCISES_KEY = 'bebig.exercises.custom';
 
-/**
- * In-memory fallback for test and non-native environments.
- */
-const memoryStorage = new Map<string, string>();
-
 const readStorage = async (key: string): Promise<string | null> => {
-  try {
-    if (Platform.OS === 'web' || process.env.NODE_ENV === 'test') {
-      if (typeof localStorage !== 'undefined') {
-        return localStorage.getItem(key);
-      }
-      return memoryStorage.get(key) ?? null;
-    }
-    return await SecureStore.getItemAsync(key);
-  } catch {
-    return memoryStorage.get(key) ?? null;
-  }
+  return platformStorage.getItem(key);
 };
 
 const writeStorage = async (key: string, value: string): Promise<void> => {
-  memoryStorage.set(key, value);
-  try {
-    if (Platform.OS === 'web' || process.env.NODE_ENV === 'test') {
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem(key, value);
-      }
-      return;
-    }
-    await SecureStore.setItemAsync(key, value);
-  } catch {
-    // Handled in memoryStorage
-  }
+  await platformStorage.setItem(key, value);
 };
 
 const deleteStorage = async (key: string): Promise<void> => {
-  memoryStorage.delete(key);
-  try {
-    if (Platform.OS === 'web' || process.env.NODE_ENV === 'test') {
-      if (typeof localStorage !== 'undefined') {
-        localStorage.removeItem(key);
-      }
-      return;
-    }
-    await SecureStore.deleteItemAsync(key);
-  } catch {
-    // Handled in memoryStorage
-  }
+  await platformStorage.removeItem(key);
 };
 
 export const customExerciseStorage = {
@@ -59,7 +21,7 @@ export const customExerciseStorage = {
    * Clears volatile in-memory storage (called on logout/user switch).
    */
   clearMemoryCache: (): void => {
-    memoryStorage.clear();
+    platformStorage.clearMemoryCache();
   },
 
   getCustomExercises: async (scope?: UserScope | null): Promise<Exercise[]> => {
@@ -138,7 +100,7 @@ export const customExerciseStorage = {
     try {
       if (key) await deleteStorage(key);
       if (!scope && process.env.NODE_ENV === 'test') {
-        memoryStorage.clear();
+        platformStorage.clearMemoryCache();
         await deleteStorage('bebig.custom.exercises');
       }
     } catch {
