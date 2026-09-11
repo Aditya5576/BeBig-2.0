@@ -251,7 +251,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
     color: colors.dark.textPrimary,
-    fontSize: 15,
+    fontSize: 16,
   },
   categoryScroll: {
     gap: spacing.xs,

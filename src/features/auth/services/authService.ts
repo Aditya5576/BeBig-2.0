@@ -151,6 +151,9 @@ export const authService: IAuthService = {
           error.code === 'user_not_found' ||
           error.status === 404 ||
           /user not found|no user found|account not found|email not found/i.test(msg);
+        const isInvalidCredentials =
+          error.code === 'invalid_credentials' ||
+          /invalid login credentials|invalid credentials/i.test(msg);
 
         return {
           success: false,
@@ -158,6 +161,7 @@ export const authService: IAuthService = {
             ? "We couldn't find an account with this email. Create an account to get started."
             : getErrorMessage(error, 'Sign in failed.'),
           isNonExistentUser: isNonExistent,
+          isInvalidCredentials,
         };
       }
 
@@ -178,6 +182,9 @@ export const authService: IAuthService = {
         err?.code === 'user_not_found' ||
         err?.status === 404 ||
         /user not found|no user found|account not found|email not found/i.test(msg);
+      const isInvalidCredentials =
+        err?.code === 'invalid_credentials' ||
+        /invalid login credentials|invalid credentials/i.test(msg);
 
       return {
         success: false,
@@ -185,6 +192,7 @@ export const authService: IAuthService = {
           ? "We couldn't find an account with this email. Create an account to get started."
           : getErrorMessage(err, 'Sign in encountered an unexpected error.'),
         isNonExistentUser: isNonExistent,
+        isInvalidCredentials,
       };
     }
   },

@@ -32,8 +32,42 @@ export const STANDARD_EQUIPMENT: string[] = [
   'Other',
 ];
 
+export function inferCategoryFromQuery(query: string): ExerciseCategory | undefined {
+  const q = query.toLowerCase().replace(/[^a-z0-9]/g, ' ');
+  if (
+    /\b(lat|lats|pulldown|pull down|pulley|row|rows|rowing|deadlift|pull up|pullup|chin up|chinup|shrug|back)\b/.test(
+      q,
+    )
+  ) {
+    return 'back';
+  }
+  if (/\b(bench|chest|fly|flye|pec|pushup|push up|dip|dips)\b/.test(q)) {
+    return 'chest';
+  }
+  if (
+    /\b(squat|squats|leg|legs|lunge|lunges|press|calf|calves|quad|hamstring|adductor|abductor)\b/.test(
+      q,
+    )
+  ) {
+    return 'legs';
+  }
+  if (/\b(curl|curls|bicep|biceps|tricep|triceps|extension|skull|hammer)\b/.test(q)) {
+    return 'arms';
+  }
+  if (
+    /\b(shoulder|shoulders|overhead|ohp|lateral|deltoid|delt|arnold|military)\b/.test(q)
+  ) {
+    return 'shoulders';
+  }
+  if (/\b(abs|ab|crunch|crunches|plank|oblique|situp)\b/.test(q)) {
+    return 'abs';
+  }
+  return undefined;
+}
+
 export class ExerciseRepository {
   private provider: IExerciseProvider;
+  private candidateCache = new Map<string, Exercise[]>();
 
   constructor(provider?: IExerciseProvider) {
     this.provider = provider || new WgerExerciseProvider();
@@ -60,17 +94,18 @@ export class ExerciseRepository {
     scope?: UserScope | null,
   ): Promise<ExerciseListResult> {
     const isFirstPage = !options.offset || options.offset === 0;
-    const hasQuery = Boolean(options.query && options.query.trim().length > 0);
+    const rawQuery = options.query?.trim();
+    const hasQuery = Boolean(rawQuery && rawQuery.length > 0);
 
-    // Retrieve local custom exercises
+    // 1. Retrieve local custom exercises
     let customMatches: Exercise[] = [];
     if (isFirstPage) {
       const allCustom = await customExerciseStorage.getCustomExercises(scope);
       if (hasQuery) {
-        customMatches = filterAndRankExercises(allCustom, options.query, options.category);
+        customMatches = filterAndRankExercises(allCustom, rawQuery, options.category);
       } else {
         customMatches = allCustom.filter((ex) => {
-          if (options.category && ex.category !== options.category) {
+          if (options.category && options.category !== 'all' && ex.category !== options.category) {
             return false;
           }
           return true;
@@ -78,61 +113,116 @@ export class ExerciseRepository {
       }
     }
 
-    // Fetch provider exercises
-    let providerResult = await this.provider.listExercises(options);
+    // 2. Fetch provider exercises
+    let providerExercises: Exercise[] = [];
+    let totalCount = 0;
+    let hasMore = false;
+    let nextOffset: number | undefined = undefined;
 
-    // If query was provided and provider returned 0 items, attempt tolerant fallback fetch
-    // (e.g., when the provider performs strict SQL/like matching that fails on typos or alternative spacing)
-    if (hasQuery && providerResult.exercises.length === 0) {
-      const qTokens = options.query!.trim().split(/\s+/).filter((t) => t.length >= 3);
-      if (qTokens.length > 0) {
-        try {
-          const fallbackResult = await this.provider.listExercises({
-            ...options,
-            query: qTokens[0],
-            limit: 40,
-          });
-          if (fallbackResult.exercises.length > 0) {
-            const rankedFallback = filterAndRankExercises(
-              fallbackResult.exercises,
-              options.query,
-              options.category,
-            );
-            if (rankedFallback.length > 0) {
-              providerResult = {
-                ...fallbackResult,
-                exercises: rankedFallback,
-              };
+    if (!hasQuery) {
+      // Standard browsing / pagination
+      const providerResult = await this.provider.listExercises(options);
+      providerExercises = providerResult.exercises;
+      totalCount = providerResult.totalCount;
+      hasMore = providerResult.hasMore;
+      nextOffset = providerResult.nextOffset;
+
+      // Cache by category if filtered
+      if (options.category && options.category !== 'all') {
+        const existing = this.candidateCache.get(options.category) || [];
+        const mergedMap = new Map<string, Exercise>();
+        existing.forEach((e) => mergedMap.set(e.id, e));
+        providerExercises.forEach((e) => mergedMap.set(e.id, e));
+        this.candidateCache.set(options.category, Array.from(mergedMap.values()));
+      }
+    } else {
+      // Query search flow
+      const targetCategory =
+        options.category && options.category !== 'all'
+          ? (options.category as ExerciseCategory)
+          : inferCategoryFromQuery(rawQuery!);
+
+      // Gather existing cached candidates
+      let candidatePool: Exercise[] = [];
+      if (targetCategory && this.candidateCache.has(targetCategory)) {
+        candidatePool = [...this.candidateCache.get(targetCategory)!];
+      }
+
+      // Initial provider query
+      try {
+        const providerResult = await this.provider.listExercises({
+          ...options,
+          category: targetCategory || options.category,
+          limit: targetCategory ? 60 : (options.limit || 30),
+        });
+
+        // Merge into candidate pool
+        const poolMap = new Map<string, Exercise>();
+        candidatePool.forEach((e) => poolMap.set(e.id, e));
+        providerResult.exercises.forEach((e) => poolMap.set(e.id, e));
+        candidatePool = Array.from(poolMap.values());
+
+        if (targetCategory) {
+          this.candidateCache.set(targetCategory, candidatePool);
+        }
+      } catch {
+        // Continue with cached candidate pool
+      }
+
+      // Rank candidate pool
+      let ranked = filterAndRankExercises(candidatePool, rawQuery, options.category);
+
+      // If ranked is empty, attempt fallback candidate retrieval (e.g. token splitting or query variants)
+      if (ranked.length === 0) {
+        const qTokens = rawQuery!.split(/\s+/).filter((t) => t.length >= 3);
+        const searchTokens = [...qTokens, rawQuery!.replace(/\s+/g, '')];
+
+        for (const token of searchTokens) {
+          try {
+            const fallbackResult = await this.provider.listExercises({
+              ...options,
+              query: token,
+              limit: 50,
+            });
+            if (fallbackResult.exercises.length > 0) {
+              const newlyRanked = filterAndRankExercises(
+                fallbackResult.exercises,
+                rawQuery,
+                options.category,
+              );
+              if (newlyRanked.length > 0) {
+                ranked = newlyRanked;
+                break;
+              }
             }
+          } catch {
+            // Ignore fallback errors
           }
-        } catch {
-          // Ignore fallback errors and preserve empty provider result
         }
       }
-    } else if (hasQuery && providerResult.exercises.length > 0) {
-      providerResult = {
-        ...providerResult,
-        exercises: filterAndRankExercises(providerResult.exercises, options.query, options.category),
-      };
+
+      providerExercises = ranked;
+      totalCount = ranked.length;
+      hasMore = false;
+      nextOffset = undefined;
     }
 
-    // Merge custom exercises on the first page
+    // 3. Merge custom and provider exercises (exact & strongest matches ranked to top)
     const combined = isFirstPage
-      ? [...customMatches, ...providerResult.exercises]
-      : providerResult.exercises;
+      ? [...customMatches, ...providerExercises]
+      : providerExercises;
 
-    // Rank combined results if querying so strongest matches are at the top
     const finalExercises = hasQuery && isFirstPage
-      ? filterAndRankExercises(combined, options.query, options.category)
+      ? filterAndRankExercises(combined, rawQuery, options.category)
       : combined;
 
     return {
       exercises: finalExercises,
       totalCount: hasQuery
         ? finalExercises.length
-        : providerResult.totalCount + customMatches.length,
-      hasMore: providerResult.hasMore,
-      nextOffset: providerResult.nextOffset,
+        : totalCount + customMatches.length,
+      hasMore,
+      nextOffset,
     };
   }
 
@@ -342,6 +432,7 @@ export class ExerciseRepository {
    * Invalidates volatile in-memory storage cache on logout/user switch.
    */
   clearInMemoryState(): void {
+    this.candidateCache.clear();
     customExerciseStorage.clearMemoryCache();
   }
 }

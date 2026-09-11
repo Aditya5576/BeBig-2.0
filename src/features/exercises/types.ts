@@ -46,6 +46,7 @@ export interface Exercise {
   sourceExerciseId?: string;
   isCustom: boolean;
   createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface CreateCustomExerciseInput {
@@ -53,6 +54,16 @@ export interface CreateCustomExerciseInput {
   description?: string;
   category: ExerciseCategory;
   primaryMuscles: string[];
+  secondaryMuscles?: string[];
+  equipment?: string[];
+}
+
+export interface UpdateCustomExerciseInput {
+  id: string;
+  name?: string;
+  description?: string;
+  category?: ExerciseCategory;
+  primaryMuscles?: string[];
   secondaryMuscles?: string[];
   equipment?: string[];
 }

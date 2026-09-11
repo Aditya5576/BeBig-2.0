@@ -40,7 +40,7 @@ export default function AuthScreen({
   initialEmail = '',
 }: AuthScreenProps = {}) {
   const router = useRouter();
-  const searchParams = useLocalSearchParams<{ mode?: string }>();
+  const searchParams = useLocalSearchParams<{ mode?: string; email?: string }>();
   const completeOnboarding = useOnboardingStore((state) => state.completeOnboarding);
   const setAuthSession = useAuthStore((state) => state.setSession);
   const enterGuestMode = useAuthStore((state) => state.enterGuestMode);
@@ -48,7 +48,7 @@ export default function AuthScreen({
   const [emailMode, setEmailMode] = useState<EmailMode>(
     initialMode || (searchParams.mode === 'sign_up' ? 'sign_up' : 'sign_in'),
   );
-  const [email, setEmail] = useState(initialEmail);
+  const [email, setEmail] = useState(initialEmail || searchParams.email || '');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -218,7 +218,7 @@ export default function AuthScreen({
         await handlePostAuthSuccess(result.session);
       } else {
         setLoading(false);
-        if (result.isNonExistentUser) {
+        if (result.isNonExistentUser || result.isInvalidCredentials) {
           setStatusMessage({
             title: 'No account found',
             text: "We couldn't find an account with this email. Create an account to get started.",

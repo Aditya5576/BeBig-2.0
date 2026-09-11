@@ -427,7 +427,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 4,
     color: colors.dark.textPrimary,
-    fontSize: 15,
+    fontSize: 16,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -533,8 +533,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,
     color: colors.dark.textPrimary,
-    fontSize: 14,
-    minHeight: 40,
+    fontSize: 16,
+    minHeight: 44,
   },
   submitButton: {
     marginTop: spacing.md,

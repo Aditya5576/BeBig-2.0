@@ -1,6 +1,6 @@
 import React from 'react';
-import AuthScreen from './auth';
+import { Redirect } from 'expo-router';
 
 export default function LoginScreen() {
-  return <AuthScreen initialMode="sign_in" />;
+  return <Redirect href="/onboarding/auth?mode=sign_in" />;
 }

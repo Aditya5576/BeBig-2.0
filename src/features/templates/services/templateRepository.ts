@@ -13,7 +13,8 @@ import {
   UpdateTemplateInput,
 } from '../types';
 import { templateStorage } from '../storage/templateStorage';
-import { getCurrentUserScope } from '../../auth/utils/userScope';
+import { getCurrentUserScope, UserScope } from '../../auth/utils/userScope';
+import { syncMetadataStore, syncLifecycleManager } from '../../../services/sync';
 
 export class TemplateRepository {
   private validateTemplateData(name: string, exercises: Omit<TemplateExercise, 'order'>[]): void {
@@ -57,15 +58,18 @@ export class TemplateRepository {
     }
   }
 
-  async getTemplates(): Promise<WorkoutTemplate[]> {
-    return templateStorage.getTemplates();
+  async getTemplates(scope?: UserScope | null): Promise<WorkoutTemplate[]> {
+    return templateStorage.getTemplates(scope);
   }
 
-  async getTemplateById(id: string): Promise<WorkoutTemplate | null> {
-    return templateStorage.getTemplateById(id);
+  async getTemplateById(id: string, scope?: UserScope | null): Promise<WorkoutTemplate | null> {
+    return templateStorage.getTemplateById(id, scope);
   }
 
-  async createTemplate(input: CreateTemplateInput): Promise<WorkoutTemplate> {
+  async createTemplate(
+    input: CreateTemplateInput,
+    scope?: UserScope | null,
+  ): Promise<WorkoutTemplate> {
     this.validateTemplateData(input.name, input.exercises);
 
     const id = `template_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
@@ -82,24 +86,49 @@ export class TemplateRepository {
       targetWeight: ex.targetWeight,
     }));
 
-    const scope = getCurrentUserScope();
+    const resolvedScope = scope !== undefined ? scope : getCurrentUserScope();
 
     const template: WorkoutTemplate = {
       id,
-      ownerId: scope?.ownerId,
-      ownerType: scope?.ownerType,
+      ownerId: resolvedScope?.ownerId,
+      ownerType: resolvedScope?.ownerType,
       name: input.name.trim(),
       exercises: normalizedExercises,
       createdAt: now,
       updatedAt: now,
     };
 
-    await templateStorage.saveTemplate(template, scope);
+    // 1. Local durable save first (Source of Truth)
+    await templateStorage.saveTemplate(template, resolvedScope);
+
+    // 2. Mark pending upload in sync metadata (authenticated only)
+    if (resolvedScope && resolvedScope.ownerType === 'authenticated') {
+      try {
+        await syncMetadataStore.markPendingUpload(
+          'template',
+          template.id,
+          template.updatedAt,
+          resolvedScope,
+        );
+      } catch {
+        // Durability: Local save succeeded. Crash recovery scanner will reconstruct missing metadata.
+      }
+
+      // 3. Fire-and-forget sync trigger (asynchronous, non-blocking)
+      void syncLifecycleManager.triggerSync({ reason: 'template_saved', scope: resolvedScope }).catch(() => {
+        // Silently caught; sync failure cannot throw or affect caller
+      });
+    }
+
     return template;
   }
 
-  async updateTemplate(input: UpdateTemplateInput): Promise<WorkoutTemplate> {
-    const existing = await templateStorage.getTemplateById(input.id);
+  async updateTemplate(
+    input: UpdateTemplateInput,
+    scope?: UserScope | null,
+  ): Promise<WorkoutTemplate> {
+    const resolvedScope = scope !== undefined ? scope : getCurrentUserScope();
+    const existing = await templateStorage.getTemplateById(input.id, resolvedScope);
     if (!existing) {
       throw new Error(`Template with id "${input.id}" not found.`);
     }
@@ -120,23 +149,77 @@ export class TemplateRepository {
       targetWeight: ex.targetWeight,
     }));
 
-    const scope = getCurrentUserScope();
+    const now = new Date().toISOString();
 
     const updated: WorkoutTemplate = {
       ...existing,
-      ownerId: existing.ownerId || scope?.ownerId,
-      ownerType: existing.ownerType || scope?.ownerType,
+      ownerId: existing.ownerId || resolvedScope?.ownerId,
+      ownerType: existing.ownerType || resolvedScope?.ownerType,
       name: updatedName.trim(),
       exercises: normalizedExercises,
-      updatedAt: new Date().toISOString(),
+      updatedAt: now,
     };
 
-    await templateStorage.saveTemplate(updated, scope);
+    // 1. Local durable save first (Source of Truth)
+    await templateStorage.saveTemplate(updated, resolvedScope);
+
+    // 2. Mark pending upload in sync metadata (authenticated only)
+    if (resolvedScope && resolvedScope.ownerType === 'authenticated') {
+      try {
+        await syncMetadataStore.markPendingUpload(
+          'template',
+          updated.id,
+          updated.updatedAt,
+          resolvedScope,
+        );
+      } catch {
+        // Durability: Local save succeeded. Crash recovery scanner will reconstruct missing metadata.
+      }
+
+      // 3. Fire-and-forget sync trigger (asynchronous, non-blocking)
+      void syncLifecycleManager.triggerSync({ reason: 'template_saved', scope: resolvedScope }).catch(() => {
+        // Silently caught; sync failure cannot throw or affect caller
+      });
+    }
+
     return updated;
   }
 
-  async deleteTemplate(id: string): Promise<void> {
-    await templateStorage.deleteTemplate(id);
+  /**
+   * Deletes a specific workout template.
+   * Produces a durable pending_delete tombstone if authenticated and previously synced.
+   * Safely cleans up local-only unsynced creations without sending unnecessary cloud tombstones.
+   */
+  async deleteTemplate(id: string, scope?: UserScope | null): Promise<void> {
+    const resolvedScope = scope !== undefined ? scope : getCurrentUserScope();
+    if (resolvedScope && resolvedScope.ownerType === 'authenticated') {
+      const existingMeta = await syncMetadataStore.getRecord('template', id, resolvedScope);
+      const isUnsyncedLocalCreate =
+        (!existingMeta || existingMeta.syncStatus === 'pending_upload') &&
+        !existingMeta?.lastSyncedServerUpdatedAt;
+
+      if (isUnsyncedLocalCreate) {
+        // Unsynced local create -> delete: remove local entity and clear pending upload record
+        await templateStorage.deleteTemplate(id, resolvedScope);
+        if (existingMeta) {
+          await syncMetadataStore.removeRecord('template', id, resolvedScope);
+        }
+        return;
+      }
+
+      // Durable tombstone first to prevent ID/sync loss on crash
+      const now = new Date().toISOString();
+      await syncMetadataStore.markPendingDelete('template', id, now, now, resolvedScope);
+      await templateStorage.deleteTemplate(id, resolvedScope);
+
+      // Fire-and-forget sync trigger (asynchronous, non-blocking)
+      void syncLifecycleManager.triggerSync({ reason: 'local_delete', scope: resolvedScope }).catch(() => {
+        // Silently caught; sync failure cannot throw or affect caller
+      });
+    } else {
+      // Guest or unauthenticated: strictly local-only delete
+      await templateStorage.deleteTemplate(id, resolvedScope);
+    }
   }
 
   /**

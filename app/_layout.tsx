@@ -5,6 +5,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { colors } from '../src/constants/theme';
 import { useSyncLifecycle } from '../src/services/sync';
 import { useAuthStore } from '../src/features/auth';
+import { WebAlertModal } from '../src/components/ui';
+import '../src/lib/ui/webAlert';
 
 function useProtectedRoute() {
   const router = typeof useRouter === 'function' ? useRouter() : null;
@@ -68,6 +70,7 @@ export default function RootLayout() {
         <Stack.Screen name="workout/progress/exercise/[id]" />
         <Stack.Screen name="+not-found" options={{ title: 'Not Found' }} />
       </Stack>
+      <WebAlertModal />
     </SafeAreaProvider>
   );
 }

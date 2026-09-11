@@ -288,7 +288,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 4,
     color: colors.dark.textPrimary,
-    fontSize: 15,
+    fontSize: 16,
   },
   multilineInput: {
     minHeight: 100,

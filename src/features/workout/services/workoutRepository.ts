@@ -8,7 +8,8 @@
 import { WorkoutTemplate } from '../../templates/types';
 import { WorkoutSession, WorkoutExercise, WorkoutSet, ActiveRestTimer } from '../types';
 import { workoutStorage } from '../storage/workoutStorage';
-import { getCurrentUserScope } from '../../auth/utils/userScope';
+import { getCurrentUserScope, UserScope } from '../../auth/utils/userScope';
+import { syncMetadataStore, syncLifecycleManager } from '../../../services/sync';
 
 export class WorkoutRepository {
   /**
@@ -378,8 +379,36 @@ export class WorkoutRepository {
       activeRestTimer: null,
     };
 
+    // 1. Save completed workout locally (Source of Truth)
     await workoutStorage.saveCompletedWorkout(completedSession);
+
+    // 2. Clear active in-progress draft (Immunity preserved)
     await workoutStorage.clearActiveWorkout();
+
+    // 3. Mark pending metadata (wrapped in try/catch to protect durability)
+    const scope = getCurrentUserScope();
+    if (scope && scope.ownerType === 'authenticated') {
+      try {
+        await syncMetadataStore.markPendingUpload(
+          'workout',
+          completedSession.id,
+          completedSession.finishedAt || completedSession.startedAt,
+          scope,
+        );
+      } catch {
+        // Local completed workout is already durable in local storage.
+        // If metadata write fails or crashes, the Checkpoint 3.1
+        // crash recovery scanner (syncMetadataStore.reconcileLocalEntities)
+        // will automatically detect the untracked completed workout on the next launch/sync pass
+        // and recreate the missing pending_upload metadata.
+      }
+
+      // 4. Fire-and-forget sync trigger (asynchronous, non-blocking)
+      void syncLifecycleManager.triggerSync({ reason: 'workout_completed', scope }).catch(() => {
+        // Silently caught; sync failure cannot throw or affect caller
+      });
+    }
+
     return completedSession;
   }
 
@@ -406,9 +435,39 @@ export class WorkoutRepository {
 
   /**
    * Deletes a specific completed workout from history.
+   * Produces a durable pending_delete tombstone if authenticated and previously synced.
+   * Safely cleans up local-only unsynced creations without sending unnecessary cloud tombstones.
    */
-  async deleteCompletedWorkout(id: string): Promise<void> {
-    await workoutStorage.deleteCompletedWorkout(id);
+  async deleteCompletedWorkout(id: string, scope?: UserScope | null): Promise<void> {
+    const resolvedScope = scope !== undefined ? scope : getCurrentUserScope();
+    if (resolvedScope && resolvedScope.ownerType === 'authenticated') {
+      const existingMeta = await syncMetadataStore.getRecord('workout', id, resolvedScope);
+      const isUnsyncedLocalCreate =
+        (!existingMeta || existingMeta.syncStatus === 'pending_upload') &&
+        !existingMeta?.lastSyncedServerUpdatedAt;
+
+      if (isUnsyncedLocalCreate) {
+        // Unsynced local create -> delete: remove local entity and clear pending upload record
+        await workoutStorage.deleteCompletedWorkout(id, resolvedScope);
+        if (existingMeta) {
+          await syncMetadataStore.removeRecord('workout', id, resolvedScope);
+        }
+        return;
+      }
+
+      // Durable tombstone first to prevent ID/sync loss on crash
+      const now = new Date().toISOString();
+      await syncMetadataStore.markPendingDelete('workout', id, now, now, resolvedScope);
+      await workoutStorage.deleteCompletedWorkout(id, resolvedScope);
+
+      // Fire-and-forget sync trigger (asynchronous, non-blocking)
+      void syncLifecycleManager.triggerSync({ reason: 'local_delete', scope: resolvedScope }).catch(() => {
+        // Silently caught; sync failure cannot throw or affect caller
+      });
+    } else {
+      // Guest or unauthenticated: strictly local-only delete
+      await workoutStorage.deleteCompletedWorkout(id, resolvedScope);
+    }
   }
 
   /**

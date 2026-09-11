@@ -10,6 +10,11 @@ import {
 import { Exercise } from '../src/features/exercises/types';
 import { useOnboardingStore } from '../src/features/onboarding';
 import AuthScreen from '../app/onboarding/auth';
+import WelcomeScreen from '../app/onboarding/welcome';
+declare const require: any;
+declare const __dirname: string;
+const fs = require('fs');
+const path = require('path');
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -209,40 +214,96 @@ describe('Surgical Fix: Login UX + Tolerant Exercise Search', () => {
       expect(getByTestId('auth-email-input').props.value).toBe('unknown@bebig.app');
     });
 
-    it('LOGIN: generic/unknown auth error does NOT incorrectly claim "No account found"', async () => {
-      // 1. Service verification: generic invalid credentials (e.g. wrong password)
+    it('LOGIN: Supabase "Invalid login credentials" (status 400) provides friendly signup guidance and Create Account action', async () => {
+      // 1. Service verification: Supabase 400 "Invalid login credentials"
       mockAuth.signInWithPassword.mockResolvedValueOnce({
         data: { session: null, user: null },
         error: {
           name: 'AuthApiError',
           message: 'Invalid login credentials',
           status: 400,
+          code: 'invalid_credentials',
         },
       });
 
-      const serviceResult = await authService.signInWithEmail('athlete@bebig.app', 'wrongPassword');
+      const serviceResult = await authService.signInWithEmail('newlifter@bebig.app', 'password123');
+      expect(serviceResult.success).toBe(false);
+      expect(serviceResult.isInvalidCredentials).toBe(true);
+
+      // 2. UI verification: AuthScreen displays No account found guidance and Create Account action
+      const screen = await render(<AuthScreen initialMode="sign_in" />);
+      await fireEvent.changeText(screen.getByTestId('auth-email-input'), 'newlifter@bebig.app');
+      await fireEvent.changeText(screen.getByTestId('auth-password-input'), 'password123');
+
+      mockAuth.signInWithPassword.mockResolvedValueOnce({
+        data: { session: null, user: null },
+        error: {
+          name: 'AuthApiError',
+          message: 'Invalid login credentials',
+          status: 400,
+          code: 'invalid_credentials',
+        },
+      });
+
+      await fireEvent.press(screen.getByTestId('auth-email-submit-button'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('auth-status-banner-title')).toBeTruthy();
+        expect(screen.getByText('No account found')).toBeTruthy();
+        expect(
+          screen.getByText("We couldn't find an account with this email. Create an account to get started.")
+        ).toBeTruthy();
+      });
+
+      // Tapping Create Account switches to Sign Up mode with email preserved
+      const createAccountButton = screen.getByTestId('auth-status-action-button');
+      expect(createAccountButton).toBeTruthy();
+      fireEvent.press(createAccountButton);
+
+      await waitFor(() => {
+        expect(screen.getByText('Create Your Account')).toBeTruthy();
+        expect(screen.getByTestId('auth-email-input').props.value).toBe('newlifter@bebig.app');
+      });
+    });
+
+    it('LOGIN: network or rate-limit error does NOT show "No account found" or Create Account action', async () => {
+      // 1. Service verification: Network error
+      mockAuth.signInWithPassword.mockResolvedValueOnce({
+        data: { session: null, user: null },
+        error: {
+          name: 'AuthRetryableFetchError',
+          message: 'fetch failed',
+          status: 0,
+        },
+      });
+
+      const serviceResult = await authService.signInWithEmail('athlete@bebig.app', 'password123');
       expect(serviceResult.success).toBe(false);
       expect(serviceResult.isNonExistentUser).toBe(false);
-      expect(serviceResult.message).toBe('Incorrect email or password. Please try again.');
+      expect(serviceResult.isInvalidCredentials).toBe(false);
+      expect(serviceResult.message).toContain('Unable to reach authentication service');
 
-      // 2. UI verification: AuthScreen displays standard error without "No account found"
-      const { getByTestId, getByText, queryByTestId } = await render(
-        <AuthScreen
-          initialMode="sign_in"
-          initialEmail="athlete@bebig.app"
-          initialStatusMessage={{
-            text: 'Incorrect email or password. Please try again.',
-            type: 'error',
-          }}
-        />
-      );
+      // 2. UI verification: displays generic connection error without "No account found"
+      const screen = await render(<AuthScreen initialMode="sign_in" />);
+      await fireEvent.changeText(screen.getByTestId('auth-email-input'), 'athlete@bebig.app');
+      await fireEvent.changeText(screen.getByTestId('auth-password-input'), 'password123');
 
-      expect(getByTestId('auth-status-banner')).toBeTruthy();
+      mockAuth.signInWithPassword.mockResolvedValueOnce({
+        data: { session: null, user: null },
+        error: {
+          name: 'AuthRetryableFetchError',
+          message: 'fetch failed',
+          status: 0,
+        },
+      });
 
-      // Must show generic error and MUST NOT claim "No account found"
-      expect(queryByTestId('auth-status-banner-title')).toBeNull();
-      expect(queryByTestId('auth-status-action-button')).toBeNull();
-      expect(getByText('Incorrect email or password. Please try again.')).toBeTruthy();
+      await fireEvent.press(screen.getByTestId('auth-email-submit-button'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('auth-status-banner')).toBeTruthy();
+        expect(screen.queryByTestId('auth-status-banner-title')).toBeNull();
+        expect(screen.queryByTestId('auth-status-action-button')).toBeNull();
+      });
     });
   });
 
@@ -423,6 +484,65 @@ describe('Surgical Fix: Login UX + Tolerant Exercise Search', () => {
       // 4. Unrelated search: "bench press" returns 0
       const resUnrelated = await repo.getExercises({ query: 'bench press' });
       expect(resUnrelated.exercises).toHaveLength(0);
+    });
+  });
+
+  // ==========================================
+  // 3. GUEST FLOW — NO QUESTIONS VERIFICATION
+  // ==========================================
+  describe('3. Guest Flow — Direct to /home Without Questions', () => {
+    it('GUEST: Continue as Guest on Welcome bypasses onboarding questionnaire and goes directly to /home', async () => {
+      const screen = await render(<WelcomeScreen />);
+      const guestButton = screen.getByTestId('welcome-guest-button');
+      expect(guestButton).toBeTruthy();
+
+      await fireEvent.press(guestButton);
+
+      await waitFor(() => {
+        expect(useAuthStore.getState().isGuest).toBe(true);
+        expect(useAuthStore.getState().status).toBe('guest');
+        expect(mockReplace).toHaveBeenCalledWith('/home');
+        // Must NOT have navigated to onboarding questionnaire
+        expect(mockPush).not.toHaveBeenCalledWith('/onboarding/goal');
+        expect(mockPush).not.toHaveBeenCalledWith('/onboarding/experience');
+        expect(mockPush).not.toHaveBeenCalledWith('/onboarding/preferences');
+      });
+    });
+
+    it('SIGNUP: New user Sign Up on Welcome routes to Auth screen and preserves onboarding questions', async () => {
+      const screen = await render(<WelcomeScreen />);
+      const signupButton = screen.getByTestId('welcome-get-started-button');
+      expect(signupButton).toBeTruthy();
+
+      await fireEvent.press(signupButton);
+
+      await waitFor(() => {
+        expect(mockPush).toHaveBeenCalledWith('/onboarding/auth?mode=sign_up');
+      });
+    });
+  });
+
+  // ==========================================
+  // 4. MOBILE WEB PINCH-TO-ZOOM SAFETY
+  // ==========================================
+  describe('4. Mobile Web Pinch-to-Zoom Prevention', () => {
+    it('HTML: app/+html.tsx specifies fixed-scale viewport and web gesture prevention', () => {
+      const htmlPath = path.resolve(__dirname, '../app/+html.tsx');
+      const htmlContent = fs.readFileSync(htmlPath, 'utf8');
+
+      // Viewport meta enforces non-scalable, fixed scale, and viewport-fit=cover
+      expect(htmlContent).toContain('user-scalable=no');
+      expect(htmlContent).toContain('maximum-scale=1');
+      expect(htmlContent).toContain('viewport-fit=cover');
+
+      // Styles enforce touch-action: pan-x pan-y to block pinch zoom while allowing normal panning
+      expect(htmlContent).toContain('touch-action: pan-x pan-y');
+
+      // Inputs have font-size: 16px to prevent iOS auto-zoom on focus
+      expect(htmlContent).toContain('font-size: 16px !important');
+
+      // Safari gesturestart prevention listener is present
+      expect(htmlContent).toContain('gesturestart');
     });
   });
 });

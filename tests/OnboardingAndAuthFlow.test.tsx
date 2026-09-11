@@ -467,14 +467,20 @@ describe('Milestone 7 — Login / Onboarding State & Email Verification Hardenin
     });
   });
 
-  // Scenario 8: Guest first use → onboarding
-  it('Scenario 8: Guest first use routes through onboarding questionnaire and enters guest mode', async () => {
+  // Scenario 8: Guest first use → Home directly (bypasses onboarding questionnaire)
+  it('Scenario 8: Guest first use bypasses onboarding questionnaire and enters guest mode directly to /home', async () => {
     // Unauthenticated initial state
     const welcomeScreen = await render(<WelcomeScreen />);
     await fireEvent.press(welcomeScreen.getByTestId('welcome-guest-button'));
-    expect(mockPush).toHaveBeenCalledWith('/onboarding/goal');
 
-    // On AuthScreen, Continue as Guest is pressed
+    await waitFor(() => {
+      expect(useAuthStore.getState().isGuest).toBe(true);
+      expect(useAuthStore.getState().status).toBe('guest');
+      expect(mockReplace).toHaveBeenCalledWith('/home');
+    });
+
+    // Also verify on AuthScreen, Continue as Guest is pressed and routes directly to /home
+    mockReplace.mockClear();
     const authScreen = await render(<AuthScreen />);
     await fireEvent.press(authScreen.getByTestId('continue-as-guest-button'));
 

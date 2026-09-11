@@ -998,8 +998,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     color: colors.dark.textPrimary,
-    fontSize: 13,
-    minHeight: 42,
+    fontSize: 16,
+    minHeight: 44,
   },
   setInputDisabled: {
     opacity: 0.55,

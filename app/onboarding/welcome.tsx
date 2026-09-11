@@ -5,20 +5,40 @@ import { ScreenContainer, Text, Button, Card } from '../../src/components/ui';
 import { useOnboardingStore } from '../../src/features/onboarding';
 import { spacing, colors, radii } from '../../src/constants/theme';
 
+import { useAuthStore } from '../../src/features/auth';
+
 export default function WelcomeScreen() {
   const router = useRouter();
+  const [navigating, setNavigating] = React.useState(false);
 
   const handleSignUp = () => {
+    if (navigating) return;
+    setNavigating(true);
     useOnboardingStore.getState().resetOnboarding();
     router.push('/onboarding/auth?mode=sign_up');
+    setTimeout(() => setNavigating(false), 800);
   };
 
   const handleLogin = () => {
+    if (navigating) return;
+    setNavigating(true);
     router.push('/onboarding/auth?mode=sign_in');
+    setTimeout(() => setNavigating(false), 800);
   };
 
-  const handleGuest = () => {
-    router.push('/onboarding/goal');
+  const handleGuest = async () => {
+    if (navigating) return;
+    setNavigating(true);
+    try {
+      useOnboardingStore.getState().completeOnboarding();
+      const onboardingState = useOnboardingStore.getState();
+      await useAuthStore.getState().enterGuestMode(onboardingState);
+      router.replace('/home');
+    } catch {
+      router.replace('/home');
+    } finally {
+      setTimeout(() => setNavigating(false), 800);
+    }
   };
 
   return (
