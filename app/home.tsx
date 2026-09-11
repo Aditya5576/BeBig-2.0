@@ -12,6 +12,8 @@ import {
   formatVolume,
 } from '../src/features/workout';
 import { templateRepository, WorkoutTemplate } from '../src/features/templates';
+import { profileService } from '../src/features/profile';
+import { guestStorage } from '../src/lib/storage';
 import { spacing, colors, radii } from '../src/constants/theme';
 
 const useFocusEffect =
@@ -55,6 +57,47 @@ export default function HomeScreen() {
 
   const loadDashboardData = useCallback(async () => {
     try {
+      // If user refreshed directly on /home and onboarding store is unhydrated, restore saved profile
+      if (!useOnboardingStore.getState().hasCompletedOnboarding) {
+        const currentUser = useAuthStore.getState().user;
+        const isGuestUser = useAuthStore.getState().isGuest;
+        if (currentUser?.id) {
+          try {
+            const profile = await profileService.getProfile(currentUser.id);
+            if (profile && profile.onboarding_completed) {
+              const store = useOnboardingStore.getState();
+              if (profile.goal) store.setGoal(profile.goal);
+              if (profile.experience_level) store.setExperienceLevel(profile.experience_level);
+              if (profile.days_per_week) store.setDaysPerWeek(profile.days_per_week);
+              if (profile.workout_duration) store.setWorkoutDuration(profile.workout_duration);
+              if (profile.equipment) store.setEquipment(profile.equipment);
+              if (profile.workout_style) store.setWorkoutStyle(profile.workout_style);
+              store.completeOnboarding();
+            }
+          } catch {
+            // Silently handled
+          }
+        } else if (isGuestUser) {
+          try {
+            const guestData = await guestStorage.getOnboardingData();
+            if (guestData) {
+              const store = useOnboardingStore.getState();
+              if (guestData.goal) store.setGoal(guestData.goal);
+              if (guestData.experienceLevel) store.setExperienceLevel(guestData.experienceLevel);
+              if (guestData.daysPerWeek) store.setDaysPerWeek(guestData.daysPerWeek);
+              if (guestData.workoutDuration) store.setWorkoutDuration(guestData.workoutDuration);
+              if (guestData.equipment) store.setEquipment(guestData.equipment);
+              if (guestData.workoutStyle) store.setWorkoutStyle(guestData.workoutStyle);
+              if (guestData.hasCompletedOnboarding) {
+                store.completeOnboarding();
+              }
+            }
+          } catch {
+            // Silently handled
+          }
+        }
+      }
+
       const [workouts, active, userTemplates] = await Promise.all([
         workoutRepository.getCompletedWorkouts(),
         workoutRepository.getActiveWorkout(),

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ActivityIndicator, Platform } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { ScreenContainer, Text, Button, Card } from '../../src/components/ui';
@@ -33,14 +33,27 @@ export default function AuthCallbackScreen() {
         }
 
         // 2. Retrieve initial URL or reconstruct from search params
-        let urlToProcess = incomingUrl || (await Linking.getInitialURL());
+        let urlToProcess: string | null | undefined = incomingUrl;
+
+        // In browser web environment, read directly from window.location.href to capture full path + hash + query
+        if (!urlToProcess && Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.href) {
+          urlToProcess = window.location.href;
+        }
+
+        if (!urlToProcess) {
+          urlToProcess = await Linking.getInitialURL();
+        }
 
         // If Linking doesn't provide the full URL, build from params
         if (!urlToProcess || !urlToProcess.includes('auth/callback')) {
           const queryString = Object.entries(searchParams)
             .map(([k, v]) => `${k}=${encodeURIComponent(Array.isArray(v) ? v[0] : v)}`)
             .join('&');
-          urlToProcess = `bebig://auth/callback?${queryString}`;
+          const prefix =
+            Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.origin
+              ? `${window.location.origin}/auth/callback`
+              : 'bebig://auth/callback';
+          urlToProcess = `${prefix}?${queryString}`;
         }
 
         const result = await authService.handleIncomingAuthUrl(urlToProcess);

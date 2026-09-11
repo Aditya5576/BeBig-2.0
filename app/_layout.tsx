@@ -1,10 +1,44 @@
-import React from 'react';
-import { Stack } from 'expo-router';
+import React, { useEffect } from 'react';
+import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { colors } from '../src/constants/theme';
+import { useSyncLifecycle } from '../src/services/sync';
+import { useAuthStore } from '../src/features/auth';
+
+function useProtectedRoute() {
+  const router = typeof useRouter === 'function' ? useRouter() : null;
+  const segments = typeof useSegments === 'function' ? useSegments() : [];
+  const navigationState =
+    typeof useRootNavigationState === 'function' ? useRootNavigationState() : { key: 'ready' };
+  const status = useAuthStore((state) => state.status);
+
+  // 1. Kick off auth initialization on root mount if still initializing (e.g. direct URL navigation / refresh)
+  useEffect(() => {
+    if (useAuthStore.getState().status === 'initializing') {
+      void useAuthStore.getState().initializeAuth();
+    }
+  }, []);
+
+  // 2. Route protection: guard protected routes against unauthenticated access
+  useEffect(() => {
+    if (!router) return;
+    if (!navigationState?.key) return;
+    if (status === 'initializing') return; // Do NOT redirect prematurely while checking session
+
+    const firstSegment = segments[0];
+    const isProtected = ['home', 'workout', 'templates', 'exercises'].includes(firstSegment);
+
+    if (status === 'unauthenticated' && isProtected) {
+      router.replace('/onboarding/welcome');
+    }
+  }, [status, segments, navigationState?.key, router]);
+}
 
 export default function RootLayout() {
+  useSyncLifecycle();
+  useProtectedRoute();
+
   return (
     <SafeAreaProvider>
       <StatusBar style="light" />

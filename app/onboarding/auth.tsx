@@ -121,6 +121,12 @@ export default function AuthScreen({ initialMode }: AuthScreenProps = {}) {
 
     if (result.success && result.session) {
       await handlePostAuthSuccess(result.session);
+    } else if (result.success) {
+      // Web browser is redirecting to Apple
+      setStatusMessage({
+        text: result.message,
+        type: 'info',
+      });
     } else {
       setLoading(false);
       setStatusMessage({
@@ -138,6 +144,12 @@ export default function AuthScreen({ initialMode }: AuthScreenProps = {}) {
 
     if (result.success && result.session) {
       await handlePostAuthSuccess(result.session);
+    } else if (result.success) {
+      // Web browser is redirecting to Google
+      setStatusMessage({
+        text: result.message,
+        type: 'info',
+      });
     } else {
       setLoading(false);
       setStatusMessage({

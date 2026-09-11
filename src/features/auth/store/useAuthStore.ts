@@ -20,6 +20,8 @@ interface AuthActions {
 }
 
 let authSubscription: { unsubscribe: () => void } | null = null;
+let authGeneration = 0;
+let inFlightInitPromise: Promise<void> | null = null;
 
 export const useAuthStore = create<AuthState & AuthActions>((set) => ({
   status: 'initializing',
@@ -31,33 +33,110 @@ export const useAuthStore = create<AuthState & AuthActions>((set) => ({
   error: null,
 
   initializeAuth: async () => {
-    // Purge legacy unscoped storage records so old global test data is never leaked
-    void purgeLegacyUnscopedStorage();
+    if (inFlightInitPromise) {
+      return inFlightInitPromise;
+    }
 
-    const configured = isSupabaseConfigured();
-    set({ isConfigured: configured });
+    const currentGen = ++authGeneration;
 
-    try {
-      // 1. Check for active Supabase session (cloud authenticated user has precedence)
-      if (configured) {
-        const currentSession = await authService.getCurrentSession();
-        if (currentSession) {
+    inFlightInitPromise = (async () => {
+      // Purge legacy unscoped storage records so old global test data is never leaked
+      void purgeLegacyUnscopedStorage();
+
+      const configured = isSupabaseConfigured();
+      set({ isConfigured: configured });
+
+      try {
+        // 1. Check for active Supabase session (cloud authenticated user has precedence)
+        if (configured) {
+          const currentSession = await authService.getCurrentSession();
+
+          // Abort if state was changed concurrently during async session check
+          if (currentGen !== authGeneration) {
+            return;
+          }
+
+          if (currentSession) {
+            set({
+              status: 'authenticated',
+              isGuest: false,
+              user: currentSession.user,
+              session: currentSession,
+              guestSession: null,
+              error: null,
+            });
+
+            // Ensure single active subscription
+            if (authSubscription) {
+              authSubscription.unsubscribe();
+            }
+
+            authSubscription = authService.onAuthStateChange((event, session) => {
+              if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+                authGeneration++;
+                set({
+                  status: session ? 'authenticated' : 'unauthenticated',
+                  isGuest: false,
+                  user: session ? session.user : null,
+                  session: session,
+                  guestSession: null,
+                });
+              } else if (event === 'SIGNED_OUT') {
+                authGeneration++;
+                workoutStorage.clearMemoryCache();
+                templateStorage.clearMemoryCache();
+                customExerciseStorage.clearMemoryCache();
+                profileService.clearMemoryCache();
+                set({
+                  status: 'unauthenticated',
+                  isGuest: false,
+                  user: null,
+                  session: null,
+                  guestSession: null,
+                });
+              }
+            });
+            return;
+          }
+        }
+
+        // 2. If no cloud session, check for active local guest session
+        const storedGuestSession = await guestStorage.getGuestSession();
+
+        // Abort if state was changed concurrently during storage check
+        if (currentGen !== authGeneration) {
+          return;
+        }
+
+        if (storedGuestSession) {
           set({
-            status: 'authenticated',
-            isGuest: false,
-            user: currentSession.user,
-            session: currentSession,
-            guestSession: null,
+            status: 'guest',
+            isGuest: true,
+            guestSession: storedGuestSession,
+            user: null,
+            session: null,
             error: null,
           });
+          return;
+        }
 
-          // Ensure single active subscription
+        // 3. Otherwise unauthenticated
+        set({
+          status: 'unauthenticated',
+          isGuest: false,
+          user: null,
+          session: null,
+          guestSession: null,
+        });
+
+        // Still attach auth state listener if Supabase is configured
+        if (configured) {
           if (authSubscription) {
             authSubscription.unsubscribe();
           }
-
           authSubscription = authService.onAuthStateChange((event, session) => {
             if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+              authGeneration++;
               set({
                 status: session ? 'authenticated' : 'unauthenticated',
                 isGuest: false,
@@ -66,6 +145,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set) => ({
                 guestSession: null,
               });
             } else if (event === 'SIGNED_OUT') {
+              authGeneration++;
               workoutStorage.clearMemoryCache();
               templateStorage.clearMemoryCache();
               customExerciseStorage.clearMemoryCache();
@@ -79,74 +159,27 @@ export const useAuthStore = create<AuthState & AuthActions>((set) => ({
               });
             }
           });
-          return;
+        }
+      } catch {
+        if (currentGen === authGeneration) {
+          set({
+            status: 'unauthenticated',
+            isGuest: false,
+            user: null,
+            session: null,
+            guestSession: null,
+          });
         }
       }
+    })().finally(() => {
+      inFlightInitPromise = null;
+    });
 
-      // 2. If no cloud session, check for active local guest session
-      const storedGuestSession = await guestStorage.getGuestSession();
-      if (storedGuestSession) {
-        set({
-          status: 'guest',
-          isGuest: true,
-          guestSession: storedGuestSession,
-          user: null,
-          session: null,
-          error: null,
-        });
-        return;
-      }
-
-      // 3. Otherwise unauthenticated
-      set({
-        status: 'unauthenticated',
-        isGuest: false,
-        user: null,
-        session: null,
-        guestSession: null,
-      });
-
-      // Still attach auth state listener if Supabase is configured
-      if (configured) {
-        if (authSubscription) {
-          authSubscription.unsubscribe();
-        }
-        authSubscription = authService.onAuthStateChange((event, session) => {
-          if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
-            set({
-              status: session ? 'authenticated' : 'unauthenticated',
-              isGuest: false,
-              user: session ? session.user : null,
-              session: session,
-              guestSession: null,
-            });
-          } else if (event === 'SIGNED_OUT') {
-            workoutStorage.clearMemoryCache();
-            templateStorage.clearMemoryCache();
-            customExerciseStorage.clearMemoryCache();
-            profileService.clearMemoryCache();
-            set({
-              status: 'unauthenticated',
-              isGuest: false,
-              user: null,
-              session: null,
-              guestSession: null,
-            });
-          }
-        });
-      }
-    } catch {
-      set({
-        status: 'unauthenticated',
-        isGuest: false,
-        user: null,
-        session: null,
-        guestSession: null,
-      });
-    }
+    return inFlightInitPromise;
   },
 
   setSession: (session: AuthSession | null) => {
+    authGeneration++;
     set({
       status: session ? 'authenticated' : 'unauthenticated',
       isGuest: false,
@@ -158,6 +191,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set) => ({
   },
 
   enterGuestMode: async (onboardingData?: OnboardingState) => {
+    authGeneration++;
     const now = new Date().toISOString();
     const guestSession: GuestSession = {
       id: `guest_${Date.now()}`,
@@ -184,6 +218,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set) => ({
   },
 
   exitGuestMode: async () => {
+    authGeneration++;
     workoutStorage.clearMemoryCache();
     templateStorage.clearMemoryCache();
     customExerciseStorage.clearMemoryCache();
@@ -203,6 +238,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set) => ({
   },
 
   signOut: async () => {
+    authGeneration++;
     workoutStorage.clearMemoryCache();
     templateStorage.clearMemoryCache();
     customExerciseStorage.clearMemoryCache();

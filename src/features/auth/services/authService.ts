@@ -176,6 +176,43 @@ export const authService: IAuthService = {
       };
     }
 
+    if (Platform.OS === 'web') {
+      try {
+        const redirectUrl = getAuthRedirectUrl();
+        const { data, error } = await supabase.auth.signInWithOAuth({
+          provider: 'apple',
+          options: {
+            redirectTo: redirectUrl,
+          },
+        });
+
+        if (error) {
+          return {
+            success: false,
+            message: getErrorMessage(error, 'Apple OAuth initialization failed.'),
+          };
+        }
+
+        if (data?.url && typeof window !== 'undefined') {
+          window.location.assign(data.url);
+          return {
+            success: true,
+            message: 'Redirecting to Apple...',
+          };
+        }
+
+        return {
+          success: false,
+          message: 'Failed to retrieve Apple authentication URL from Supabase.',
+        };
+      } catch (err) {
+        return {
+          success: false,
+          message: getErrorMessage(err, 'Apple Sign In encountered an unexpected error.'),
+        };
+      }
+    }
+
     if (Platform.OS !== 'ios') {
       return {
         success: false,
@@ -256,6 +293,35 @@ export const authService: IAuthService = {
 
     try {
       const redirectUrl = getAuthRedirectUrl();
+
+      if (Platform.OS === 'web') {
+        const { data, error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: redirectUrl,
+          },
+        });
+
+        if (error) {
+          return {
+            success: false,
+            message: getErrorMessage(error, 'Google OAuth initialization failed.'),
+          };
+        }
+
+        if (data?.url && typeof window !== 'undefined') {
+          window.location.assign(data.url);
+          return {
+            success: true,
+            message: 'Redirecting to Google...',
+          };
+        }
+
+        return {
+          success: false,
+          message: 'Failed to retrieve Google authentication URL from Supabase.',
+        };
+      }
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
