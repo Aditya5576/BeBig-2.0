@@ -31,11 +31,11 @@ export interface IndexProps {
 export default function Index({ splashDurationMs }: IndexProps = {}) {
   const [destination, setDestination] = useState<string | null>(null);
 
-  // Default to 3500ms (3.5s) on physical device / production / dev.
+  // Default to 1200ms (1.2s) on physical device / production / dev for snappy launch.
   // In test environments (process.env.NODE_ENV === 'test'), default to 0ms so tests execute
   // rapidly without timeouts, unless explicitly overridden via splashDurationMs prop.
   const delayMs =
-    splashDurationMs !== undefined ? splashDurationMs : process.env.NODE_ENV === 'test' ? 0 : 3500;
+    splashDurationMs !== undefined ? splashDurationMs : process.env.NODE_ENV === 'test' ? 0 : 1200;
 
   useEffect(() => {
     let isMounted = true;

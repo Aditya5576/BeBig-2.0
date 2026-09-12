@@ -803,6 +803,12 @@ export default function HomeScreen() {
           <Text variant="caption" color="muted" style={styles.resetHint}>
             Use this button during local testing to clear local state and run the flow again.
           </Text>
+
+          <View style={styles.appFooter}>
+            <Text variant="caption" color="muted" style={styles.appFooterText}>
+              BeBig 2.0 • Developed by Aditya Patil
+            </Text>
+          </View>
         </View>
       </ScrollView>
     </ScreenContainer>
@@ -1144,5 +1150,15 @@ const styles = StyleSheet.create({
   },
   resetHint: {
     textAlign: 'center',
+  },
+  appFooter: {
+    alignItems: 'center',
+    paddingTop: spacing.md,
+  },
+  appFooterText: {
+    fontSize: 12,
+    letterSpacing: 0.5,
+    opacity: 0.7,
+    fontWeight: '500',
   },
 });

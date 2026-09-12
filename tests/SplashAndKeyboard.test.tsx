@@ -62,7 +62,8 @@ describe('BeBig 2.0 — Startup Splash & Keyboard Overlap Fix', () => {
 
       expect(getByTestId('startup-splash-screen')).toBeTruthy();
       expect(getByText('BEBIG')).toBeTruthy();
-      expect(getByText('TRAIN WITH PURPOSE')).toBeTruthy();
+      expect(getByText('Your workout. Your progress. Your BeBig.')).toBeTruthy();
+      expect(getByText('Developed by Aditya Patil')).toBeTruthy();
       expect(getByTestId('auth-loading-indicator')).toBeTruthy();
       expect(getByTestId('splash-athlete-image')).toBeTruthy();
     });

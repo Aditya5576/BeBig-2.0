@@ -72,7 +72,18 @@ export const useAuthStore = create<AuthState & AuthActions>((set) => ({
             }
 
             authSubscription = authService.onAuthStateChange((event, session) => {
-              if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+              if (event === 'INITIAL_SESSION') {
+                if (session) {
+                  authGeneration++;
+                  set({
+                    status: 'authenticated',
+                    isGuest: false,
+                    user: session.user,
+                    session: session,
+                    guestSession: null,
+                  });
+                }
+              } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
                 authGeneration++;
                 set({
                   status: session ? 'authenticated' : 'unauthenticated',
@@ -135,7 +146,18 @@ export const useAuthStore = create<AuthState & AuthActions>((set) => ({
             authSubscription.unsubscribe();
           }
           authSubscription = authService.onAuthStateChange((event, session) => {
-            if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+            if (event === 'INITIAL_SESSION') {
+              if (session) {
+                authGeneration++;
+                set({
+                  status: 'authenticated',
+                  isGuest: false,
+                  user: session.user,
+                  session: session,
+                  guestSession: null,
+                });
+              }
+            } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
               authGeneration++;
               set({
                 status: session ? 'authenticated' : 'unauthenticated',
