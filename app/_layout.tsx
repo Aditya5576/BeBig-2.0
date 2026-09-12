@@ -4,7 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { colors } from '../src/constants/theme';
 import { useSyncLifecycle } from '../src/services/sync';
-import { useAuthStore } from '../src/features/auth';
+import { useAuthStore, resolveAuthenticatedUserRoute } from '../src/features/auth';
 import { WebAlertModal } from '../src/components/ui';
 import '../src/lib/ui/webAlert';
 
@@ -14,6 +14,7 @@ function useProtectedRoute() {
   const navigationState =
     typeof useRootNavigationState === 'function' ? useRootNavigationState() : { key: 'ready' };
   const status = useAuthStore((state) => state.status);
+  const userId = useAuthStore((state) => state.user?.id);
 
   // 1. Kick off auth initialization on root mount if still initializing (e.g. direct URL navigation / refresh)
   useEffect(() => {
@@ -23,6 +24,7 @@ function useProtectedRoute() {
   }, []);
 
   // 2. Route protection: guard protected routes against unauthenticated access
+  // and prevent completed authenticated users from entering onboarding
   useEffect(() => {
     if (!router) return;
     if (!navigationState?.key) return;
@@ -33,8 +35,23 @@ function useProtectedRoute() {
 
     if (status === 'unauthenticated' && isProtected) {
       router.replace('/onboarding/welcome');
+      return;
     }
-  }, [status, segments, navigationState?.key, router]);
+
+    if (status === 'authenticated' && userId && firstSegment === 'onboarding') {
+      const activeUserId = userId;
+      void (async () => {
+        const resolution = await resolveAuthenticatedUserRoute(activeUserId);
+        if (
+          resolution &&
+          resolution.onboardingCompleted &&
+          useAuthStore.getState().user?.id === activeUserId
+        ) {
+          router.replace('/home');
+        }
+      })();
+    }
+  }, [status, userId, segments, navigationState?.key, router]);
 }
 
 export default function RootLayout() {

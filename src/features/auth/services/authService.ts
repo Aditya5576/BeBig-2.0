@@ -178,7 +178,7 @@ export const authService: IAuthService = {
           message: isNonExistent
             ? "We couldn't find an account with this email. Create an account to get started."
             : isInvalidCredentials
-              ? "Invalid email or password. Please try again or create an account."
+              ? "Incorrect email or password. Please try again or create an account."
               : getErrorMessage(error, 'Sign in failed.'),
           isNonExistentUser: isNonExistent,
           isInvalidCredentials,

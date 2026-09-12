@@ -10,7 +10,7 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ScreenContainer, Text, Button, Card, Input } from '../../src/components/ui';
 import { useOnboardingStore } from '../../src/features/onboarding';
-import { authService, useAuthStore } from '../../src/features/auth';
+import { authService, useAuthStore, resolveAuthenticatedUserRoute } from '../../src/features/auth';
 import { profileService } from '../../src/features/profile';
 import { supabase, isSupabaseConfigured } from '../../src/lib/supabase';
 import { getAuthRedirectUrl } from '../../src/features/auth/utils/redirect';
@@ -59,7 +59,7 @@ export default function AuthScreen({
 
   const configured = isSupabaseConfigured();
 
-  const handlePostAuthSuccess = async (session: any, mode: EmailMode = emailMode) => {
+  const handlePostAuthSuccess = async (session: any) => {
     if (!session?.user?.id) {
       setAuthSession(session);
       router.replace('/home');
@@ -74,69 +74,15 @@ export default function AuthScreen({
     // Establish auth session in store
     setAuthSession(session);
 
-    let existingProfile: any = null;
-    try {
-      existingProfile = await profileService.getProfile(userId);
-    } catch {
-      // Ignore network errors; fallback below
-    }
+    // Authoritative profile-driven routing resolution
+    const resolution = await resolveAuthenticatedUserRoute(userId);
 
-    // Protect against account-switch race during async profile check
-    const currentAuthedUser = useAuthStore.getState().user;
-    if (currentAuthedUser?.id !== userId) {
+    // Account isolation check: verify user ID still matches at async boundary
+    if (!resolution || useAuthStore.getState().user?.id !== userId) {
       return;
     }
 
-    // 1. COMPLETED ACCOUNT:
-    // If THIS user's profile has onboarding_completed === true, rehydrate and route directly to /home.
-    // NEVER show Goal, Experience, or Preferences to a completed user, regardless of mode!
-    if (existingProfile && existingProfile.onboarding_completed) {
-      const store = useOnboardingStore.getState();
-      if (existingProfile.goal) store.setGoal(existingProfile.goal);
-      if (existingProfile.experience_level)
-        store.setExperienceLevel(existingProfile.experience_level);
-      if (existingProfile.days_per_week) store.setDaysPerWeek(existingProfile.days_per_week);
-      if (existingProfile.workout_duration)
-        store.setWorkoutDuration(existingProfile.workout_duration);
-      if (existingProfile.equipment) store.setEquipment(existingProfile.equipment);
-      if (existingProfile.workout_style) store.setWorkoutStyle(existingProfile.workout_style);
-      store.completeOnboarding();
-
-      router.replace('/home');
-      return;
-    }
-
-    // 2. NEW SIGNUP (mode === 'sign_up' with no existing profile or unstarted answers):
-    if (mode === 'sign_up' && !existingProfile?.goal) {
-      router.replace('/onboarding/goal');
-      return;
-    }
-
-    // 3. INCOMPLETE ACCOUNT:
-    // Rehydrate any existing partially completed fields and continue at the correct incomplete step.
-    if (existingProfile) {
-      const store = useOnboardingStore.getState();
-      if (existingProfile.goal) store.setGoal(existingProfile.goal);
-      if (existingProfile.experience_level)
-        store.setExperienceLevel(existingProfile.experience_level);
-      if (existingProfile.days_per_week) store.setDaysPerWeek(existingProfile.days_per_week);
-      if (existingProfile.workout_duration)
-        store.setWorkoutDuration(existingProfile.workout_duration);
-      if (existingProfile.equipment) store.setEquipment(existingProfile.equipment);
-      if (existingProfile.workout_style) store.setWorkoutStyle(existingProfile.workout_style);
-
-      if (!existingProfile.goal) {
-        router.replace('/onboarding/goal');
-      } else if (!existingProfile.experience_level) {
-        router.replace('/onboarding/experience');
-      } else {
-        router.replace('/onboarding/preferences');
-      }
-      return;
-    }
-
-    // 4. Fallback for unprofiled user: start onboarding
-    router.replace('/onboarding/goal');
+    router.replace(resolution.route as any);
   };
 
   const handleContinueAsGuest = async () => {
@@ -228,7 +174,7 @@ export default function AuthScreen({
 
       if (result.success) {
         if (result.session) {
-          await handlePostAuthSuccess(result.session, 'sign_up');
+          await handlePostAuthSuccess(result.session);
         } else if (result.requiresEmailConfirmation) {
           setLoading(false);
           setStatusMessage({
@@ -265,7 +211,7 @@ export default function AuthScreen({
       const result = await authService.signInWithEmail(email, password);
 
       if (result.success && result.session) {
-        await handlePostAuthSuccess(result.session, 'sign_in');
+        await handlePostAuthSuccess(result.session);
       } else {
         setLoading(false);
         if (result.isNonExistentUser) {

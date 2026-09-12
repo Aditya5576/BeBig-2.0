@@ -6,6 +6,7 @@ import { UserProfile, ProfileUpsertPayload } from '../types';
 
 export interface IProfileService {
   getProfile: (userId: string) => Promise<UserProfile | null>;
+  getCachedProfile: (userId: string) => UserProfile | null;
   upsertProfile: (
     userId: string,
     data: Partial<ProfileUpsertPayload>,
@@ -64,24 +65,44 @@ async function writeLocalProfile(userId: string, profile: UserProfile): Promise<
 }
 
 export const profileService: IProfileService = {
+  getCachedProfile: (userId: string): UserProfile | null => {
+    if (!userId) return null;
+    return memoryProfiles.get(userId) ?? null;
+  },
+
   getProfile: async (userId: string): Promise<UserProfile | null> => {
     if (!userId) return null;
 
-    if (isSupabaseConfigured()) {
-      try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', userId)
-          .maybeSingle();
+    // Fast memory return if completed
+    const mem = memoryProfiles.get(userId);
+    if (mem && mem.onboarding_completed) {
+      return mem;
+    }
 
-        if (!error && data) {
-          const profile = data as UserProfile;
-          await writeLocalProfile(userId, profile);
-          return profile;
+    if (isSupabaseConfigured()) {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const { data, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', userId)
+            .maybeSingle();
+
+          if (!error && data) {
+            const profile = data as UserProfile;
+            await writeLocalProfile(userId, profile);
+            return profile;
+          }
+          if (!error && !data) {
+            // Profile genuinely does not exist in DB yet
+            break;
+          }
+        } catch {
+          // Network or client blip; retry once
         }
-      } catch {
-        // Fallback to local profile cache below
+        if (attempt === 0 && process.env.NODE_ENV !== 'test') {
+          await new Promise((resolve) => setTimeout(resolve, 150));
+        }
       }
     }
 

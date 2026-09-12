@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Redirect } from 'expo-router';
 import { StartupSplash } from '../src/components/ui';
-import { useAuthStore } from '../src/features/auth';
+import { useAuthStore, resolveAuthenticatedUserRoute } from '../src/features/auth';
 import { useOnboardingStore } from '../src/features/onboarding';
 import { profileService } from '../src/features/profile';
 import { guestStorage } from '../src/lib/storage';
@@ -76,45 +76,13 @@ export default function Index({ splashDurationMs }: IndexProps = {}) {
         let resolvedRoute = '/onboarding/welcome';
 
         if (authStatus === 'authenticated' && currentUser?.id) {
-          try {
-            profile = await profileService.getProfile(currentUser.id);
-            if (profile && profile.onboarding_completed) {
-              const store = useOnboardingStore.getState();
-              if (profile.goal) store.setGoal(profile.goal);
-              if (profile.experience_level) store.setExperienceLevel(profile.experience_level);
-              if (profile.days_per_week) store.setDaysPerWeek(profile.days_per_week);
-              if (profile.workout_duration) store.setWorkoutDuration(profile.workout_duration);
-              if (profile.equipment) store.setEquipment(profile.equipment);
-              if (profile.workout_style) store.setWorkoutStyle(profile.workout_style);
-              store.completeOnboarding();
-              localOnboardingCompleted = true;
-            }
-          } catch {
-            // Fallback to existing store state
-          }
-
-          if (profile?.onboarding_completed) {
-            resolvedRoute = '/home';
-          } else if (profile) {
-            // Incomplete account: rehydrate existing answers and continue at first incomplete step
-            const store = useOnboardingStore.getState();
-            if (profile.goal) store.setGoal(profile.goal);
-            if (profile.experience_level) store.setExperienceLevel(profile.experience_level);
-            if (profile.days_per_week) store.setDaysPerWeek(profile.days_per_week);
-            if (profile.workout_duration) store.setWorkoutDuration(profile.workout_duration);
-            if (profile.equipment) store.setEquipment(profile.equipment);
-            if (profile.workout_style) store.setWorkoutStyle(profile.workout_style);
-
-            if (!profile.goal) {
-              resolvedRoute = '/onboarding/goal';
-            } else if (!profile.experience_level) {
-              resolvedRoute = '/onboarding/experience';
-            } else {
-              resolvedRoute = '/onboarding/preferences';
-            }
+          const resolution = await resolveAuthenticatedUserRoute(currentUser.id);
+          if (resolution) {
+            resolvedRoute = resolution.route;
+            profile = resolution.profile;
+            localOnboardingCompleted = resolution.onboardingCompleted;
           } else {
-            useOnboardingStore.getState().resetOnboarding();
-            resolvedRoute = '/onboarding/goal';
+            resolvedRoute = '/onboarding/welcome';
           }
         } else if (authStatus === 'guest' || isGuest) {
           try {
@@ -176,24 +144,16 @@ export default function Index({ splashDurationMs }: IndexProps = {}) {
 
         // Re-verify against current auth store state to ensure stale async startup decision
         // cannot overwrite state or redirect an authenticated completed user into onboarding
-        if (currentAuthStatus === 'authenticated' && currentUserId) {
-          try {
-            const activeProfile = await profileService.getProfile(currentUserId);
-            if (activeProfile?.onboarding_completed) {
-              const store = useOnboardingStore.getState();
-              if (activeProfile.goal) store.setGoal(activeProfile.goal);
-              if (activeProfile.experience_level)
-                store.setExperienceLevel(activeProfile.experience_level);
-              if (activeProfile.days_per_week) store.setDaysPerWeek(activeProfile.days_per_week);
-              if (activeProfile.workout_duration)
-                store.setWorkoutDuration(activeProfile.workout_duration);
-              if (activeProfile.equipment) store.setEquipment(activeProfile.equipment);
-              if (activeProfile.workout_style) store.setWorkoutStyle(activeProfile.workout_style);
-              store.completeOnboarding();
-              finalTargetRoute = '/home';
-            }
-          } catch {
-            // Ignore fetch error
+        if (currentAuthStatus === 'unauthenticated') {
+          finalTargetRoute = '/onboarding/welcome';
+        } else if (
+          currentAuthStatus === 'authenticated' &&
+          currentUserId &&
+          (!initResolvedRoute || initResolvedRoute === '/onboarding/welcome')
+        ) {
+          const recheck = await resolveAuthenticatedUserRoute(currentUserId);
+          if (recheck) {
+            finalTargetRoute = recheck.route;
           }
         }
 

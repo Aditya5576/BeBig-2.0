@@ -3,7 +3,7 @@ import { View, StyleSheet, ActivityIndicator, Platform } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { ScreenContainer, Text, Button, Card } from '../../src/components/ui';
-import { authService, useAuthStore } from '../../src/features/auth';
+import { authService, useAuthStore, resolveAuthenticatedUserRoute } from '../../src/features/auth';
 import { profileService } from '../../src/features/profile';
 import { useOnboardingStore } from '../../src/features/onboarding';
 import { colors, spacing } from '../../src/constants/theme';
@@ -62,52 +62,18 @@ export default function AuthCallbackScreen() {
 
         if (result.success && result.session) {
           const userId = result.session.user.id;
-          let profile = null;
-          try {
-            profile = await profileService.getProfile(userId);
-          } catch {
-            // Ignore fetch errors; fallback below
-          }
-
-          if (profile && profile.onboarding_completed) {
-            const store = useOnboardingStore.getState();
-            if (profile.goal) store.setGoal(profile.goal);
-            if (profile.experience_level) store.setExperienceLevel(profile.experience_level);
-            if (profile.days_per_week) store.setDaysPerWeek(profile.days_per_week);
-            if (profile.workout_duration) store.setWorkoutDuration(profile.workout_duration);
-            if (profile.equipment) store.setEquipment(profile.equipment);
-            if (profile.workout_style) store.setWorkoutStyle(profile.workout_style);
-            store.completeOnboarding();
-
-            setSession(result.session);
-            router.replace('/home');
-            return;
-          }
-
-          // User verified email but hasn't completed onboarding questions:
-          if (profile) {
-            const store = useOnboardingStore.getState();
-            if (profile.goal) store.setGoal(profile.goal);
-            if (profile.experience_level) store.setExperienceLevel(profile.experience_level);
-            if (profile.days_per_week) store.setDaysPerWeek(profile.days_per_week);
-            if (profile.workout_duration) store.setWorkoutDuration(profile.workout_duration);
-            if (profile.equipment) store.setEquipment(profile.equipment);
-            if (profile.workout_style) store.setWorkoutStyle(profile.workout_style);
-
-            setSession(result.session);
-            if (!profile.goal) {
-              router.replace('/onboarding/goal');
-            } else if (!profile.experience_level) {
-              router.replace('/onboarding/experience');
-            } else {
-              router.replace('/onboarding/preferences');
-            }
-            return;
-          }
-
-          useOnboardingStore.getState().resetOnboarding();
           setSession(result.session);
-          router.replace('/onboarding/goal');
+
+          const resolution = await resolveAuthenticatedUserRoute(userId);
+          if (!isMounted) return;
+
+          // Account isolation check: verify user ID still matches at async boundary
+          if (!resolution || useAuthStore.getState().user?.id !== userId) {
+            return;
+          }
+
+          router.replace(resolution.route as any);
+          return;
         } else {
           setError(result.message || 'Verification link expired or invalid.');
           setLoading(false);
