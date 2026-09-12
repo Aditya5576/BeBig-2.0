@@ -2,10 +2,12 @@
 node_modules/
 package-lock.json.log
 
-# Expo
+# Expo & Deployment
 .expo/
 dist/
 web-build/
+.vercel/
+
 
 # Native builds (if bare workflow or prebuild ever executed)
 /ios/
