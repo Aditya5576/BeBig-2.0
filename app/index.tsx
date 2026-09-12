@@ -95,6 +95,23 @@ export default function Index({ splashDurationMs }: IndexProps = {}) {
 
           if (profile?.onboarding_completed) {
             resolvedRoute = '/home';
+          } else if (profile) {
+            // Incomplete account: rehydrate existing answers and continue at first incomplete step
+            const store = useOnboardingStore.getState();
+            if (profile.goal) store.setGoal(profile.goal);
+            if (profile.experience_level) store.setExperienceLevel(profile.experience_level);
+            if (profile.days_per_week) store.setDaysPerWeek(profile.days_per_week);
+            if (profile.workout_duration) store.setWorkoutDuration(profile.workout_duration);
+            if (profile.equipment) store.setEquipment(profile.equipment);
+            if (profile.workout_style) store.setWorkoutStyle(profile.workout_style);
+
+            if (!profile.goal) {
+              resolvedRoute = '/onboarding/goal';
+            } else if (!profile.experience_level) {
+              resolvedRoute = '/onboarding/experience';
+            } else {
+              resolvedRoute = '/onboarding/preferences';
+            }
           } else {
             useOnboardingStore.getState().resetOnboarding();
             resolvedRoute = '/onboarding/goal';
@@ -150,14 +167,43 @@ export default function Index({ splashDurationMs }: IndexProps = {}) {
       })();
 
       // Wait for both the minimum splash screen timer AND the initialization task
-      const [, finalTargetRoute] = await Promise.all([splashTimer, initTask]);
+      const [, initResolvedRoute] = await Promise.all([splashTimer, initTask]);
 
-      if (isMounted && finalTargetRoute) {
+      if (isMounted) {
+        let finalTargetRoute = initResolvedRoute;
+        const currentAuthStatus = useAuthStore.getState().status;
+        const currentUserId = useAuthStore.getState().user?.id;
+
+        // Re-verify against current auth store state to ensure stale async startup decision
+        // cannot overwrite state or redirect an authenticated completed user into onboarding
+        if (currentAuthStatus === 'authenticated' && currentUserId) {
+          try {
+            const activeProfile = await profileService.getProfile(currentUserId);
+            if (activeProfile?.onboarding_completed) {
+              const store = useOnboardingStore.getState();
+              if (activeProfile.goal) store.setGoal(activeProfile.goal);
+              if (activeProfile.experience_level)
+                store.setExperienceLevel(activeProfile.experience_level);
+              if (activeProfile.days_per_week) store.setDaysPerWeek(activeProfile.days_per_week);
+              if (activeProfile.workout_duration)
+                store.setWorkoutDuration(activeProfile.workout_duration);
+              if (activeProfile.equipment) store.setEquipment(activeProfile.equipment);
+              if (activeProfile.workout_style) store.setWorkoutStyle(activeProfile.workout_style);
+              store.completeOnboarding();
+              finalTargetRoute = '/home';
+            }
+          } catch {
+            // Ignore fetch error
+          }
+        }
+
         if (__DEV__) {
           console.log(`[STARTUP] SPLASH COMPLETE: true`);
           console.log(`[STARTUP] FINAL ROUTE: ${finalTargetRoute}`);
         }
-        setDestination(finalTargetRoute);
+        if (finalTargetRoute) {
+          setDestination(finalTargetRoute);
+        }
       }
     }
 

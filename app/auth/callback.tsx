@@ -85,6 +85,26 @@ export default function AuthCallbackScreen() {
           }
 
           // User verified email but hasn't completed onboarding questions:
+          if (profile) {
+            const store = useOnboardingStore.getState();
+            if (profile.goal) store.setGoal(profile.goal);
+            if (profile.experience_level) store.setExperienceLevel(profile.experience_level);
+            if (profile.days_per_week) store.setDaysPerWeek(profile.days_per_week);
+            if (profile.workout_duration) store.setWorkoutDuration(profile.workout_duration);
+            if (profile.equipment) store.setEquipment(profile.equipment);
+            if (profile.workout_style) store.setWorkoutStyle(profile.workout_style);
+
+            setSession(result.session);
+            if (!profile.goal) {
+              router.replace('/onboarding/goal');
+            } else if (!profile.experience_level) {
+              router.replace('/onboarding/experience');
+            } else {
+              router.replace('/onboarding/preferences');
+            }
+            return;
+          }
+
           useOnboardingStore.getState().resetOnboarding();
           setSession(result.session);
           router.replace('/onboarding/goal');

@@ -295,8 +295,8 @@ describe('Milestone 7 — Login / Onboarding State & Email Verification Hardenin
     expect(profile.onboarding_completed).toBe(true);
   });
 
-  // Scenario 4: Existing account with incomplete onboarding → onboarding
-  it('Scenario 4: Existing account with incomplete onboarding routes to onboarding questions', async () => {
+  // Scenario 4: Existing account with incomplete onboarding → continues at incomplete step (Requirement B)
+  it('Scenario 4: Existing account with incomplete onboarding routes to correct onboarding step, not /home (Requirement B)', async () => {
     mockProfilesDb.set('incomplete-user', {
       id: 'incomplete-user',
       goal: 'lose_fat',
@@ -327,7 +327,11 @@ describe('Milestone 7 — Login / Onboarding State & Email Verification Hardenin
     await fireEvent.press(screen.getByTestId('auth-email-submit-button'));
 
     await waitFor(() => {
-      expect(mockReplace).toHaveBeenCalledWith('/onboarding/goal');
+      // Since goal is already answered ('lose_fat'), continues at experience, NOT home!
+      expect(mockReplace).toHaveBeenCalledWith('/onboarding/experience');
+      expect(mockReplace).not.toHaveBeenCalledWith('/home');
+      expect(useOnboardingStore.getState().goal).toBe('lose_fat');
+      expect(useOnboardingStore.getState().hasCompletedOnboarding).toBe(false);
     });
   });
 
@@ -784,5 +788,81 @@ describe('Milestone 7 — Login / Onboarding State & Email Verification Hardenin
     // Verify completely clean of Training Purpose text
     expect(screen.queryByText(/training purpose/i)).toBeNull();
     expect(screen.queryByText(/training purpose track/i)).toBeNull();
+  });
+
+  // Scenario 19: Stale previous-user onboarding state cannot redirect a newly logged-in completed user into onboarding (Requirement E)
+  it('Scenario 19: Stale previous-user onboarding state cannot redirect a newly logged-in completed user into onboarding (Requirement E)', async () => {
+    // Stale local onboarding state from previous user/guest who did not complete
+    const store = useOnboardingStore.getState();
+    store.resetOnboarding();
+    store.setGoal('lose_fat');
+    expect(store.hasCompletedOnboarding).toBe(false);
+
+    // Incoming user has a completed profile in Supabase
+    mockProfilesDb.set('completed-user-99', {
+      id: 'completed-user-99',
+      goal: 'build_muscle',
+      experience_level: 'advanced',
+      days_per_week: 5,
+      workout_duration: '60_min',
+      equipment: 'full_gym',
+      workout_style: 'push_pull_legs',
+      onboarding_completed: true,
+    });
+
+    mockAuth.signInWithPassword.mockResolvedValueOnce({
+      data: {
+        session: {
+          access_token: 'tok-completed-99',
+          refresh_token: 'ref-completed-99',
+          user: { id: 'completed-user-99', email: 'completed99@bebig.app' },
+        },
+      },
+      error: null,
+    });
+
+    mockSearchParams = { mode: 'sign_in' };
+    const screen = await render(<AuthScreen initialMode="sign_in" />);
+    await fireEvent.changeText(screen.getByTestId('auth-email-input'), 'completed99@bebig.app');
+    await fireEvent.changeText(screen.getByTestId('auth-password-input'), 'correctPassword');
+
+    await fireEvent.press(screen.getByTestId('auth-email-submit-button'));
+
+    await waitFor(() => {
+      // Must route directly to /home, NEVER to any onboarding questionnaire step!
+      expect(mockReplace).toHaveBeenCalledWith('/home');
+      expect(mockReplace).not.toHaveBeenCalledWith('/onboarding/goal');
+      expect(mockReplace).not.toHaveBeenCalledWith('/onboarding/experience');
+      expect(mockReplace).not.toHaveBeenCalledWith('/onboarding/preferences');
+    });
+
+    // Store is hydrated with the newly authenticated user's profile, NOT stale previous data
+    const finalStore = useOnboardingStore.getState();
+    expect(finalStore.hasCompletedOnboarding).toBe(true);
+    expect(finalStore.goal).toBe('build_muscle');
+    expect(finalStore.daysPerWeek).toBe(5);
+  });
+
+  // Scenario 20: No duplicate login route/screen is introduced (Requirement H)
+  it('Scenario 20: Welcome to Login routes canonically and mode toggling does not introduce duplicate screens (Requirement H)', async () => {
+    // 1. Welcome to Login triggers push to canonical auth route
+    const welcome = await render(<WelcomeScreen />);
+    fireEvent.press(welcome.getByTestId('welcome-sign-in-button'));
+
+    expect(mockPush).toHaveBeenCalledWith('/onboarding/auth?mode=sign_in');
+
+    // 2. AuthScreen switches mode in-place without pushing additional routes
+    mockSearchParams = { mode: 'sign_in' };
+    const authScreen = await render(<AuthScreen initialMode="sign_in" />);
+    expect(authScreen.getByText('Welcome Back')).toBeTruthy();
+
+    const switchModeButton = authScreen.getByTestId('toggle-signup');
+    fireEvent.press(switchModeButton);
+
+    await waitFor(() => {
+      expect(authScreen.getByText('Create Your Account')).toBeTruthy();
+      // No secondary push occurred
+      expect(mockPush).toHaveBeenCalledTimes(1);
+    });
   });
 });

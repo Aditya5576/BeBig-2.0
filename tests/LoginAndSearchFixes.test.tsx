@@ -214,7 +214,7 @@ describe('Surgical Fix: Login UX + Tolerant Exercise Search', () => {
       expect(getByTestId('auth-email-input').props.value).toBe('unknown@bebig.app');
     });
 
-    it('LOGIN: Supabase "Invalid login credentials" (status 400) provides friendly signup guidance and Create Account action', async () => {
+    it('LOGIN: Supabase "Invalid login credentials" (status 400) provides truthful neutral failure and Create Account action without claiming account does not exist (Requirement F)', async () => {
       // 1. Service verification: Supabase 400 "Invalid login credentials"
       mockAuth.signInWithPassword.mockResolvedValueOnce({
         data: { session: null, user: null },
@@ -226,14 +226,18 @@ describe('Surgical Fix: Login UX + Tolerant Exercise Search', () => {
         },
       });
 
-      const serviceResult = await authService.signInWithEmail('newlifter@bebig.app', 'password123');
+      const serviceResult = await authService.signInWithEmail('existinglifter@bebig.app', 'wrongpassword');
       expect(serviceResult.success).toBe(false);
       expect(serviceResult.isInvalidCredentials).toBe(true);
+      expect(serviceResult.isNonExistentUser).toBe(false);
+      expect(serviceResult.message).toBe(
+        'Invalid email or password. Please try again or create an account.'
+      );
 
-      // 2. UI verification: AuthScreen displays No account found guidance and Create Account action
+      // 2. UI verification: AuthScreen displays neutral "Unable to sign in" banner and Create Account action
       const screen = await render(<AuthScreen initialMode="sign_in" />);
-      await fireEvent.changeText(screen.getByTestId('auth-email-input'), 'newlifter@bebig.app');
-      await fireEvent.changeText(screen.getByTestId('auth-password-input'), 'password123');
+      await fireEvent.changeText(screen.getByTestId('auth-email-input'), 'existinglifter@bebig.app');
+      await fireEvent.changeText(screen.getByTestId('auth-password-input'), 'wrongpassword');
 
       mockAuth.signInWithPassword.mockResolvedValueOnce({
         data: { session: null, user: null },
@@ -249,10 +253,14 @@ describe('Surgical Fix: Login UX + Tolerant Exercise Search', () => {
 
       await waitFor(() => {
         expect(screen.getByTestId('auth-status-banner-title')).toBeTruthy();
-        expect(screen.getByText('No account found')).toBeTruthy();
+        expect(screen.getByText('Unable to sign in')).toBeTruthy();
         expect(
-          screen.getByText("We couldn't find an account with this email. Create an account to get started.")
+          screen.getByText(
+            "We couldn't sign you in with those credentials. Please check your password or create a new account."
+          )
         ).toBeTruthy();
+        // Must NOT falsely claim "No account found"
+        expect(screen.queryByText('No account found')).toBeNull();
       });
 
       // Tapping Create Account switches to Sign Up mode with email preserved
@@ -262,7 +270,61 @@ describe('Surgical Fix: Login UX + Tolerant Exercise Search', () => {
 
       await waitFor(() => {
         expect(screen.getByText('Create Your Account')).toBeTruthy();
-        expect(screen.getByTestId('auth-email-input').props.value).toBe('newlifter@bebig.app');
+        expect(screen.getByTestId('auth-email-input').props.value).toBe('existinglifter@bebig.app');
+      });
+    });
+
+    it('SIGNUP: when signup reports "already registered", provides a Log In path and preserves email (Requirement G)', async () => {
+      // 1. Service verification: Supabase user already registered response
+      mockAuth.signUp.mockResolvedValueOnce({
+        data: {
+          user: { id: 'registered-id', identities: [] },
+          session: null,
+        },
+        error: null,
+      });
+
+      const serviceResult = await authService.signUpWithEmail('existing@bebig.app', 'password123');
+      expect(serviceResult.success).toBe(false);
+      expect(serviceResult.isUserAlreadyRegistered).toBe(true);
+      expect(serviceResult.message).toBe(
+        'An account with this email already exists. Please sign in.'
+      );
+
+      // 2. UI verification: AuthScreen displays Account already exists banner and Log In action
+      const screen = await render(
+        <AuthScreen initialMode="sign_up" initialEmail="existing@bebig.app" />
+      );
+      await fireEvent.changeText(screen.getByTestId('auth-password-input'), 'password123');
+      await fireEvent.changeText(screen.getByTestId('auth-confirm-password-input'), 'password123');
+
+      mockAuth.signUp.mockResolvedValueOnce({
+        data: {
+          user: { id: 'registered-id', identities: [] },
+          session: null,
+        },
+        error: null,
+      });
+
+      await fireEvent.press(screen.getByTestId('auth-email-submit-button'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('auth-status-banner-title')).toBeTruthy();
+        expect(screen.getByText('Account already exists')).toBeTruthy();
+        expect(
+          screen.getByText('An account with this email already exists. Please log in instead.')
+        ).toBeTruthy();
+      });
+
+      // Pressing "Log In" switches to Sign In mode with email preserved
+      const logInActionButton = screen.getByTestId('auth-status-action-button');
+      expect(logInActionButton).toBeTruthy();
+      expect(within(logInActionButton).getByText('Log In')).toBeTruthy();
+      fireEvent.press(logInActionButton);
+
+      await waitFor(() => {
+        expect(screen.getByText('Welcome Back')).toBeTruthy();
+        expect(screen.getByTestId('auth-email-input').props.value).toBe('existing@bebig.app');
       });
     });
 

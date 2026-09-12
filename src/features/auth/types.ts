@@ -35,6 +35,7 @@ export interface AuthResult {
   requiresEmailConfirmation?: boolean;
   isNonExistentUser?: boolean;
   isInvalidCredentials?: boolean;
+  isUserAlreadyRegistered?: boolean;
 }
 
 export type AuthStatus = 'initializing' | 'authenticated' | 'guest' | 'unauthenticated';

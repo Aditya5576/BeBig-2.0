@@ -86,7 +86,17 @@ export const authService: IAuthService = {
       });
 
       if (error) {
-        return { success: false, message: getErrorMessage(error, 'Sign up failed.') };
+        const msg = error.message || '';
+        const isAlreadyRegistered =
+          /already registered|already exists|user already exists/i.test(msg) ||
+          error.code === 'user_already_exists';
+        return {
+          success: false,
+          message: isAlreadyRegistered
+            ? 'An account with this email already exists. Please sign in.'
+            : getErrorMessage(error, 'Sign up failed.'),
+          isUserAlreadyRegistered: isAlreadyRegistered,
+        };
       }
 
       if (!data.user) {
@@ -98,6 +108,7 @@ export const authService: IAuthService = {
         return {
           success: false,
           message: 'An account with this email already exists. Please sign in.',
+          isUserAlreadyRegistered: true,
         };
       }
 
@@ -118,10 +129,17 @@ export const authService: IAuthService = {
         session,
         user: session?.user ?? mapSupabaseUser(data.user),
       };
-    } catch (err) {
+    } catch (err: any) {
+      const msg = err?.message || '';
+      const isAlreadyRegistered =
+        /already registered|already exists|user already exists/i.test(msg) ||
+        err?.code === 'user_already_exists';
       return {
         success: false,
-        message: getErrorMessage(err, 'Sign up encountered an unexpected error.'),
+        message: isAlreadyRegistered
+          ? 'An account with this email already exists. Please sign in.'
+          : getErrorMessage(err, 'Sign up encountered an unexpected error.'),
+        isUserAlreadyRegistered: isAlreadyRegistered,
       };
     }
   },
@@ -159,7 +177,9 @@ export const authService: IAuthService = {
           success: false,
           message: isNonExistent
             ? "We couldn't find an account with this email. Create an account to get started."
-            : getErrorMessage(error, 'Sign in failed.'),
+            : isInvalidCredentials
+              ? "Invalid email or password. Please try again or create an account."
+              : getErrorMessage(error, 'Sign in failed.'),
           isNonExistentUser: isNonExistent,
           isInvalidCredentials,
         };
@@ -190,7 +210,9 @@ export const authService: IAuthService = {
         success: false,
         message: isNonExistent
           ? "We couldn't find an account with this email. Create an account to get started."
-          : getErrorMessage(err, 'Sign in encountered an unexpected error.'),
+          : isInvalidCredentials
+            ? "Invalid email or password. Please try again or create an account."
+            : getErrorMessage(err, 'Sign in encountered an unexpected error.'),
         isNonExistentUser: isNonExistent,
         isInvalidCredentials,
       };

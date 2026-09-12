@@ -59,7 +59,7 @@ export default function AuthScreen({
 
   const configured = isSupabaseConfigured();
 
-  const handlePostAuthSuccess = async (session: any) => {
+  const handlePostAuthSuccess = async (session: any, mode: EmailMode = emailMode) => {
     if (!session?.user?.id) {
       setAuthSession(session);
       router.replace('/home');
@@ -67,24 +67,29 @@ export default function AuthScreen({
     }
 
     const userId = session.user.id;
-    let existingProfile = null;
 
+    // Reset local onboarding store to ensure answers from a previous user/guest never leak
+    useOnboardingStore.getState().resetOnboarding();
+
+    // Establish auth session in store
+    setAuthSession(session);
+
+    let existingProfile: any = null;
     try {
       existingProfile = await profileService.getProfile(userId);
     } catch {
       // Ignore network errors; fallback below
     }
 
-    // 1. New Account Sign-Up: Always reset local onboarding state and route directly to /onboarding/goal
-    if (emailMode === 'sign_up') {
-      useOnboardingStore.getState().resetOnboarding();
-      setAuthSession(session);
-      router.replace('/onboarding/goal');
+    // Protect against account-switch race during async profile check
+    const currentAuthedUser = useAuthStore.getState().user;
+    if (currentAuthedUser?.id !== userId) {
       return;
     }
 
-    // 2. Existing account with completed onboarding:
-    // Restore their saved profile into useOnboardingStore and route directly to Home.
+    // 1. COMPLETED ACCOUNT:
+    // If THIS user's profile has onboarding_completed === true, rehydrate and route directly to /home.
+    // NEVER show Goal, Experience, or Preferences to a completed user, regardless of mode!
     if (existingProfile && existingProfile.onboarding_completed) {
       const store = useOnboardingStore.getState();
       if (existingProfile.goal) store.setGoal(existingProfile.goal);
@@ -97,15 +102,40 @@ export default function AuthScreen({
       if (existingProfile.workout_style) store.setWorkoutStyle(existingProfile.workout_style);
       store.completeOnboarding();
 
-      setAuthSession(session);
       router.replace('/home');
       return;
     }
 
-    // 3. Existing account or social login with incomplete onboarding:
-    // Reset local store to ensure clean slate and route to onboarding questions.
-    useOnboardingStore.getState().resetOnboarding();
-    setAuthSession(session);
+    // 2. NEW SIGNUP (mode === 'sign_up' with no existing profile or unstarted answers):
+    if (mode === 'sign_up' && !existingProfile?.goal) {
+      router.replace('/onboarding/goal');
+      return;
+    }
+
+    // 3. INCOMPLETE ACCOUNT:
+    // Rehydrate any existing partially completed fields and continue at the correct incomplete step.
+    if (existingProfile) {
+      const store = useOnboardingStore.getState();
+      if (existingProfile.goal) store.setGoal(existingProfile.goal);
+      if (existingProfile.experience_level)
+        store.setExperienceLevel(existingProfile.experience_level);
+      if (existingProfile.days_per_week) store.setDaysPerWeek(existingProfile.days_per_week);
+      if (existingProfile.workout_duration)
+        store.setWorkoutDuration(existingProfile.workout_duration);
+      if (existingProfile.equipment) store.setEquipment(existingProfile.equipment);
+      if (existingProfile.workout_style) store.setWorkoutStyle(existingProfile.workout_style);
+
+      if (!existingProfile.goal) {
+        router.replace('/onboarding/goal');
+      } else if (!existingProfile.experience_level) {
+        router.replace('/onboarding/experience');
+      } else {
+        router.replace('/onboarding/preferences');
+      }
+      return;
+    }
+
+    // 4. Fallback for unprofiled user: start onboarding
     router.replace('/onboarding/goal');
   };
 
@@ -194,12 +224,11 @@ export default function AuthScreen({
     setStatusMessage(null);
 
     if (emailMode === 'sign_up') {
-      useOnboardingStore.getState().resetOnboarding();
       const result = await authService.signUpWithEmail(email, password);
 
       if (result.success) {
         if (result.session) {
-          await handlePostAuthSuccess(result.session);
+          await handlePostAuthSuccess(result.session, 'sign_up');
         } else if (result.requiresEmailConfirmation) {
           setLoading(false);
           setStatusMessage({
@@ -209,16 +238,37 @@ export default function AuthScreen({
         }
       } else {
         setLoading(false);
-        setStatusMessage({ text: result.message, type: 'error' });
+        const isAlreadyRegistered =
+          result.isUserAlreadyRegistered ||
+          /already exists|already registered/i.test(result.message);
+
+        if (isAlreadyRegistered) {
+          setStatusMessage({
+            title: 'Account already exists',
+            text: 'An account with this email already exists. Please log in instead.',
+            type: 'error',
+            action: {
+              label: 'Log In',
+              onPress: () => {
+                setEmailMode('sign_in');
+                setPassword('');
+                setConfirmPassword('');
+                setStatusMessage(null);
+              },
+            },
+          });
+        } else {
+          setStatusMessage({ text: result.message, type: 'error' });
+        }
       }
     } else {
       const result = await authService.signInWithEmail(email, password);
 
       if (result.success && result.session) {
-        await handlePostAuthSuccess(result.session);
+        await handlePostAuthSuccess(result.session, 'sign_in');
       } else {
         setLoading(false);
-        if (result.isNonExistentUser || result.isInvalidCredentials) {
+        if (result.isNonExistentUser) {
           setStatusMessage({
             title: 'No account found',
             text: "We couldn't find an account with this email. Create an account to get started.",
@@ -227,6 +277,23 @@ export default function AuthScreen({
               label: 'Create Account',
               onPress: () => {
                 setEmailMode('sign_up');
+                setPassword('');
+                setConfirmPassword('');
+                setStatusMessage(null);
+              },
+            },
+          });
+        } else if (result.isInvalidCredentials) {
+          setStatusMessage({
+            title: 'Unable to sign in',
+            text: "We couldn't sign you in with those credentials. Please check your password or create a new account.",
+            type: 'error',
+            action: {
+              label: 'Create Account',
+              onPress: () => {
+                setEmailMode('sign_up');
+                setPassword('');
+                setConfirmPassword('');
                 setStatusMessage(null);
               },
             },
