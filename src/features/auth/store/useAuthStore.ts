@@ -9,6 +9,7 @@ import { workoutStorage } from '../../workout/storage/workoutStorage';
 import { templateStorage } from '../../templates/storage/templateStorage';
 import { customExerciseStorage } from '../../exercises/storage/customExerciseStorage';
 import { profileService } from '../../profile';
+import { useOnboardingStore } from '../../onboarding/store/useOnboardingStore';
 
 interface AuthActions {
   initializeAuth: () => Promise<void>;
@@ -98,6 +99,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set) => ({
                 templateStorage.clearMemoryCache();
                 customExerciseStorage.clearMemoryCache();
                 profileService.clearMemoryCache();
+                useOnboardingStore.getState().resetOnboarding();
                 set({
                   status: 'unauthenticated',
                   isGuest: false,
@@ -172,6 +174,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set) => ({
               templateStorage.clearMemoryCache();
               customExerciseStorage.clearMemoryCache();
               profileService.clearMemoryCache();
+              useOnboardingStore.getState().resetOnboarding();
               set({
                 status: 'unauthenticated',
                 isGuest: false,
@@ -265,6 +268,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set) => ({
     templateStorage.clearMemoryCache();
     customExerciseStorage.clearMemoryCache();
     profileService.clearMemoryCache();
+    useOnboardingStore.getState().resetOnboarding();
     const state = useAuthStore.getState();
     if (state.isGuest) {
       await guestStorage.clearGuestSession();

@@ -267,6 +267,20 @@ export default function HomeScreen() {
                 {badgeText}
               </Text>
             </View>
+
+            <Pressable
+              testID="settings-header-button"
+              onPress={() => router.push('/settings' as any)}
+              accessibilityLabel="Settings and Profile"
+              accessibilityRole="button"
+              style={styles.settingsHeaderButton}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={styles.settingsHeaderIcon}>⚙️</Text>
+              <Text variant="caption" color="secondary" style={styles.settingsHeaderText}>
+                Settings
+              </Text>
+            </Pressable>
           </View>
 
           <Text variant="display" color="primary" testID="home-title" style={styles.greetingTitle}>
@@ -658,6 +672,15 @@ export default function HomeScreen() {
               <Text variant="titleMedium" color="primary">
                 Your Training Configuration
               </Text>
+              <Pressable
+                testID="edit-profile-link"
+                onPress={() => router.push('/settings' as any)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text variant="label" color="accent">
+                  Edit ›
+                </Text>
+              </Pressable>
             </View>
 
             <View style={styles.row}>
@@ -832,7 +855,27 @@ const styles = StyleSheet.create({
   headerTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: spacing.xs,
+  },
+  settingsHeaderButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.dark.surface,
+    borderColor: colors.dark.border,
+    borderWidth: 1,
+    paddingHorizontal: spacing.sm + 4,
+    paddingVertical: 6,
+    borderRadius: radii.full,
+    minHeight: 44,
+  },
+  settingsHeaderIcon: {
+    fontSize: 14,
+  },
+  settingsHeaderText: {
+    fontWeight: '600',
+    color: colors.dark.textSecondary,
   },
   badge: {
     backgroundColor: '#0E291B',
@@ -1114,6 +1157,9 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: spacing.sm,
   },
   row: {

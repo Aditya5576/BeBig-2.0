@@ -31,7 +31,7 @@ function useProtectedRoute() {
     if (status === 'initializing') return; // Do NOT redirect prematurely while checking session
 
     const firstSegment = segments[0];
-    const isProtected = ['home', 'workout', 'templates', 'exercises'].includes(firstSegment);
+    const isProtected = ['home', 'workout', 'templates', 'exercises', 'settings'].includes(firstSegment);
 
     if (status === 'unauthenticated' && isProtected) {
       router.replace('/onboarding/welcome');
@@ -71,6 +71,7 @@ export default function RootLayout() {
         <Stack.Screen name="index" />
         <Stack.Screen name="onboarding" />
         <Stack.Screen name="home" />
+        <Stack.Screen name="settings" />
         <Stack.Screen name="auth/callback" />
         <Stack.Screen name="exercises/index" />
         <Stack.Screen name="exercises/[id]" />

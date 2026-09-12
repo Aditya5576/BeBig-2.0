@@ -23,6 +23,7 @@ export interface OnboardingStore extends OnboardingState {
   setWorkoutDuration: (duration: WorkoutDuration) => void;
   setEquipment: (equipment: Equipment) => void;
   togglePreferredTrainingDay: (day: DayOfWeek) => void;
+  setPreferredTrainingDays: (days: DayOfWeek[]) => void;
   setWorkoutStyle: (style: WorkoutStyle) => void;
   completeOnboarding: () => void;
   resetOnboarding: () => void;
@@ -62,6 +63,9 @@ export const useOnboardingStore = create<OnboardingStore>((set) => ({
           : [...state.preferredTrainingDays, day],
       };
     }),
+
+  setPreferredTrainingDays: (preferredTrainingDays: DayOfWeek[]) =>
+    set({ preferredTrainingDays }),
 
   setWorkoutStyle: (workoutStyle: WorkoutStyle) => set({ workoutStyle }),
 
