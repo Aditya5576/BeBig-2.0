@@ -79,6 +79,46 @@ export async function resolveAuthenticatedUserRoute(
     };
   }
 
+  // 4b. Cloud Metadata Fallback: Check if user_metadata confirms onboarding was completed
+  const metaProfile = postAsyncUser.user_metadata?.profile as UserProfile | undefined;
+  const isMetaCompleted =
+    postAsyncUser.user_metadata?.onboarding_completed === true ||
+    metaProfile?.onboarding_completed === true;
+
+  if (isMetaCompleted) {
+    const resolvedProfile: UserProfile = metaProfile || {
+      id: userId,
+      goal: 'build_muscle',
+      experience_level: 'intermediate',
+      days_per_week: 4,
+      workout_duration: '60_min',
+      training_location: 'gym',
+      equipment: 'full_gym',
+      preferred_training_days: ['monday', 'wednesday', 'friday'],
+      workout_style: 'push_pull_legs',
+      onboarding_completed: true,
+    };
+
+    const store = useOnboardingStore.getState();
+    if (resolvedProfile.goal) store.setGoal(resolvedProfile.goal);
+    if (resolvedProfile.experience_level) store.setExperienceLevel(resolvedProfile.experience_level);
+    if (resolvedProfile.days_per_week) store.setDaysPerWeek(resolvedProfile.days_per_week);
+    if (resolvedProfile.workout_duration) store.setWorkoutDuration(resolvedProfile.workout_duration);
+    if (resolvedProfile.equipment) store.setEquipment(resolvedProfile.equipment);
+    if (resolvedProfile.workout_style) store.setWorkoutStyle(resolvedProfile.workout_style);
+    store.completeOnboarding();
+
+    if (__DEV__) {
+      console.log('[AUTH_ROUTE] User verified COMPLETED via cloud user_metadata -> /home');
+    }
+
+    return {
+      route: '/home',
+      onboardingCompleted: true,
+      profile: resolvedProfile,
+    };
+  }
+
   // 5. Case B: Incomplete Account
   if (profile) {
     const store = useOnboardingStore.getState();

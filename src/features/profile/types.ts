@@ -9,6 +9,11 @@ import {
 
 export interface UserProfile {
   id: string;
+  display_name?: string | null;
+  age?: number | null;
+  height?: number | null; // in cm
+  weight?: number | null; // in kg
+  avatar_url?: string | null;
   goal: Goal | null;
   experience_level: ExperienceLevel | null;
   days_per_week: number | null;
@@ -23,3 +28,4 @@ export interface UserProfile {
 }
 
 export type ProfileUpsertPayload = Omit<UserProfile, 'created_at' | 'updated_at'>;
+

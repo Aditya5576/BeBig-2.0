@@ -104,6 +104,31 @@ export const profileService: IProfileService = {
           await new Promise((resolve) => setTimeout(resolve, 150));
         }
       }
+
+      // Cloud Metadata Fallback: Check auth user metadata across devices
+      try {
+        const { data: userData } = await supabase.auth.getUser();
+        if (userData?.user?.id === userId && userData.user.user_metadata?.profile) {
+          const metaProfile = userData.user.user_metadata.profile as UserProfile;
+          await writeLocalProfile(userId, metaProfile);
+          return metaProfile;
+        }
+      } catch {
+        // Silently handled
+      }
+    }
+
+    // Check currently active in-memory auth store user metadata if available
+    try {
+      const { useAuthStore } = require('../../auth/store/useAuthStore');
+      const currentUser = useAuthStore.getState().user;
+      if (currentUser?.id === userId && currentUser.user_metadata?.profile) {
+        const metaProfile = currentUser.user_metadata.profile as UserProfile;
+        await writeLocalProfile(userId, metaProfile);
+        return metaProfile;
+      }
+    } catch {
+      // Silently handled
     }
 
     return readLocalProfile(userId);
@@ -131,16 +156,29 @@ export const profileService: IProfileService = {
         if (!error && updated) {
           const profile = updated as UserProfile;
           await writeLocalProfile(userId, profile);
+          void supabase.auth.updateUser({
+            data: {
+              profile,
+              onboarding_completed: Boolean(profile.onboarding_completed),
+            },
+          });
           return profile;
         }
       } catch {
-        // Fallback to local profile cache below
+        // Fallback to local profile cache and auth metadata below
       }
     }
 
     const existing = await readLocalProfile(userId);
     const merged: UserProfile = {
       id: userId,
+      display_name:
+        data.display_name !== undefined ? data.display_name : (existing?.display_name ?? null),
+      age: data.age !== undefined ? data.age : (existing?.age ?? null),
+      height: data.height !== undefined ? data.height : (existing?.height ?? null),
+      weight: data.weight !== undefined ? data.weight : (existing?.weight ?? null),
+      avatar_url:
+        data.avatar_url !== undefined ? data.avatar_url : (existing?.avatar_url ?? null),
       goal: data.goal !== undefined ? data.goal : (existing?.goal ?? null),
       experience_level:
         data.experience_level !== undefined
@@ -165,6 +203,20 @@ export const profileService: IProfileService = {
           ? data.onboarding_completed
           : (existing?.onboarding_completed ?? false),
     };
+
+    if (isSupabaseConfigured()) {
+      try {
+        await supabase.auth.updateUser({
+          data: {
+            profile: merged,
+            onboarding_completed: Boolean(merged.onboarding_completed),
+          },
+        });
+      } catch {
+        // Silently handled
+      }
+    }
+
     await writeLocalProfile(userId, merged);
     return merged;
   },
@@ -173,7 +225,7 @@ export const profileService: IProfileService = {
     userId: string,
     onboarding: OnboardingState,
   ): Promise<UserProfile | null> => {
-    const payload: ProfileUpsertPayload = {
+    const payload: Partial<ProfileUpsertPayload> = {
       id: userId,
       goal: onboarding.goal,
       experience_level: onboarding.experienceLevel,

@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { View } from 'react-native';
 import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -6,6 +7,7 @@ import { colors } from '../src/constants/theme';
 import { useSyncLifecycle } from '../src/services/sync';
 import { useAuthStore, resolveAuthenticatedUserRoute } from '../src/features/auth';
 import { WebAlertModal } from '../src/components/ui';
+import { BottomNavBar } from '../src/components/navigation';
 import '../src/lib/ui/webAlert';
 
 function useProtectedRoute() {
@@ -61,34 +63,38 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <StatusBar style="light" />
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: colors.dark.background },
-          animation: 'fade',
-        }}
-      >
-        <Stack.Screen name="index" />
-        <Stack.Screen name="onboarding" />
-        <Stack.Screen name="home" />
-        <Stack.Screen name="settings" />
-        <Stack.Screen name="auth/callback" />
-        <Stack.Screen name="exercises/index" />
-        <Stack.Screen name="exercises/[id]" />
-        <Stack.Screen name="exercises/new" />
-        <Stack.Screen name="templates/index" />
-        <Stack.Screen name="templates/new" />
-        <Stack.Screen name="templates/[id]" />
-        <Stack.Screen name="workout/start" />
-        <Stack.Screen name="workout/active" />
-        <Stack.Screen name="workout/summary" />
-        <Stack.Screen name="workout/history" />
-        <Stack.Screen name="workout/history/[id]" />
-        <Stack.Screen name="workout/progress/prs" />
-        <Stack.Screen name="workout/progress/exercise/[id]" />
-        <Stack.Screen name="+not-found" options={{ title: 'Not Found' }} />
-      </Stack>
+      <View style={{ flex: 1, backgroundColor: colors.dark.background }}>
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: colors.dark.background },
+            animation: 'fade',
+          }}
+        >
+          <Stack.Screen name="index" />
+          <Stack.Screen name="onboarding" />
+          <Stack.Screen name="home" />
+          <Stack.Screen name="settings" />
+          <Stack.Screen name="auth/callback" />
+          <Stack.Screen name="exercises/index" />
+          <Stack.Screen name="exercises/[id]" />
+          <Stack.Screen name="exercises/new" />
+          <Stack.Screen name="templates/index" />
+          <Stack.Screen name="templates/new" />
+          <Stack.Screen name="templates/[id]" />
+          <Stack.Screen name="workout/start" />
+          <Stack.Screen name="workout/active" />
+          <Stack.Screen name="workout/summary" />
+          <Stack.Screen name="workout/history" />
+          <Stack.Screen name="workout/history/[id]" />
+          <Stack.Screen name="workout/progress/prs" />
+          <Stack.Screen name="workout/progress/exercise/[id]" />
+          <Stack.Screen name="+not-found" options={{ title: 'Not Found' }} />
+        </Stack>
+        <BottomNavBar />
+      </View>
       <WebAlertModal />
     </SafeAreaProvider>
   );
 }
+

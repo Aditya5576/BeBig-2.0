@@ -13,6 +13,8 @@ export interface AuthUser {
   email: string | null;
   provider?: AuthProvider;
   createdAt?: string;
+  user_metadata?: Record<string, any>;
+  app_metadata?: Record<string, any>;
 }
 
 export interface AuthSession {

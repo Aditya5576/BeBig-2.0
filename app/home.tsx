@@ -670,15 +670,17 @@ export default function HomeScreen() {
           <Card style={styles.profileCard} testID="profile-summary-card">
             <View style={styles.cardHeader}>
               <Text variant="titleMedium" color="primary">
-                Your Training Configuration
+                Fitness Profile
               </Text>
               <Pressable
                 testID="edit-profile-link"
                 onPress={() => router.push('/settings' as any)}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityLabel="Edit Profile"
+                accessibilityRole="button"
               >
                 <Text variant="label" color="accent">
-                  Edit ›
+                  Edit Profile ›
                 </Text>
               </Pressable>
             </View>
