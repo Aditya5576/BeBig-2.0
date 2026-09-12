@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, Image, Animated, ActivityIndicator } from 'react-native';
 import { Text } from './Text';
-import { colors, spacing, radii } from '../../constants/theme';
+import { colors, spacing } from '../../constants/theme';
 
 export interface StartupSplashProps {
   testID?: string;
@@ -9,94 +9,148 @@ export interface StartupSplashProps {
 
 export function StartupSplash({ testID = 'startup-splash-screen' }: StartupSplashProps) {
   const [fadeAnim] = useState(() => new Animated.Value(0));
-  const [scaleAnim] = useState(() => new Animated.Value(0.95));
+  const [scaleAnim] = useState(() => new Animated.Value(0.92));
   const [pulseAnim] = useState(() => new Animated.Value(1));
+  const [glowAnim] = useState(() => new Animated.Value(0.4));
+  const [textFadeAnim] = useState(() => new Animated.Value(0));
+  const [textSlideAnim] = useState(() => new Animated.Value(8));
 
   useEffect(() => {
-    // 1. Initial entrance animation
+    // 1. Staggered entrance animation: Emblem reveals first, then typography slides in
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 400,
+        duration: 450,
         useNativeDriver: true,
       }),
-      Animated.timing(scaleAnim, {
+      Animated.spring(scaleAnim, {
         toValue: 1,
-        duration: 400,
+        friction: 8,
+        tension: 40,
         useNativeDriver: true,
       }),
+      Animated.sequence([
+        Animated.delay(150),
+        Animated.parallel([
+          Animated.timing(textFadeAnim, {
+            toValue: 1,
+            duration: 350,
+            useNativeDriver: true,
+          }),
+          Animated.timing(textSlideAnim, {
+            toValue: 0,
+            duration: 350,
+            useNativeDriver: true,
+          }),
+        ]),
+      ]),
     ]).start();
 
-    // 2. Subtle continuous breathing pulse for athletic aesthetic
-    const pulseLoop = Animated.loop(
+    // 2. Continuous athletic breathing aura loop
+    const auraLoop = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1.025,
-          duration: 1400,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 1400,
-          useNativeDriver: true,
-        }),
+        Animated.parallel([
+          Animated.timing(pulseAnim, {
+            toValue: 1.03,
+            duration: 1500,
+            useNativeDriver: true,
+          }),
+          Animated.timing(glowAnim, {
+            toValue: 0.8,
+            duration: 1500,
+            useNativeDriver: true,
+          }),
+        ]),
+        Animated.parallel([
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 1500,
+            useNativeDriver: true,
+          }),
+          Animated.timing(glowAnim, {
+            toValue: 0.4,
+            duration: 1500,
+            useNativeDriver: true,
+          }),
+        ]),
       ]),
     );
-    pulseLoop.start();
+    auraLoop.start();
 
     return () => {
-      pulseLoop.stop();
+      auraLoop.stop();
     };
-  }, [fadeAnim, scaleAnim, pulseAnim]);
+  }, [fadeAnim, scaleAnim, pulseAnim, glowAnim, textFadeAnim, textSlideAnim]);
 
   return (
     <View style={styles.container} testID={testID}>
-      {/* Centered Brand & Artwork Content */}
-      <View style={styles.centerContainer}>
+      {/* Top Spacer for balanced vertical optical center */}
+      <View style={styles.topSpacer} />
+
+      {/* Main Brand Core */}
+      <View style={styles.brandCore}>
+        {/* Atmospheric Backlight Aura */}
         <Animated.View
           style={[
-            styles.content,
+            styles.backlightAura,
+            {
+              opacity: glowAnim,
+              transform: [{ scale: pulseAnim }],
+            },
+          ]}
+        />
+
+        {/* Hero Insignia */}
+        <Animated.View
+          style={[
+            styles.insigniaWrapper,
             {
               opacity: fadeAnim,
-              transform: [{ scale: scaleAnim }],
+              transform: [{ scale: scaleAnim }, { scale: pulseAnim }],
             },
           ]}
         >
-          {/* Athlete Artwork with Subtle Pulsing Glow */}
-          <Animated.View style={[styles.imageGlowWrapper, { transform: [{ scale: pulseAnim }] }]}>
-            <View style={styles.imageContainer}>
-              <Image
-                source={require('../../../assets/splash-athlete.png')}
-                style={styles.athleteImage}
-                resizeMode="cover"
-                testID="splash-athlete-image"
-              />
-            </View>
-          </Animated.View>
-
-          {/* Brand Typography & Tagline */}
-          <View style={styles.brandSection}>
-            <Text variant="display" color="accent" style={styles.brandTitle}>
-              BEBIG
-            </Text>
-            <Text variant="label" color="primary" style={styles.tagline}>
-              Your workout. Your progress. Your BeBig.
-            </Text>
-          </View>
-
-          {/* Loading Spinner */}
-          <ActivityIndicator
-            testID="auth-loading-indicator"
-            size="small"
-            color={colors.dark.primary}
-            style={styles.spinner}
+          <Image
+            source={require('../../../assets/splash-athlete.png')}
+            style={styles.heroInsignia}
+            resizeMode="contain"
+            testID="splash-athlete-image"
           />
+        </Animated.View>
+
+        {/* Brand Typography & Tagline */}
+        <Animated.View
+          style={[
+            styles.typographyGroup,
+            {
+              opacity: textFadeAnim,
+              transform: [{ translateY: textSlideAnim }],
+            },
+          ]}
+        >
+          <Text variant="display" style={styles.brandWordmark}>
+            BEBIG
+          </Text>
+
+          <Text variant="label" style={styles.tagline}>
+            Your workout. Your progress. Your BeBig.
+          </Text>
+
+          {/* Minimalist Energy Loading Indicator */}
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator
+              testID="auth-loading-indicator"
+              size="small"
+              color={colors.dark.primary}
+              style={styles.spinner}
+            />
+          </View>
         </Animated.View>
       </View>
 
-      {/* Subtle Developer Attribution Footer */}
-      <View style={styles.footerSection}>
-        <Text variant="caption" color="muted" style={styles.developerAttribution}>
+      {/* Elegant Bottom Developer Attribution */}
+      <View style={styles.footerContainer}>
+        <Text variant="caption" style={styles.developerAttribution}>
           Developed by Aditya Patil
         </Text>
       </View>
@@ -107,71 +161,86 @@ export function StartupSplash({ testID = 'startup-splash-screen' }: StartupSplas
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#090D16',
+    backgroundColor: '#000000',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xxl,
+    paddingTop: spacing.xl,
     paddingBottom: spacing.xl,
   },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
+  topSpacer: {
+    height: 24,
+  },
+  brandCore: {
     alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
     width: '100%',
+    maxWidth: 420,
   },
-  content: {
+  backlightAura: {
+    position: 'absolute',
+    width: 260,
+    height: 260,
+    borderRadius: 130,
+    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+    shadowColor: '#38BDF8',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.7,
+    shadowRadius: 40,
+  },
+  insigniaWrapper: {
+    width: 176,
+    height: 176,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.lg,
+    marginBottom: spacing.md,
   },
-  imageGlowWrapper: {
-    shadowColor: colors.dark.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.45,
-    shadowRadius: 24,
-    elevation: 12,
-  },
-  imageContainer: {
-    width: 220,
-    height: 220,
-    borderRadius: radii.xl,
-    overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: colors.dark.borderLight,
-    backgroundColor: colors.dark.surfaceElevated,
-  },
-  athleteImage: {
+  heroInsignia: {
     width: '100%',
     height: '100%',
   },
-  brandSection: {
+  typographyGroup: {
     alignItems: 'center',
-    gap: spacing.xs,
+    gap: 8,
   },
-  brandTitle: {
-    fontSize: 44,
+  brandWordmark: {
+    fontSize: 42,
     fontWeight: '900',
-    letterSpacing: 7,
+    letterSpacing: 9,
+    color: '#F8FAFC',
+    textShadowColor: 'rgba(56, 189, 248, 0.5)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 18,
+    textAlign: 'center',
   },
   tagline: {
-    letterSpacing: 0.8,
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '500',
+    letterSpacing: 0.8,
+    color: '#94A3B8',
     textAlign: 'center',
-    opacity: 0.9,
+    paddingHorizontal: spacing.md,
+  },
+  loadingContainer: {
+    marginTop: spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 32,
   },
   spinner: {
-    marginTop: spacing.xs,
+    transform: [{ scale: 0.85 }],
   },
-  footerSection: {
+  footerContainer: {
     alignItems: 'center',
-    paddingBottom: spacing.sm,
+    justifyContent: 'center',
+    paddingBottom: spacing.xs,
   },
   developerAttribution: {
-    fontSize: 12,
-    letterSpacing: 0.6,
-    opacity: 0.65,
+    fontSize: 11,
+    letterSpacing: 1.2,
     fontWeight: '500',
+    color: '#475569',
+    textTransform: 'none',
   },
 });
