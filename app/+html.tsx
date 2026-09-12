@@ -45,6 +45,16 @@ export default function Root({ children }: PropsWithChildren) {
           content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, shrink-to-fit=no, viewport-fit=cover"
         />
         <title>BeBig</title>
+        {/* PWA Manifest & Android Chrome Theme */}
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#090D16" />
+
+        {/* iOS Safari Home Screen Configuration */}
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="BeBig" />
+        <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+
         <ScrollViewStyleReset />
         <style dangerouslySetInnerHTML={{ __html: mobileWebStyles }} />
         <script
@@ -54,6 +64,13 @@ export default function Root({ children }: PropsWithChildren) {
                 document.addEventListener('gesturestart', function(e) { e.preventDefault(); }, { passive: false });
                 document.addEventListener('gesturechange', function(e) { e.preventDefault(); }, { passive: false });
                 document.addEventListener('gestureend', function(e) { e.preventDefault(); }, { passive: false });
+              }
+              if (typeof window !== 'undefined' && 'serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
+                window.addEventListener('load', function() {
+                  navigator.serviceWorker.register('/sw.js').catch(function(err) {
+                    console.warn('[SW] Registration failed:', err);
+                  });
+                });
               }
             `,
           }}
