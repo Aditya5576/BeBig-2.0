@@ -402,7 +402,7 @@ describe('Milestone 8 — Home Dashboard Integration Tests', () => {
 
   // Scenario 9: Backward compatibility with all existing testIDs
   it('Scenario 9: Preserves all existing testIDs for backward compatibility', async () => {
-    const { getByTestId } = await render(<HomeScreen />);
+    const { getByTestId, queryByTestId } = await render(<HomeScreen />);
 
     await waitFor(
       () => {
@@ -412,7 +412,7 @@ describe('Milestone 8 — Home Dashboard Integration Tests', () => {
         expect(getByTestId('my-templates-button')).toBeTruthy();
         expect(getByTestId('browse-exercises-button')).toBeTruthy();
         expect(getByTestId('sign-out-button')).toBeTruthy();
-        expect(getByTestId('reset-onboarding-button')).toBeTruthy();
+        expect(queryByTestId('reset-onboarding-button')).toBeNull();
       },
       { timeout: 3000 },
     );

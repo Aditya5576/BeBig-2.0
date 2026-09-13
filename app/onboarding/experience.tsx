@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, Redirect } from 'expo-router';
 import { ScreenContainer, Text, Button } from '../../src/components/ui';
 import {
   OnboardingHeader,
@@ -9,6 +9,8 @@ import {
   ExperienceLevel,
 } from '../../src/features/onboarding';
 import { spacing } from '../../src/constants/theme';
+
+import { useAuthStore } from '../../src/features/auth';
 
 interface ExperienceOption {
   id: ExperienceLevel;
@@ -22,14 +24,14 @@ const EXPERIENCE_OPTIONS: ExperienceOption[] = [
     id: 'beginner',
     title: 'Beginner',
     description:
-      'Less than 1 year of structured lifting. Focusing on form, motor patterns, and foundational strength.',
+      'Less than 1 year of consistent lifting. Focused on learning foundational movement patterns and technique.',
     badge: '< 1 Year',
   },
   {
     id: 'intermediate',
     title: 'Intermediate',
     description:
-      '1 to 3 years of consistent gym training. Familiar with main compound lifts and structured splits.',
+      '1–3 years of structured gym training. Comfortable with compound lifts and progressive overload fundamentals.',
     badge: '1–3 Years',
   },
   {
@@ -45,6 +47,13 @@ export default function ExperienceScreen() {
   const router = useRouter();
   const selectedLevel = useOnboardingStore((state) => state.experienceLevel);
   const setExperienceLevel = useOnboardingStore((state) => state.setExperienceLevel);
+  const hasCompletedOnboarding = useOnboardingStore((state) => state.hasCompletedOnboarding);
+  const authStatus = useAuthStore((state) => state.status);
+  const isGuest = useAuthStore((state) => state.isGuest);
+
+  if (hasCompletedOnboarding && (authStatus === 'authenticated' || isGuest)) {
+    return <Redirect href="/home" />;
+  }
 
   const handleContinue = () => {
     const currentLevel = useOnboardingStore.getState().experienceLevel || selectedLevel;

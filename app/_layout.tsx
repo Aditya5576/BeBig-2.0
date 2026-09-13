@@ -33,10 +33,21 @@ function useProtectedRoute() {
     if (status === 'initializing') return; // Do NOT redirect prematurely while checking session
 
     const firstSegment = segments[0];
+    const secondSegment = segments[1];
     const isProtected = ['home', 'workout', 'templates', 'exercises', 'settings'].includes(firstSegment);
 
     if (status === 'unauthenticated' && isProtected) {
       router.replace('/onboarding/welcome');
+      return;
+    }
+
+    const isGuest = useAuthStore.getState().isGuest;
+    const isQuestionnaireRoute =
+      firstSegment === 'onboarding' &&
+      ['goal', 'experience', 'preferences'].includes(secondSegment);
+
+    if (isGuest && isQuestionnaireRoute) {
+      router.replace('/home');
       return;
     }
 

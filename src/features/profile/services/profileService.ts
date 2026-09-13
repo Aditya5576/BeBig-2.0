@@ -140,9 +140,36 @@ export const profileService: IProfileService = {
   ): Promise<UserProfile | null> => {
     if (!userId) return null;
 
+    const existing = await readLocalProfile(userId);
+
+    // Check user_metadata from active auth store
+    let currentUserMeta: any = null;
+    try {
+      const { useAuthStore } = require('../../auth/store/useAuthStore');
+      const authUser = useAuthStore.getState().user;
+      if (authUser?.id === userId) {
+        currentUserMeta = authUser.user_metadata;
+      }
+    } catch {
+      // Silently handled
+    }
+
+    // Invariant: Once onboarding_completed is true for an account, it can NEVER revert to false
+    const wasAlreadyCompleted =
+      existing?.onboarding_completed === true ||
+      currentUserMeta?.onboarding_completed === true ||
+      currentUserMeta?.profile?.onboarding_completed === true;
+
+    const resolvedOnboardingCompleted = wasAlreadyCompleted
+      ? true
+      : data.onboarding_completed !== undefined
+        ? Boolean(data.onboarding_completed)
+        : false;
+
     const payload: Partial<ProfileUpsertPayload> = {
       ...data,
       id: userId,
+      onboarding_completed: resolvedOnboardingCompleted,
     };
 
     if (isSupabaseConfigured()) {
@@ -154,14 +181,21 @@ export const profileService: IProfileService = {
           .single();
 
         if (!error && updated) {
-          const profile = updated as UserProfile;
+          const profile = {
+            ...(updated as UserProfile),
+            onboarding_completed: resolvedOnboardingCompleted,
+          };
           await writeLocalProfile(userId, profile);
-          void supabase.auth.updateUser({
-            data: {
-              profile,
-              onboarding_completed: Boolean(profile.onboarding_completed),
-            },
-          });
+          try {
+            await supabase.auth.updateUser({
+              data: {
+                profile,
+                onboarding_completed: resolvedOnboardingCompleted,
+              },
+            });
+          } catch {
+            // Silently handled
+          }
           return profile;
         }
       } catch {
@@ -169,7 +203,6 @@ export const profileService: IProfileService = {
       }
     }
 
-    const existing = await readLocalProfile(userId);
     const merged: UserProfile = {
       id: userId,
       display_name:
@@ -198,10 +231,7 @@ export const profileService: IProfileService = {
           : (existing?.preferred_training_days ?? []),
       workout_style:
         data.workout_style !== undefined ? data.workout_style : (existing?.workout_style ?? null),
-      onboarding_completed:
-        data.onboarding_completed !== undefined
-          ? data.onboarding_completed
-          : (existing?.onboarding_completed ?? false),
+      onboarding_completed: resolvedOnboardingCompleted,
     };
 
     if (isSupabaseConfigured()) {
@@ -209,7 +239,7 @@ export const profileService: IProfileService = {
         await supabase.auth.updateUser({
           data: {
             profile: merged,
-            onboarding_completed: Boolean(merged.onboarding_completed),
+            onboarding_completed: resolvedOnboardingCompleted,
           },
         });
       } catch {

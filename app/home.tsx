@@ -223,11 +223,6 @@ export default function HomeScreen() {
     }
   };
 
-  const handleResetDev = () => {
-    resetOnboarding();
-    router.replace('/onboarding/welcome');
-  };
-
   const formatCompletedDate = (dateStr?: string) => {
     if (!dateStr) return 'Recent';
     const d = new Date(dateStr);
@@ -808,26 +803,6 @@ export default function HomeScreen() {
             size="lg"
             style={styles.signOutButton}
           />
-
-          <View style={styles.devDivider}>
-            <View style={styles.dividerLine} />
-            <Text variant="caption" color="muted" style={styles.dividerLabel}>
-              DEVELOPMENT TOOLS
-            </Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          <Button
-            testID="reset-onboarding-button"
-            title="Reset Onboarding (Dev Testing)"
-            onPress={handleResetDev}
-            variant="secondary"
-            size="md"
-            style={styles.resetButton}
-          />
-          <Text variant="caption" color="muted" style={styles.resetHint}>
-            Use this button during local testing to clear local state and run the flow again.
-          </Text>
 
           <View style={styles.appFooter}>
             <Text variant="caption" color="muted" style={styles.appFooterText}>

@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, Redirect } from 'expo-router';
 import { ScreenContainer, Text, Button } from '../../src/components/ui';
 import {
   OnboardingHeader,
@@ -9,6 +9,8 @@ import {
   Goal,
 } from '../../src/features/onboarding';
 import { spacing } from '../../src/constants/theme';
+
+import { useAuthStore } from '../../src/features/auth';
 
 interface GoalOption {
   id: Goal;
@@ -42,6 +44,13 @@ export default function GoalScreen() {
   const router = useRouter();
   const selectedGoal = useOnboardingStore((state) => state.goal);
   const setGoal = useOnboardingStore((state) => state.setGoal);
+  const hasCompletedOnboarding = useOnboardingStore((state) => state.hasCompletedOnboarding);
+  const authStatus = useAuthStore((state) => state.status);
+  const isGuest = useAuthStore((state) => state.isGuest);
+
+  if (hasCompletedOnboarding && (authStatus === 'authenticated' || isGuest)) {
+    return <Redirect href="/home" />;
+  }
 
   const handleContinue = () => {
     const currentGoal = useOnboardingStore.getState().goal || selectedGoal;

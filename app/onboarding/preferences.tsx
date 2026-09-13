@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, Redirect } from 'expo-router';
 import { ScreenContainer, Text, Button, Card } from '../../src/components/ui';
 import {
   OnboardingHeader,
@@ -16,13 +16,12 @@ import { useAuthStore } from '../../src/features/auth';
 import { profileService } from '../../src/features/profile';
 import { spacing, colors, radii } from '../../src/constants/theme';
 
-const DAYS_PER_WEEK_OPTIONS = [
-  { label: '2', value: 2 },
-  { label: '3', value: 3 },
-  { label: '4', value: 4 },
-  { label: '5', value: 5 },
-  { label: '6', value: 6 },
-  { label: '7', value: 7 },
+const DAYS_PER_WEEK_OPTIONS: { label: string; value: number }[] = [
+  { label: '2 days', value: 2 },
+  { label: '3 days', value: 3 },
+  { label: '4 days', value: 4 },
+  { label: '5 days', value: 5 },
+  { label: '6 days', value: 6 },
 ];
 
 const DURATION_OPTIONS: { label: string; value: WorkoutDuration }[] = [
@@ -59,19 +58,19 @@ const WORKOUT_STYLE_OPTIONS: {
   id: WorkoutStyle;
   title: string;
   description: string;
-  badge: string;
+  badge?: string;
 }[] = [
   {
     id: 'push_pull_legs',
     title: 'Push / Pull / Legs',
-    description: 'Chest/Shoulders/Triceps, Back/Biceps, and Legs/Abs.',
-    badge: 'Popular',
+    description: 'Target specific movement chains for balanced development and optimal recovery.',
+    badge: 'Classic Hypertrophy',
   },
   {
     id: 'upper_lower',
     title: 'Upper / Lower',
-    description: 'Alternating upper body and lower body focus sessions.',
-    badge: 'Balanced',
+    description: 'Split upper and lower body movements for solid frequency and progressive strength.',
+    badge: 'Strength Focus',
   },
   {
     id: 'full_body',
@@ -83,6 +82,13 @@ const WORKOUT_STYLE_OPTIONS: {
 
 export default function PreferencesScreen() {
   const router = useRouter();
+  const hasCompletedOnboarding = useOnboardingStore((state) => state.hasCompletedOnboarding);
+  const authStatus = useAuthStore((state) => state.status);
+  const isGuest = useAuthStore((state) => state.isGuest);
+
+  if (hasCompletedOnboarding && (authStatus === 'authenticated' || isGuest)) {
+    return <Redirect href="/home" />;
+  }
 
   const daysPerWeek = useOnboardingStore((state) => state.daysPerWeek);
   const workoutDuration = useOnboardingStore((state) => state.workoutDuration);
