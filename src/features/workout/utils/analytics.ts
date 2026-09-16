@@ -322,7 +322,7 @@ export interface ExerciseHistoryEntry {
     setNumber: number;
     weight: number;
     reps: number;
-    rir: number;
+    rir?: number;
     notes?: string;
   }[];
 }

@@ -32,6 +32,74 @@ export default function ActiveWorkoutScreen() {
   const [restRemaining, setRestRemaining] = useState<number | null>(null);
   const [isRestFinished, setIsRestFinished] = useState(false);
   const [finishing, setFinishing] = useState(false);
+  const [lastPerformanceMap, setLastPerformanceMap] = useState<
+    Record<string, { workoutDate?: string; sets: WorkoutSet[] }>
+  >({});
+
+  // Fetch last performance per exercise from local completed history
+  useEffect(() => {
+    if (!session || !session.exercises || session.exercises.length === 0) return;
+
+    let isMounted = true;
+
+    async function loadLastPerformances() {
+      try {
+        const completed = await workoutRepository.getCompletedWorkouts();
+        const map: Record<string, { workoutDate?: string; sets: WorkoutSet[] }> = {};
+
+        for (const ex of session!.exercises) {
+          if (!ex.exerciseId && !ex.exerciseName) continue;
+          const targetId = ex.exerciseId;
+          const targetName = ex.exerciseName ? ex.exerciseName.trim().toLowerCase() : '';
+
+          for (const w of completed) {
+            if (w.id === session!.id) continue;
+            if (!w.exercises || w.exercises.length === 0) continue;
+
+            const match = w.exercises.find((e) => {
+              if (targetId && e.exerciseId && e.exerciseId === targetId) return true;
+              if (
+                targetName &&
+                e.exerciseName &&
+                e.exerciseName.trim().toLowerCase() === targetName
+              ) {
+                return true;
+              }
+              return false;
+            });
+
+            if (match && match.actualSets && match.actualSets.length > 0) {
+              const loggedSets = match.actualSets.filter(
+                (s) => s.completed || (s.weight ?? 0) > 0 || (s.reps ?? 0) > 0,
+              );
+              if (loggedSets.length > 0) {
+                map[ex.exerciseId] = {
+                  workoutDate: w.finishedAt || w.startedAt,
+                  sets: loggedSets,
+                };
+                break;
+              }
+            }
+          }
+        }
+
+        if (isMounted) {
+          setLastPerformanceMap(map);
+        }
+      } catch {
+        // Fallback gracefully
+      }
+    }
+
+    void loadLastPerformances();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    session?.id,
+    session?.exercises?.map((e) => `${e.exerciseId}_${e.exerciseName}`).join(','),
+  ]);
 
   // Load active workout draft
   useEffect(() => {
@@ -120,6 +188,13 @@ export default function ActiveWorkoutScreen() {
       return `${hours}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const formatShortDate = (dateStr?: string) => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
   };
 
   // Autosave helper
@@ -258,7 +333,7 @@ export default function ActiveWorkoutScreen() {
         Alert.alert('Invalid Weight', 'Weight cannot be negative.');
         return;
       }
-      if (set.rir < 0 || set.rir > 10 || isNaN(set.rir)) {
+      if (set.rir !== undefined && (set.rir < 0 || set.rir > 10 || isNaN(set.rir))) {
         Alert.alert('Invalid RIR', 'RIR must be between 0 and 10.');
         return;
       }
@@ -587,6 +662,46 @@ export default function ActiveWorkoutScreen() {
                     </Text>
                   </View>
                 ) : null}
+
+                {/* Last Time Performance */}
+                {lastPerformanceMap[ex.exerciseId] ? (
+                  <View
+                    style={styles.lastTimeContainer}
+                    testID={`last-time-performance-${ex.exerciseId}`}
+                  >
+                    <View style={styles.lastTimeHeaderRow}>
+                      <Text variant="caption" style={styles.lastTimeTitle}>
+                        LAST TIME{' '}
+                        {formatShortDate(lastPerformanceMap[ex.exerciseId].workoutDate)
+                          ? `(${formatShortDate(lastPerformanceMap[ex.exerciseId].workoutDate)})`
+                          : ''}
+                      </Text>
+                    </View>
+                    <View style={styles.lastTimeSetsRow}>
+                      {lastPerformanceMap[ex.exerciseId].sets.map((s, idx, arr) => (
+                        <Text
+                          key={s.id || idx}
+                          variant="caption"
+                          color="secondary"
+                          style={styles.lastTimeSetChip}
+                        >
+                          {s.weight > 0 ? `${s.weight}kg` : 'BW'} × {s.reps}
+                          {s.rir !== undefined && s.rir !== null ? ` @ RIR ${s.rir}` : ''}
+                          {idx < arr.length - 1 ? '  •  ' : ''}
+                        </Text>
+                      ))}
+                    </View>
+                  </View>
+                ) : (
+                  <View
+                    style={styles.noLastTimeContainer}
+                    testID={`last-time-empty-${ex.exerciseId}`}
+                  >
+                    <Text variant="caption" color="muted" style={styles.noLastTimeText}>
+                      No previous performance
+                    </Text>
+                  </View>
+                )}
 
                 {/* Sets List */}
                 <View style={styles.setsContainer}>
@@ -984,6 +1099,45 @@ const styles = StyleSheet.create({
   targetsText: {
     fontSize: 11,
     fontWeight: '600',
+  },
+  lastTimeContainer: {
+    backgroundColor: 'rgba(56, 189, 248, 0.05)',
+    paddingVertical: 6,
+    paddingHorizontal: spacing.sm + 2,
+    borderRadius: radii.xs,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.2)',
+    gap: 2,
+  },
+  lastTimeHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  lastTimeTitle: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    color: colors.dark.primary,
+  },
+  lastTimeSetsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+  },
+  lastTimeSetChip: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.dark.textSecondary,
+  },
+  noLastTimeContainer: {
+    paddingVertical: 2,
+    paddingHorizontal: 2,
+  },
+  noLastTimeText: {
+    fontSize: 11,
+    fontStyle: 'italic',
+    color: colors.dark.textMuted,
   },
   setsContainer: {
     gap: spacing.md,

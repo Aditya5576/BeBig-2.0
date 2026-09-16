@@ -13,7 +13,7 @@ export interface WorkoutSet {
   setNumber: number;
   weight: number; // kg, supports decimals (e.g. 62.5)
   reps: number; // positive whole integer (e.g. 8)
-  rir: number; // Reps In Reserve (0 to 10)
+  rir?: number; // Reps In Reserve (0 to 10)
   notes?: string; // optional user notes
   completed: boolean;
   completedAt?: string; // ISO 8601 timestamp
