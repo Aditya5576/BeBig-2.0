@@ -2,7 +2,7 @@ import React from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import { useRouter, useSegments } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Text } from '../ui';
+import { Text, Icon } from '../ui';
 import { useAuthStore } from '../../features/auth';
 import { colors, radii } from '../../constants/theme';
 
@@ -86,7 +86,7 @@ export function BottomNavBar() {
         style={styles.tabItem}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
-        <Text style={[styles.tabIcon, isHomeActive && styles.tabIconActive]}>🏠</Text>
+        <Icon name="home" size={20} focused={isHomeActive} />
         <Text
           variant="caption"
           style={[styles.tabLabel, isHomeActive ? styles.tabLabelActive : styles.tabLabelInactive]}
@@ -105,7 +105,7 @@ export function BottomNavBar() {
         style={styles.tabItem}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
-        <Text style={[styles.tabIcon, isHistoryActive && styles.tabIconActive]}>📊</Text>
+        <Icon name="history" size={20} focused={isHistoryActive} />
         <Text
           variant="caption"
           style={[styles.tabLabel, isHistoryActive ? styles.tabLabelActive : styles.tabLabelInactive]}
@@ -125,7 +125,7 @@ export function BottomNavBar() {
         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
       >
         <View style={[styles.centerButton, isWorkoutActive && styles.centerButtonActive]}>
-          <Text style={styles.centerButtonIcon}>🏋️‍♂️</Text>
+          <Icon name="workout" size={22} color="#090D16" />
         </View>
         <Text
           variant="caption"
@@ -145,7 +145,7 @@ export function BottomNavBar() {
         style={styles.tabItem}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
-        <Text style={[styles.tabIcon, isExercisesActive && styles.tabIconActive]}>📚</Text>
+        <Icon name="exercises" size={20} focused={isExercisesActive} />
         <Text
           variant="caption"
           style={[styles.tabLabel, isExercisesActive ? styles.tabLabelActive : styles.tabLabelInactive]}
@@ -164,7 +164,7 @@ export function BottomNavBar() {
         style={styles.tabItem}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
-        <Text style={[styles.tabIcon, isProfileActive && styles.tabIconActive]}>👤</Text>
+        <Icon name="profile" size={20} focused={isProfileActive} />
         <Text
           variant="caption"
           style={[styles.tabLabel, isProfileActive ? styles.tabLabelActive : styles.tabLabelInactive]}

@@ -25,6 +25,8 @@ export interface AppConfig {
   readonly supabaseUrl?: string;
   /** Future Supabase public anonymous client key (RLS restricted) */
   readonly supabaseAnonKey?: string;
+  /** Sentry DSN for error monitoring */
+  readonly sentryDsn?: string;
   /** Convenience boolean for development mode checks */
   readonly isDev: boolean;
 }
@@ -45,5 +47,6 @@ export const env: AppConfig = Object.freeze({
   apiUrl: process.env.EXPO_PUBLIC_API_URL || undefined,
   supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL || undefined,
   supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || undefined,
+  sentryDsn: process.env.EXPO_PUBLIC_SENTRY_DSN || undefined,
   isDev: appEnv === 'development',
 });

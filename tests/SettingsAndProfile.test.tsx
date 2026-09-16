@@ -111,16 +111,13 @@ describe('BeBig 2.0 — Settings & Profile Feature Tests', () => {
     await cleanup();
   });
 
-  // 1. Authenticated user can open Settings
-  it('1. Authenticated user can open Settings from Home header', async () => {
-    const { getByTestId } = await render(<HomeScreen />);
+  // 1. Redundant settings button is removed from Home header
+  it('1. Redundant settings button is removed from Home header', async () => {
+    const { queryByTestId } = await render(<HomeScreen />);
 
     await waitFor(() => {
-      expect(getByTestId('settings-header-button')).toBeTruthy();
+      expect(queryByTestId('settings-header-button')).toBeNull();
     });
-
-    fireEvent.press(getByTestId('settings-header-button'));
-    expect(mockPush).toHaveBeenCalledWith('/settings');
   });
 
   // 2. Profile information loads

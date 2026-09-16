@@ -16,8 +16,20 @@ import { colors, spacing, radii } from '../../src/constants/theme';
 export default function ExerciseListScreen() {
   const router = useRouter();
 
-  const [exercises, setExercises] = useState<Exercise[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [exercises, setExercises] = useState<Exercise[]>(() => {
+    try {
+      return exerciseRepository.getCachedExercises();
+    } catch {
+      return [];
+    }
+  });
+  const [loading, setLoading] = useState<boolean>(() => {
+    try {
+      return exerciseRepository.getCachedExercises().length === 0;
+    } catch {
+      return true;
+    }
+  });
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -25,12 +37,29 @@ export default function ExerciseListScreen() {
   const [nextOffset, setNextOffset] = useState<number | undefined>(undefined);
   const [hasMore, setHasMore] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [isCachedOnly, setIsCachedOnly] = useState(false);
 
+  // 1. Instant local search against cache whenever query or category changes
+  useEffect(() => {
+    const cached = exerciseRepository.getCachedExercises({
+      query: searchQuery.trim() || undefined,
+      category: selectedCategory !== 'all' ? selectedCategory : undefined,
+    });
+    if (cached.length > 0) {
+      setExercises(cached);
+      setLoading(false);
+      setError(null);
+    }
+  }, [searchQuery, selectedCategory]);
+
+  // 2. Background API refresh with debounce
   useEffect(() => {
     let isMounted = true;
-
-    async function loadExercises() {
-      setLoading(true);
+    const timeoutId = setTimeout(async () => {
+      // If we don't already have exercises rendered, indicate loading
+      if (exercises.length === 0) {
+        setLoading(true);
+      }
       setError(null);
 
       try {
@@ -45,22 +74,32 @@ export default function ExerciseListScreen() {
           setExercises(result.exercises);
           setHasMore(result.hasMore);
           setNextOffset(result.nextOffset);
+          setIsCachedOnly(false);
         }
       } catch (err: any) {
         if (isMounted) {
-          setError(err?.message || 'Failed to load exercises. Please try again.');
+          // If we have cached results, keep displaying them gracefully
+          const cached = exerciseRepository.getCachedExercises({
+            query: searchQuery.trim() || undefined,
+            category: selectedCategory !== 'all' ? selectedCategory : undefined,
+          });
+          if (cached.length > 0) {
+            setExercises(cached);
+            setIsCachedOnly(true);
+          } else {
+            setError(err?.message || 'Failed to load exercises. Please try again.');
+          }
         }
       } finally {
         if (isMounted) {
           setLoading(false);
         }
       }
-    }
-
-    void loadExercises();
+    }, 250);
 
     return () => {
       isMounted = false;
+      clearTimeout(timeoutId);
     };
   }, [searchQuery, selectedCategory, refreshTrigger]);
 
@@ -223,6 +262,15 @@ export default function ExerciseListScreen() {
           })}
         </ScrollView>
       </View>
+
+      {/* Offline/Cached Subtle Banner */}
+      {isCachedOnly && (
+        <View testID="exercise-offline-banner" style={styles.offlineBanner}>
+          <Text variant="caption" color="accent" style={styles.offlineBannerText}>
+            ⚡ Offline / Weak Network — Showing Cached Movements
+          </Text>
+        </View>
+      )}
 
       {/* Main Content Area */}
       {loading ? (
@@ -408,5 +456,20 @@ const styles = StyleSheet.create({
   footerLoading: {
     paddingVertical: spacing.md,
     alignItems: 'center',
+  },
+  offlineBanner: {
+    backgroundColor: 'rgba(56, 189, 248, 0.08)',
+    borderColor: 'rgba(56, 189, 248, 0.25)',
+    borderWidth: 1,
+    borderRadius: radii.sm,
+    paddingVertical: 6,
+    paddingHorizontal: spacing.sm,
+    marginBottom: spacing.xs,
+    alignItems: 'center',
+  },
+  offlineBannerText: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.3,
   },
 });

@@ -132,8 +132,6 @@ describe('Milestone 8 — Home Dashboard Integration Tests', () => {
     await waitFor(
       () => {
         expect(getByTestId('home-title')).toBeTruthy();
-        expect(getByTestId('user-email')).toBeTruthy();
-        expect(getByText('athlete@bebig.app')).toBeTruthy();
       },
       { timeout: 3000 },
     );
@@ -363,43 +361,6 @@ describe('Milestone 8 — Home Dashboard Integration Tests', () => {
     expect(mockPush).toHaveBeenCalledWith('/workout/history/workout-detail-test');
   });
 
-  // Scenario 8: Guest Mode dashboard rendering
-  it('Scenario 8: Guest Mode renders guest badge, local device info, and exit guest button', async () => {
-    const exitGuestSpy = jest.fn().mockResolvedValue(undefined);
-
-    useAuthStore.setState({
-      status: 'guest',
-      user: null,
-      isGuest: true,
-      guestSession: {
-        id: 'guest-session-uuid',
-        createdAt: new Date().toISOString(),
-        lastActiveAt: new Date().toISOString(),
-      },
-      exitGuestMode: exitGuestSpy,
-    });
-
-    const { getByTestId, getByText } = await render(<HomeScreen />);
-
-    await waitFor(
-      () => {
-        const guestCard = getByTestId('guest-account-card');
-        expect(guestCard).toBeTruthy();
-        expect(within(guestCard).getByText('GUEST MODE')).toBeTruthy();
-        expect(within(guestCard).getByText('Local Device Athlete')).toBeTruthy();
-      },
-      { timeout: 3000 },
-    );
-
-    const exitBtn = getByTestId('exit-guest-button');
-    await act(async () => {
-      fireEvent.press(exitBtn);
-    });
-
-    expect(exitGuestSpy).toHaveBeenCalled();
-    expect(mockReplace).toHaveBeenCalledWith('/onboarding/welcome');
-  });
-
   // Scenario 9: Backward compatibility with all existing testIDs
   it('Scenario 9: Preserves all existing testIDs for backward compatibility', async () => {
     const { getByTestId, queryByTestId } = await render(<HomeScreen />);
@@ -411,7 +372,6 @@ describe('Milestone 8 — Home Dashboard Integration Tests', () => {
         expect(getByTestId('workout-history-button')).toBeTruthy();
         expect(getByTestId('my-templates-button')).toBeTruthy();
         expect(getByTestId('browse-exercises-button')).toBeTruthy();
-        expect(getByTestId('sign-out-button')).toBeTruthy();
         expect(queryByTestId('reset-onboarding-button')).toBeNull();
       },
       { timeout: 3000 },

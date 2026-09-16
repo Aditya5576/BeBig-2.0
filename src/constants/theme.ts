@@ -27,48 +27,86 @@ export const radii = {
   full: 9999,
 } as const;
 
+import { Platform } from 'react-native';
+
+export const fontFamilies = {
+  sans: Platform.select({
+    web: 'system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Segoe UI", Roboto, sans-serif',
+    ios: 'System',
+    android: 'Roboto',
+    default: 'sans-serif',
+  }),
+  numeric: Platform.select({
+    web: 'system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif',
+    ios: 'System',
+    android: 'Roboto',
+    default: 'sans-serif',
+  }),
+};
+
 export const typography = {
   display: {
     fontSize: 32,
     lineHeight: 38,
     fontWeight: '700' as const,
+    fontFamily: fontFamilies.sans,
     letterSpacing: -0.5,
   },
   titleLarge: {
     fontSize: 24,
     lineHeight: 30,
     fontWeight: '700' as const,
+    fontFamily: fontFamilies.sans,
     letterSpacing: -0.3,
   },
   titleMedium: {
     fontSize: 18,
     lineHeight: 24,
     fontWeight: '600' as const,
+    fontFamily: fontFamilies.sans,
     letterSpacing: -0.2,
   },
   body: {
     fontSize: 15,
     lineHeight: 22,
     fontWeight: '400' as const,
+    fontFamily: fontFamilies.sans,
     letterSpacing: 0,
   },
   bodyBold: {
     fontSize: 15,
     lineHeight: 22,
     fontWeight: '600' as const,
+    fontFamily: fontFamilies.sans,
     letterSpacing: 0,
   },
   label: {
     fontSize: 13,
     lineHeight: 18,
     fontWeight: '600' as const,
+    fontFamily: fontFamilies.sans,
     letterSpacing: 0.2,
   },
   caption: {
     fontSize: 12,
     lineHeight: 16,
     fontWeight: '400' as const,
+    fontFamily: fontFamilies.sans,
     letterSpacing: 0.1,
+  },
+  numeric: {
+    fontSize: 22,
+    lineHeight: 28,
+    fontWeight: '700' as const,
+    fontFamily: fontFamilies.numeric,
+    letterSpacing: -0.2,
+  },
+  numericHero: {
+    fontSize: 36,
+    lineHeight: 42,
+    fontWeight: '800' as const,
+    fontFamily: fontFamilies.numeric,
+    letterSpacing: -0.5,
   },
 } as const;
 

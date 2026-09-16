@@ -30,71 +30,52 @@ export default function HomeScreen() {
 
   const user = useAuthStore((state) => state.user);
   const isGuest = useAuthStore((state) => state.isGuest);
-  const signOut = useAuthStore((state) => state.signOut);
-  const exitGuestMode = useAuthStore((state) => state.exitGuestMode);
-
   const daysPerWeek = useOnboardingStore((state) => state.daysPerWeek);
-  const resetOnboarding = useOnboardingStore((state) => state.resetOnboarding);
-  const goal = useOnboardingStore((state) => state.goal);
-  const experienceLevel = useOnboardingStore((state) => state.experienceLevel);
-  const workoutDuration = useOnboardingStore((state) => state.workoutDuration);
-  const trainingLocation = useOnboardingStore((state) => state.trainingLocation);
-  const equipment = useOnboardingStore((state) => state.equipment);
-  const workoutStyle = useOnboardingStore((state) => state.workoutStyle);
-  const preferredTrainingDays = useOnboardingStore((state) => state.preferredTrainingDays);
-
-  const formatText = (text: any) => {
-    if (!text || typeof text !== 'string') return 'Not set';
-    return text
-      .split('_')
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(' ');
-  };
 
   const [completedWorkouts, setCompletedWorkouts] = useState<WorkoutSession[]>([]);
   const [activeWorkout, setActiveWorkout] = useState<WorkoutSession | null>(null);
   const [templates, setTemplates] = useState<WorkoutTemplate[]>([]);
+  const [profileDisplayName, setProfileDisplayName] = useState<string | null>(null);
 
   const loadDashboardData = useCallback(async () => {
     try {
-      // If user refreshed directly on /home and onboarding store is unhydrated, restore saved profile
-      if (!useOnboardingStore.getState().hasCompletedOnboarding) {
-        const currentUser = useAuthStore.getState().user;
-        const isGuestUser = useAuthStore.getState().isGuest;
-        if (currentUser?.id) {
-          try {
-            const profile = await profileService.getProfile(currentUser.id);
-            if (profile && profile.onboarding_completed) {
-              const store = useOnboardingStore.getState();
-              if (profile.goal) store.setGoal(profile.goal);
-              if (profile.experience_level) store.setExperienceLevel(profile.experience_level);
-              if (profile.days_per_week) store.setDaysPerWeek(profile.days_per_week);
-              if (profile.workout_duration) store.setWorkoutDuration(profile.workout_duration);
-              if (profile.equipment) store.setEquipment(profile.equipment);
-              if (profile.workout_style) store.setWorkoutStyle(profile.workout_style);
+      const currentUser = useAuthStore.getState().user;
+      const isGuestUser = useAuthStore.getState().isGuest;
+
+      if (currentUser?.id) {
+        try {
+          const profile = await profileService.getProfile(currentUser.id);
+          setProfileDisplayName(profile?.display_name ?? null);
+          if (!useOnboardingStore.getState().hasCompletedOnboarding && profile && profile.onboarding_completed) {
+            const store = useOnboardingStore.getState();
+            if (profile.goal) store.setGoal(profile.goal);
+            if (profile.experience_level) store.setExperienceLevel(profile.experience_level);
+            if (profile.days_per_week) store.setDaysPerWeek(profile.days_per_week);
+            if (profile.workout_duration) store.setWorkoutDuration(profile.workout_duration);
+            if (profile.equipment) store.setEquipment(profile.equipment);
+            if (profile.workout_style) store.setWorkoutStyle(profile.workout_style);
+            store.completeOnboarding();
+          }
+        } catch {
+          // Silently handled
+        }
+      } else if (isGuestUser) {
+        try {
+          const guestData = await guestStorage.getOnboardingData();
+          if (guestData) {
+            const store = useOnboardingStore.getState();
+            if (guestData.goal) store.setGoal(guestData.goal);
+            if (guestData.experienceLevel) store.setExperienceLevel(guestData.experienceLevel);
+            if (guestData.daysPerWeek) store.setDaysPerWeek(guestData.daysPerWeek);
+            if (guestData.workoutDuration) store.setWorkoutDuration(guestData.workoutDuration);
+            if (guestData.equipment) store.setEquipment(guestData.equipment);
+            if (guestData.workoutStyle) store.setWorkoutStyle(guestData.workoutStyle);
+            if (guestData.hasCompletedOnboarding) {
               store.completeOnboarding();
             }
-          } catch {
-            // Silently handled
           }
-        } else if (isGuestUser) {
-          try {
-            const guestData = await guestStorage.getOnboardingData();
-            if (guestData) {
-              const store = useOnboardingStore.getState();
-              if (guestData.goal) store.setGoal(guestData.goal);
-              if (guestData.experienceLevel) store.setExperienceLevel(guestData.experienceLevel);
-              if (guestData.daysPerWeek) store.setDaysPerWeek(guestData.daysPerWeek);
-              if (guestData.workoutDuration) store.setWorkoutDuration(guestData.workoutDuration);
-              if (guestData.equipment) store.setEquipment(guestData.equipment);
-              if (guestData.workoutStyle) store.setWorkoutStyle(guestData.workoutStyle);
-              if (guestData.hasCompletedOnboarding) {
-                store.completeOnboarding();
-              }
-            }
-          } catch {
-            // Silently handled
-          }
+        } catch {
+          // Silently handled
         }
       }
 
@@ -212,16 +193,6 @@ export default function HomeScreen() {
     );
   };
 
-  const handleSignOut = async () => {
-    if (isGuest) {
-      await exitGuestMode();
-      router.replace('/onboarding/welcome');
-    } else {
-      await signOut();
-      resetOnboarding();
-      router.replace('/onboarding/welcome');
-    }
-  };
 
   const formatCompletedDate = (dateStr?: string) => {
     if (!dateStr) return 'Recent';
@@ -249,7 +220,11 @@ export default function HomeScreen() {
 
   const badgeText = user ? 'Cloud Synced' : isGuest ? 'Guest Mode — Local Device' : 'BeBig Athlete';
 
-  const athleteName = user?.email ? user.email.split('@')[0] : 'Athlete';
+  const athleteName =
+    user?.user_metadata?.profile?.display_name ||
+    profileDisplayName ||
+    user?.user_metadata?.display_name ||
+    (user?.email ? user.email.split('@')[0] : 'Athlete');
 
   return (
     <ScreenContainer>
@@ -262,20 +237,6 @@ export default function HomeScreen() {
                 {badgeText}
               </Text>
             </View>
-
-            <Pressable
-              testID="settings-header-button"
-              onPress={() => router.push('/settings' as any)}
-              accessibilityLabel="Settings and Profile"
-              accessibilityRole="button"
-              style={styles.settingsHeaderButton}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Text style={styles.settingsHeaderIcon}>⚙️</Text>
-              <Text variant="caption" color="secondary" style={styles.settingsHeaderText}>
-                Settings
-              </Text>
-            </Pressable>
           </View>
 
           <Text variant="display" color="primary" testID="home-title" style={styles.greetingTitle}>
@@ -660,103 +621,7 @@ export default function HomeScreen() {
           )}
         </View>
 
-        {/* 6b. Training Program Configuration Card (from Onboarding) */}
-        {(goal || experienceLevel || workoutStyle) && (
-          <Card style={styles.profileCard} testID="profile-summary-card">
-            <View style={styles.cardHeader}>
-              <Text variant="titleMedium" color="primary">
-                Fitness Profile
-              </Text>
-              <Pressable
-                testID="edit-profile-link"
-                onPress={() => router.push('/settings' as any)}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                accessibilityLabel="Edit Profile"
-                accessibilityRole="button"
-              >
-                <Text variant="label" color="accent">
-                  Edit Profile ›
-                </Text>
-              </Pressable>
-            </View>
-
-            <View style={styles.row}>
-              <Text variant="label" color="muted">
-                Primary Goal:
-              </Text>
-              <Text variant="bodyBold" color="primary" testID="summary-goal">
-                {formatText(goal)}
-              </Text>
-            </View>
-
-            <View style={styles.row}>
-              <Text variant="label" color="muted">
-                Experience Level:
-              </Text>
-              <Text variant="bodyBold" color="primary" testID="summary-experience">
-                {formatText(experienceLevel)}
-              </Text>
-            </View>
-
-            <View style={styles.row}>
-              <Text variant="label" color="muted">
-                Weekly Frequency:
-              </Text>
-              <Text variant="bodyBold" color="primary" testID="summary-frequency">
-                {daysPerWeek ? `${daysPerWeek} days / week` : 'Not set'}
-              </Text>
-            </View>
-
-            <View style={styles.row}>
-              <Text variant="label" color="muted">
-                Session Duration:
-              </Text>
-              <Text variant="bodyBold" color="primary" testID="summary-duration">
-                {formatText(workoutDuration)}
-              </Text>
-            </View>
-
-            <View style={styles.row}>
-              <Text variant="label" color="muted">
-                Training Location:
-              </Text>
-              <Text variant="bodyBold" color="primary" testID="summary-location">
-                {formatText(trainingLocation)}
-              </Text>
-            </View>
-
-            <View style={styles.row}>
-              <Text variant="label" color="muted">
-                Equipment Access:
-              </Text>
-              <Text variant="bodyBold" color="primary" testID="summary-equipment">
-                {formatText(equipment)}
-              </Text>
-            </View>
-
-            <View style={styles.row}>
-              <Text variant="label" color="muted">
-                Workout Style:
-              </Text>
-              <Text variant="bodyBold" color="primary" testID="summary-style">
-                {formatText(workoutStyle)}
-              </Text>
-            </View>
-
-            <View style={[styles.row, styles.noBorder]}>
-              <Text variant="label" color="muted">
-                Preferred Days:
-              </Text>
-              <Text variant="bodyBold" color="accent" testID="summary-training-days">
-                {preferredTrainingDays && preferredTrainingDays.length > 0
-                  ? preferredTrainingDays.map((d) => d.slice(0, 3).toUpperCase()).join(', ')
-                  : 'Flexible'}
-              </Text>
-            </View>
-          </Card>
-        )}
-
-        {/* 7. Quick Navigation & Account Section */}
+        {/* 7. Quick Navigation & App Footer */}
         <View style={styles.quickNavSection}>
           <Button
             testID="browse-exercises-button"
@@ -765,43 +630,6 @@ export default function HomeScreen() {
             variant="secondary"
             size="lg"
             style={styles.navButton}
-          />
-
-          {user && (
-            <Card style={styles.accountCard} testID="account-card">
-              <Text variant="label" color="muted">
-                AUTHENTICATED ACCOUNT
-              </Text>
-              <Text variant="bodyBold" color="primary" testID="user-email">
-                {user.email ?? 'No email associated'}
-              </Text>
-              <Text variant="caption" color="muted">
-                User ID: {user.id}
-              </Text>
-            </Card>
-          )}
-
-          {isGuest && (
-            <Card style={styles.accountCard} testID="guest-account-card">
-              <Text variant="label" color="accent">
-                GUEST MODE
-              </Text>
-              <Text variant="bodyBold" color="primary">
-                Local Device Athlete
-              </Text>
-              <Text variant="caption" color="secondary">
-                Guest Mode — Data stored on this device
-              </Text>
-            </Card>
-          )}
-
-          <Button
-            testID={isGuest ? 'exit-guest-button' : 'sign-out-button'}
-            title={isGuest ? 'Exit Guest Mode' : 'Sign Out'}
-            onPress={handleSignOut}
-            variant="outline"
-            size="lg"
-            style={styles.signOutButton}
           />
 
           <View style={styles.appFooter}>

@@ -314,18 +314,15 @@ describe('BeBig 2.0 — Cross-Device Auth, Profile Revamp & Bottom Nav Tests', (
     });
   });
 
-  // 3. Home Screen Single Clean Edit Action
-  describe('3. Home Screen Edit Profile Action', () => {
-    it('renders single Edit Profile link on Fitness Profile card without duplicates', async () => {
-      const { getByTestId } = await render(<HomeScreen />);
+  // 3. Home Screen Architecture
+  describe('3. Home Screen Architecture', () => {
+    it('verifies Fitness Profile card is removed from Home', async () => {
+      const { queryByTestId } = await render(<HomeScreen />);
 
       await waitFor(() => {
-        expect(getByTestId('profile-summary-card')).toBeTruthy();
-        expect(getByTestId('edit-profile-link')).toBeTruthy();
+        expect(queryByTestId('profile-summary-card')).toBeNull();
+        expect(queryByTestId('edit-profile-link')).toBeNull();
       });
-
-      await fireEvent.press(getByTestId('edit-profile-link'));
-      expect(mockPush).toHaveBeenCalledWith('/settings');
     });
   });
 

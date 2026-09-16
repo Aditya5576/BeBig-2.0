@@ -2,10 +2,23 @@ import { Exercise, ExerciseCategory, CreateCustomExerciseInput, UpdateCustomExer
 import { ExerciseFilterOptions, ExerciseListResult, IExerciseProvider } from '../providers/types';
 import { WgerExerciseProvider } from '../providers/wger/WgerExerciseProvider';
 import { customExerciseStorage } from '../storage/customExerciseStorage';
+import { exerciseCacheStorage } from '../storage/exerciseCacheStorage';
 import { normalizeCategory } from '../providers/wger/wgerMapper';
 import { getCurrentUserScope, UserScope } from '../../auth/utils/userScope';
 import { syncMetadataStore, syncLifecycleManager } from '../../../services/sync';
 import { filterAndRankExercises } from '../utils/exerciseSearch';
+
+async function withTimeout<T>(promise: Promise<T>, ms: number = 4000): Promise<T> {
+  let timer: any;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error('Network request timed out')), ms);
+  });
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 export const STANDARD_CATEGORIES: { id: ExerciseCategory; name: string }[] = [
   { id: 'chest', name: 'Chest' },
@@ -120,41 +133,68 @@ export class ExerciseRepository {
     let nextOffset: number | undefined = undefined;
 
     if (!hasQuery) {
-      // Standard browsing / pagination
-      const providerResult = await this.provider.listExercises(options);
-      providerExercises = providerResult.exercises;
-      totalCount = providerResult.totalCount;
-      hasMore = providerResult.hasMore;
-      nextOffset = providerResult.nextOffset;
+      // Standard browsing / pagination with local-first cache update
+      try {
+        const providerResult = await withTimeout(this.provider.listExercises(options), 4000);
+        providerExercises = providerResult.exercises;
+        totalCount = providerResult.totalCount;
+        hasMore = providerResult.hasMore;
+        nextOffset = providerResult.nextOffset;
 
-      // Cache by category if filtered
-      if (options.category && options.category !== 'all') {
-        const existing = this.candidateCache.get(options.category) || [];
-        const mergedMap = new Map<string, Exercise>();
-        existing.forEach((e) => mergedMap.set(e.id, e));
-        providerExercises.forEach((e) => mergedMap.set(e.id, e));
-        this.candidateCache.set(options.category, Array.from(mergedMap.values()));
+        if (providerExercises.length > 0) {
+          void exerciseCacheStorage.saveToCatalog(providerExercises);
+        }
+
+        // Cache by category if filtered
+        if (options.category && options.category !== 'all') {
+          const existing = this.candidateCache.get(options.category) || [];
+          const mergedMap = new Map<string, Exercise>();
+          existing.forEach((e) => mergedMap.set(e.id, e));
+          providerExercises.forEach((e) => mergedMap.set(e.id, e));
+          this.candidateCache.set(options.category, Array.from(mergedMap.values()));
+        }
+      } catch {
+        // Fallback to local exercise cache on network error or timeout
+        const cached = exerciseCacheStorage.searchCached({
+          category: options.category,
+          limit: options.limit || 30,
+        });
+        providerExercises = cached;
+        totalCount = cached.length;
+        hasMore = false;
+        nextOffset = undefined;
       }
     } else {
-      // Query search flow
+      // Query search flow: seeded with local-first cache
       const targetCategory =
         options.category && options.category !== 'all'
           ? (options.category as ExerciseCategory)
           : inferCategoryFromQuery(rawQuery!);
 
-      // Gather existing cached candidates
-      let candidatePool: Exercise[] = [];
+      // Gather existing cached candidates from local storage and memory
+      let candidatePool: Exercise[] = exerciseCacheStorage.searchCached({
+        category: targetCategory || options.category,
+      });
       if (targetCategory && this.candidateCache.has(targetCategory)) {
-        candidatePool = [...this.candidateCache.get(targetCategory)!];
+        this.candidateCache.get(targetCategory)!.forEach((e) => {
+          if (!candidatePool.some((c) => c.id === e.id)) candidatePool.push(e);
+        });
       }
 
-      // Initial provider query
+      // Query provider with timeout
       try {
-        const providerResult = await this.provider.listExercises({
-          ...options,
-          category: targetCategory || options.category,
-          limit: targetCategory ? 60 : (options.limit || 30),
-        });
+        const providerResult = await withTimeout(
+          this.provider.listExercises({
+            ...options,
+            category: targetCategory || options.category,
+            limit: targetCategory ? 60 : (options.limit || 30),
+          }),
+          3500,
+        );
+
+        if (providerResult.exercises.length > 0) {
+          void exerciseCacheStorage.saveToCatalog(providerResult.exercises);
+        }
 
         // Merge into candidate pool
         const poolMap = new Map<string, Exercise>();
@@ -172,19 +212,23 @@ export class ExerciseRepository {
       // Rank candidate pool
       let ranked = filterAndRankExercises(candidatePool, rawQuery, options.category);
 
-      // If ranked is empty, attempt fallback candidate retrieval (e.g. token splitting or query variants)
+      // If ranked is empty, attempt fallback candidate retrieval (e.g. token splitting)
       if (ranked.length === 0) {
         const qTokens = rawQuery!.split(/\s+/).filter((t) => t.length >= 3);
         const searchTokens = [...qTokens, rawQuery!.replace(/\s+/g, '')];
 
         for (const token of searchTokens) {
           try {
-            const fallbackResult = await this.provider.listExercises({
-              ...options,
-              query: token,
-              limit: 50,
-            });
+            const fallbackResult = await withTimeout(
+              this.provider.listExercises({
+                ...options,
+                query: token,
+                limit: 50,
+              }),
+              2500,
+            );
             if (fallbackResult.exercises.length > 0) {
+              void exerciseCacheStorage.saveToCatalog(fallbackResult.exercises);
               const newlyRanked = filterAndRankExercises(
                 fallbackResult.exercises,
                 rawQuery,
@@ -233,8 +277,33 @@ export class ExerciseRepository {
       return customs.find((e) => e.id === id) || null;
     }
 
-    // Fall back to external provider
-    return this.provider.getExerciseById(id);
+    // Check local exercise cache first
+    const cached = await exerciseCacheStorage.getCachedExerciseById(id);
+    if (cached) {
+      return cached;
+    }
+
+    // Fall back to external provider with timeout
+    try {
+      const exercise = await withTimeout(this.provider.getExerciseById(id), 4000);
+      if (exercise) {
+        void exerciseCacheStorage.saveToCatalog([exercise]);
+      }
+      return exercise;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Returns cached exercises synchronously or locally without network delay.
+   */
+  getCachedExercises(options: ExerciseFilterOptions = {}): Exercise[] {
+    return exerciseCacheStorage.searchCached({
+      query: options.query,
+      category: options.category,
+      limit: options.limit || 30,
+    });
   }
 
   async createCustomExercise(

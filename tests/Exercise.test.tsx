@@ -365,7 +365,9 @@ describe('BeBig 2.0 — Exercise System Foundation', () => {
 
       // Test search typing
       fireEvent.changeText(getByTestId('exercise-search-input'), 'Bench');
-      expect(mockFetch).toHaveBeenCalled();
+      await waitFor(() => {
+        expect(mockFetch).toHaveBeenCalled();
+      });
     });
 
     it('renders ExerciseDetailScreen with full instructions and anatomy', async () => {

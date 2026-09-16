@@ -574,4 +574,104 @@ describe('BeBig 2.0 — Milestone 5: Workout Execution', () => {
       expect(mockPush).toHaveBeenCalledWith('/workout/active');
     });
   });
+
+  describe('Bulletproof Active Workout Offline Recovery & Durability', () => {
+    it('persists all active set details (weight, reps, rir, notes, completed) locally without network', async () => {
+      const session = await workoutRepository.startEmptyWorkout('Hypertrophy Push');
+      const withEx = workoutRepository.addExerciseToWorkout(session, {
+        id: 'wger_bench',
+        name: 'Barbell Bench Press',
+      });
+      const updated = workoutRepository.updateSet(withEx, 'wger_bench', withEx.exercises[0].actualSets[0].id, {
+        weight: 100,
+        reps: 8,
+        rir: 1,
+        notes: 'Paused reps on chest',
+        completed: true,
+      });
+
+      await workoutRepository.updateActiveWorkout(updated);
+
+      // Simulate app closure / reload by reading directly from storage
+      const restored = await workoutStorage.getActiveWorkout();
+      expect(restored).not.toBeNull();
+      expect(restored?.name).toBe('Hypertrophy Push');
+      const set = restored?.exercises[0].actualSets[0];
+      expect(set?.weight).toBe(100);
+      expect(set?.reps).toBe(8);
+      expect(set?.rir).toBe(1);
+      expect(set?.notes).toBe('Paused reps on chest');
+      expect(set?.completed).toBe(true);
+    });
+
+    it('calculates rest timer countdown correctly using absolute targetEndTime after app backgrounding', async () => {
+      const session = await workoutRepository.startEmptyWorkout('Leg Day');
+      const restDurationSec = 90;
+
+      // Start rest timer 30 seconds ago
+      const pastStartMs = Date.now() - 30 * 1000;
+      const targetEndTime = pastStartMs + restDurationSec * 1000;
+
+      const timedSession = {
+        ...session,
+        activeRestTimer: {
+          exerciseId: 'squat_1',
+          exerciseName: 'Back Squat',
+          setNumber: 2,
+          targetEndTime,
+          durationSeconds: restDurationSec,
+        },
+      };
+
+      await workoutRepository.updateActiveWorkout(timedSession);
+
+      // Reopen session from local storage
+      const restored = await workoutStorage.getActiveWorkout();
+      expect(restored?.activeRestTimer).not.toBeNull();
+      const remainingSec = Math.ceil((restored!.activeRestTimer!.targetEndTime - Date.now()) / 1000);
+      expect(remainingSec).toBeGreaterThan(50);
+      expect(remainingSec).toBeLessThanOrEqual(60);
+    });
+
+    it('completes workout locally offline, saves history, and clears active draft safely', async () => {
+      const session = await workoutRepository.startEmptyWorkout('Offline Session');
+      const withEx = workoutRepository.addExerciseToWorkout(session, {
+        id: 'ex_1',
+        name: 'Deadlift',
+      });
+      const completedSetSession = workoutRepository.updateSet(
+        withEx,
+        'ex_1',
+        withEx.exercises[0].actualSets[0].id,
+        { weight: 140, reps: 5, rir: 2, completed: true },
+      );
+      await workoutRepository.updateActiveWorkout(completedSetSession);
+
+      // Complete workout offline
+      const completed = await workoutRepository.completeActiveWorkout(completedSetSession);
+      expect(completed.status).toBe('completed');
+      expect(completed.completedSetsCount).toBe(1);
+      expect(completed.totalVolume).toBe(700); // 140 * 5
+
+      // Verify active draft is cleared
+      const activeDraft = await workoutStorage.getActiveWorkout();
+      expect(activeDraft).toBeNull();
+
+      // Verify completed workout is preserved in local history
+      const history = await workoutStorage.getCompletedWorkouts();
+      expect(history.length).toBe(1);
+      expect(history[0].id).toBe(completed.id);
+    });
+
+    it('recovers safely without crashing when active workout storage contains malformed JSON', async () => {
+      const key = 'bebig.workout.active.usr_test_default_user';
+      // Write malformed JSON directly into storage
+      const { platformStorage } = require('../src/lib/storage');
+      await platformStorage.setItem(key, '{ invalid_json_corrupted: ');
+
+      // Should return null safely without throwing an exception
+      const restored = await workoutStorage.getActiveWorkout();
+      expect(restored).toBeNull();
+    });
+  });
 });

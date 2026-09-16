@@ -174,6 +174,28 @@ export default function ActiveWorkoutScreen() {
     );
   };
 
+  // Reorder exercise move up
+  const handleMoveUpExercise = async (index: number) => {
+    if (!session || index <= 0) return;
+    const updated = [...session.exercises];
+    const temp = updated[index - 1];
+    updated[index - 1] = updated[index];
+    updated[index] = temp;
+    const reindexed = updated.map((ex, idx) => ({ ...ex, order: idx }));
+    await updateSessionAndAutosave({ ...session, exercises: reindexed });
+  };
+
+  // Reorder exercise move down
+  const handleMoveDownExercise = async (index: number) => {
+    if (!session || index >= session.exercises.length - 1) return;
+    const updated = [...session.exercises];
+    const temp = updated[index + 1];
+    updated[index + 1] = updated[index];
+    updated[index] = temp;
+    const reindexed = updated.map((ex, idx) => ({ ...ex, order: idx }));
+    await updateSessionAndAutosave({ ...session, exercises: reindexed });
+  };
+
   // Add set to exercise
   const handleAddSet = async (exerciseId: string) => {
     if (!session) return;
@@ -502,16 +524,53 @@ export default function ActiveWorkoutScreen() {
                     </View>
                   </View>
 
-                  <Pressable
-                    testID={`remove-exercise-${ex.exerciseId}`}
-                    onPress={() => handleRemoveExercise(ex)}
-                    hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                    style={styles.removeExButton}
-                  >
-                    <Text variant="caption" style={styles.removeExText}>
-                      ✕ Remove
-                    </Text>
-                  </Pressable>
+                  <View style={styles.exerciseHeaderActions}>
+                    <Pressable
+                      testID={`move-up-exercise-${ex.exerciseId}`}
+                      onPress={() => handleMoveUpExercise(exIndex)}
+                      disabled={exIndex === 0}
+                      style={[styles.arrowButton, exIndex === 0 && styles.buttonDisabled]}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Text
+                        variant="caption"
+                        color={exIndex === 0 ? 'muted' : 'primary'}
+                        style={styles.controlIcon}
+                      >
+                        ▲
+                      </Text>
+                    </Pressable>
+
+                    <Pressable
+                      testID={`move-down-exercise-${ex.exerciseId}`}
+                      onPress={() => handleMoveDownExercise(exIndex)}
+                      disabled={exIndex === session.exercises.length - 1}
+                      style={[
+                        styles.arrowButton,
+                        exIndex === session.exercises.length - 1 && styles.buttonDisabled,
+                      ]}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Text
+                        variant="caption"
+                        color={exIndex === session.exercises.length - 1 ? 'muted' : 'primary'}
+                        style={styles.controlIcon}
+                      >
+                        ▼
+                      </Text>
+                    </Pressable>
+
+                    <Pressable
+                      testID={`remove-exercise-${ex.exerciseId}`}
+                      onPress={() => handleRemoveExercise(ex)}
+                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                      style={styles.removeExButton}
+                    >
+                      <Text variant="caption" style={styles.removeExText}>
+                        ✕ Remove
+                      </Text>
+                    </Pressable>
+                  </View>
                 </View>
 
                 {/* Planned Targets Header */}
@@ -585,11 +644,7 @@ export default function ActiveWorkoutScreen() {
                             onChangeText={(val) =>
                               handleUpdateSetField(ex.exerciseId, set.id, 'weight', val)
                             }
-                            editable={!set.completed}
-                            style={[
-                              styles.metricInput,
-                              set.completed ? styles.setInputDisabled : null,
-                            ]}
+                            style={styles.metricInput}
                           />
                         </View>
 
@@ -607,11 +662,7 @@ export default function ActiveWorkoutScreen() {
                             onChangeText={(val) =>
                               handleUpdateSetField(ex.exerciseId, set.id, 'reps', val)
                             }
-                            editable={!set.completed}
-                            style={[
-                              styles.metricInput,
-                              set.completed ? styles.setInputDisabled : null,
-                            ]}
+                            style={styles.metricInput}
                           />
                         </View>
 
@@ -629,11 +680,7 @@ export default function ActiveWorkoutScreen() {
                             onChangeText={(val) =>
                               handleUpdateSetField(ex.exerciseId, set.id, 'rir', val)
                             }
-                            editable={!set.completed}
-                            style={[
-                              styles.metricInput,
-                              set.completed ? styles.setInputDisabled : null,
-                            ]}
+                            style={styles.metricInput}
                           />
                         </View>
                       </View>
@@ -651,11 +698,7 @@ export default function ActiveWorkoutScreen() {
                           onChangeText={(val) =>
                             handleUpdateSetField(ex.exerciseId, set.id, 'notes', val)
                           }
-                          editable={!set.completed}
-                          style={[
-                            styles.notesInput,
-                            set.completed ? styles.setInputDisabled : null,
-                          ]}
+                          style={styles.notesInput}
                         />
                       </View>
 
@@ -863,6 +906,29 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.dark.borderLight,
     paddingBottom: spacing.sm,
+  },
+  exerciseHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 0,
+  },
+  arrowButton: {
+    backgroundColor: colors.dark.surfaceElevated,
+    minWidth: 36,
+    minHeight: 32,
+    borderRadius: radii.xs,
+    borderWidth: 1,
+    borderColor: colors.dark.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  buttonDisabled: {
+    opacity: 0.3,
+  },
+  controlIcon: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   exerciseTitleGroup: {
     flexDirection: 'row',

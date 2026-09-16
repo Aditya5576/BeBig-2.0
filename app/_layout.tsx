@@ -8,7 +8,7 @@ import { useSyncLifecycle } from '../src/services/sync';
 import { useAuthStore, resolveAuthenticatedUserRoute } from '../src/features/auth';
 import { WebAlertModal } from '../src/components/ui';
 import { BottomNavBar } from '../src/components/navigation';
-import '../src/lib/ui/webAlert';
+import { initErrorMonitoring } from '../src/services/monitoring/errorMonitoring';
 
 function useProtectedRoute() {
   const router = typeof useRouter === 'function' ? useRouter() : null;
@@ -18,8 +18,9 @@ function useProtectedRoute() {
   const status = useAuthStore((state) => state.status);
   const userId = useAuthStore((state) => state.user?.id);
 
-  // 1. Kick off auth initialization on root mount if still initializing (e.g. direct URL navigation / refresh)
+  // 1. Kick off monitoring & auth initialization on root mount
   useEffect(() => {
+    initErrorMonitoring();
     if (useAuthStore.getState().status === 'initializing') {
       void useAuthStore.getState().initializeAuth();
     }

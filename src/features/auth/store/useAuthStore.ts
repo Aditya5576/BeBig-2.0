@@ -8,7 +8,7 @@ import { purgeLegacyUnscopedStorage } from '../utils/userScope';
 import { workoutStorage } from '../../workout/storage/workoutStorage';
 import { templateStorage } from '../../templates/storage/templateStorage';
 import { customExerciseStorage } from '../../exercises/storage/customExerciseStorage';
-import { profileService } from '../../profile';
+import { profileService, UserProfile } from '../../profile';
 import { useOnboardingStore } from '../../onboarding/store/useOnboardingStore';
 
 interface AuthActions {
@@ -18,6 +18,7 @@ interface AuthActions {
   exitGuestMode: () => Promise<void>;
   setError: (error: string | null) => void;
   signOut: () => Promise<void>;
+  updateUserProfile: (profile: Partial<UserProfile>) => void;
 }
 
 let authSubscription: { unsubscribe: () => void } | null = null;
@@ -282,6 +283,24 @@ export const useAuthStore = create<AuthState & AuthActions>((set) => ({
       session: null,
       guestSession: null,
       error: null,
+    });
+  },
+
+  updateUserProfile: (profile: Partial<UserProfile>) => {
+    set((state) => {
+      if (!state.user) return state;
+      const currentMeta = state.user.user_metadata || {};
+      const currentMetaProfile = currentMeta.profile || {};
+      const mergedProfile = { ...currentMetaProfile, ...profile };
+      const updatedUser = {
+        ...state.user,
+        user_metadata: {
+          ...currentMeta,
+          ...profile,
+          profile: mergedProfile,
+        },
+      };
+      return { user: updatedUser };
     });
   },
 }));

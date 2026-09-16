@@ -582,31 +582,6 @@ describe('Milestone 3 — Authentication & Supabase Foundation', () => {
     });
   });
 
-  // UI Components
-  describe('HomeScreen Account & Sign Out', () => {
-    it('renders authenticated user email and calls signOut on sign out tap', async () => {
-      useAuthStore.setState({
-        status: 'authenticated',
-        user: { id: 'user-ui', email: 'athlete@bebig.app' },
-      });
-      useOnboardingStore.getState().completeOnboarding();
-
-      mockAuth.signOut.mockResolvedValueOnce({ error: null });
-
-      const { getByTestId } = await render(<HomeScreen />);
-
-      expect(getByTestId('user-email')).toBeTruthy();
-      expect(getByTestId('user-email').props.children).toBe('athlete@bebig.app');
-
-      fireEvent.press(getByTestId('sign-out-button'));
-
-      await waitFor(() => {
-        expect(mockAuth.signOut).toHaveBeenCalled();
-        expect(mockReplace).toHaveBeenCalledWith('/onboarding/welcome');
-      });
-    });
-  });
-
   describe('AuthScreen Form Interaction', () => {
     it('renders Apple, Google, and Email sign in controls without dev bypass shortcut', async () => {
       const { getByTestId, queryByTestId, getByText } = await render(<AuthScreen />);

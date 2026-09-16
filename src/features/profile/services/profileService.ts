@@ -187,6 +187,12 @@ export const profileService: IProfileService = {
           };
           await writeLocalProfile(userId, profile);
           try {
+            const { useAuthStore } = require('../../auth/store/useAuthStore');
+            useAuthStore.getState().updateUserProfile(profile);
+          } catch {
+            // Silently handled
+          }
+          try {
             await supabase.auth.updateUser({
               data: {
                 profile,
@@ -248,6 +254,12 @@ export const profileService: IProfileService = {
     }
 
     await writeLocalProfile(userId, merged);
+    try {
+      const { useAuthStore } = require('../../auth/store/useAuthStore');
+      useAuthStore.getState().updateUserProfile(merged);
+    } catch {
+      // Silently handled
+    }
     return merged;
   },
 

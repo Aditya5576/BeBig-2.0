@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, TextInput, Image } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable, TextInput, Image, Alert, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ScreenContainer, Text, Button, Card } from '../src/components/ui';
 import { useAuthStore } from '../src/features/auth';
@@ -14,9 +14,32 @@ import {
   ChipGroup,
   SelectableCard,
 } from '../src/features/onboarding';
-import { profileService, UserProfile } from '../src/features/profile';
+import { profileService, avatarService, UserProfile } from '../src/features/profile';
 import { guestStorage } from '../src/lib/storage';
 import { colors, spacing, radii } from '../src/constants/theme';
+
+export const ATHLETIC_AVATAR_PRESETS = [
+  {
+    id: 'barbell',
+    label: '🏋️‍♂️ Barbell',
+    url: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=240&h=240&fit=crop&crop=faces',
+  },
+  {
+    id: 'iron',
+    label: '⚡ Iron',
+    url: 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=240&h=240&fit=crop&crop=faces',
+  },
+  {
+    id: 'champion',
+    label: '🏆 Champion',
+    url: 'https://images.unsplash.com/photo-1574680096145-d05b474e2155?w=240&h=240&fit=crop&crop=faces',
+  },
+  {
+    id: 'runner',
+    label: '🏃 Runner',
+    url: 'https://images.unsplash.com/photo-1552674605-db6ffd4facb5?w=240&h=240&fit=crop&crop=faces',
+  },
+];
 
 const GOAL_OPTIONS: { id: Goal; title: string; description: string; badge?: string }[] = [
   {
@@ -166,6 +189,10 @@ export default function SettingsScreen() {
   const [height, setHeight] = useState<number | null>(null);
   const [weight, setWeight] = useState<number | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [avatarLoadError, setAvatarLoadError] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const fileInputRef = useRef<any>(null);
+  const pendingAvatarFileRef = useRef<{ file: any; mimeType: string } | null>(null);
 
   // Store training values
   const storeGoal = useOnboardingStore((state) => state.goal);
@@ -264,7 +291,7 @@ export default function SettingsScreen() {
             if (profile.age !== undefined && profile.age !== null) setAge(profile.age);
             if (profile.height !== undefined && profile.height !== null) setHeight(profile.height);
             if (profile.weight !== undefined && profile.weight !== null) setWeight(profile.weight);
-            if (profile.avatar_url) setAvatarUrl(profile.avatar_url);
+            setAvatarUrl(profile.avatar_url ?? null);
 
             if (profile.goal) setStoreGoal(profile.goal);
             if (profile.experience_level) setStoreExperience(profile.experience_level);
@@ -307,6 +334,7 @@ export default function SettingsScreen() {
   ]);
 
   const handleStartEdit = () => {
+    pendingAvatarFileRef.current = null;
     editDisplayNameRef.current = displayName;
     editAgeRef.current = age ? String(age) : '';
     editHeightRef.current = height ? String(height) : '';
@@ -349,6 +377,7 @@ export default function SettingsScreen() {
   };
 
   const handleCancelEdit = () => {
+    pendingAvatarFileRef.current = null;
     setIsEditing(false);
     setSuccessMessage(null);
     setErrorMessage(null);
@@ -410,39 +439,59 @@ export default function SettingsScreen() {
     const updatedDays = editPreferredDaysRef.current.length > 0 ? editPreferredDaysRef.current : editPreferredDays;
     const updatedStyle = editStyleRef.current || editStyle || storeStyle;
     const trimmedDisplayName = currentNameStr.trim();
-    const trimmedAvatarUrl = currentAvatarStr.trim() || null;
+    let trimmedAvatarUrl = currentAvatarStr.trim() || null;
 
     try {
-      if (user?.id) {
-        await profileService.upsertProfile(user.id, {
-          display_name: trimmedDisplayName || null,
-          age: parsedAge,
-          height: parsedHeight,
-          weight: parsedWeight,
-          avatar_url: trimmedAvatarUrl,
-          goal: updatedGoal,
-          experience_level: updatedExperience,
-          days_per_week: updatedDaysPerWeek,
-          workout_duration: updatedDuration,
-          equipment: updatedEquipment,
-          preferred_training_days: updatedDays,
-          workout_style: updatedStyle,
-          onboarding_completed: true,
-        });
-      } else if (isGuest) {
-        const guestData = await guestStorage.getOnboardingData();
-        await guestStorage.saveOnboardingData({
-          ...guestData,
-          goal: updatedGoal,
-          experienceLevel: updatedExperience,
-          daysPerWeek: updatedDaysPerWeek,
-          workoutDuration: updatedDuration,
-          trainingLocation: 'gym',
-          equipment: updatedEquipment,
-          preferredTrainingDays: updatedDays,
-          workoutStyle: updatedStyle,
-          hasCompletedOnboarding: true,
-        });
+      let newlyUploadedAvatarUrl: string | null = null;
+      if (pendingAvatarFileRef.current && user?.id) {
+        setUploadingAvatar(true);
+        const { file, mimeType } = pendingAvatarFileRef.current;
+        const uploadedUrl = await avatarService.uploadAvatar(user.id, file, mimeType);
+        trimmedAvatarUrl = uploadedUrl;
+        newlyUploadedAvatarUrl = uploadedUrl;
+        setUploadingAvatar(false);
+      }
+
+      const previousAvatarUrl = avatarUrl;
+
+      try {
+        if (user?.id) {
+          await profileService.upsertProfile(user.id, {
+            display_name: trimmedDisplayName || null,
+            age: parsedAge,
+            height: parsedHeight,
+            weight: parsedWeight,
+            avatar_url: trimmedAvatarUrl,
+            goal: updatedGoal,
+            experience_level: updatedExperience,
+            days_per_week: updatedDaysPerWeek,
+            workout_duration: updatedDuration,
+            equipment: updatedEquipment,
+            preferred_training_days: updatedDays,
+            workout_style: updatedStyle,
+            onboarding_completed: true,
+          });
+        } else if (isGuest) {
+          const guestData = await guestStorage.getOnboardingData();
+          await guestStorage.saveOnboardingData({
+            ...guestData,
+            goal: updatedGoal,
+            experienceLevel: updatedExperience,
+            daysPerWeek: updatedDaysPerWeek,
+            workoutDuration: updatedDuration,
+            trainingLocation: 'gym',
+            equipment: updatedEquipment,
+            preferredTrainingDays: updatedDays,
+            workoutStyle: updatedStyle,
+            hasCompletedOnboarding: true,
+          });
+        }
+      } catch (upsertError: any) {
+        // If we just uploaded a new avatar but profile save failed, clean up the orphan
+        if (newlyUploadedAvatarUrl && user?.id) {
+          void avatarService.deleteAvatarByUrl(user.id, newlyUploadedAvatarUrl);
+        }
+        throw upsertError;
       }
 
       // Update personal info state
@@ -451,6 +500,13 @@ export default function SettingsScreen() {
       setHeight(parsedHeight);
       setWeight(parsedWeight);
       setAvatarUrl(trimmedAvatarUrl);
+      setAvatarLoadError(false);
+
+      // Clean up previous avatar if replaced or cleared
+      if (user?.id && previousAvatarUrl && previousAvatarUrl !== trimmedAvatarUrl) {
+        void avatarService.deleteAvatarByUrl(user.id, previousAvatarUrl);
+      }
+      pendingAvatarFileRef.current = null;
 
       // Update store so entire app has updated state
       if (updatedGoal) setStoreGoal(updatedGoal);
@@ -463,10 +519,11 @@ export default function SettingsScreen() {
 
       setSuccessMessage('Fitness profile updated successfully!');
       setIsEditing(false);
-    } catch {
-      setErrorMessage('Failed to save profile. Please try again.');
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Failed to save profile. Please try again.');
     } finally {
       setSaving(false);
+      setUploadingAvatar(false);
     }
   };
 
@@ -480,6 +537,36 @@ export default function SettingsScreen() {
       resetOnboarding();
       router.replace('/onboarding/welcome');
     }
+  };
+
+  const handleClearCache = () => {
+    try {
+      const { platformStorage } = require('../src/lib/storage');
+      platformStorage.clearMemoryCache();
+      profileService.clearMemoryCache();
+      setSuccessMessage('Local memory and exercise cache cleared.');
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch {
+      setErrorMessage('Failed to clear local cache.');
+    }
+  };
+
+  const handleDevResetOnboarding = () => {
+    Alert.alert(
+      'Developer Diagnostic Reset',
+      'This will reset your local onboarding store to test initial routing. This is for developer verification only.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset & Test Questionnaire',
+          style: 'destructive',
+          onPress: () => {
+            resetOnboarding();
+            router.replace('/onboarding/goal' as any);
+          },
+        },
+      ],
+    );
   };
 
   const formatText = (text: string | null | undefined) => {
@@ -509,19 +596,8 @@ export default function SettingsScreen() {
   return (
     <ScreenContainer>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Top Header Navigation */}
+        {/* Top Header */}
         <View style={styles.header}>
-          <View style={styles.navRow}>
-            <Button
-              testID="settings-back-button"
-              title="← Home"
-              onPress={() => router.back()}
-              variant="ghost"
-              size="sm"
-              style={styles.backButton}
-            />
-          </View>
-
           <View style={styles.headerTitleRow}>
             <Text
               variant="titleLarge"
@@ -529,7 +605,7 @@ export default function SettingsScreen() {
               testID="settings-screen-title"
               style={styles.screenTitle}
             >
-              Settings & Profile
+              Profile
             </Text>
             <Text variant="caption" color="secondary">
               Manage your athletic identity, training profile, and preferences
@@ -559,8 +635,13 @@ export default function SettingsScreen() {
         <Card style={styles.profileHeaderCard} testID="settings-profile-header-card">
           <View style={styles.profileHeaderContent}>
             <View style={styles.avatarWrapper}>
-              {avatarUrl ? (
-                <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+              {avatarUrl && !avatarLoadError ? (
+                <Image
+                  source={{ uri: avatarUrl }}
+                  style={styles.avatarImage}
+                  onError={() => setAvatarLoadError(true)}
+                  testID="profile-avatar-image"
+                />
               ) : (
                 <View style={styles.avatarFallback} testID="profile-avatar-fallback">
                   <Text style={styles.avatarInitialsText}>{initials}</Text>
@@ -830,8 +911,126 @@ export default function SettingsScreen() {
 
                 <View style={styles.inputGroup}>
                   <Text variant="caption" color="secondary">
-                    Avatar Image URL (Optional)
+                    Profile Avatar
                   </Text>
+
+                  {/* Avatar Live Preview */}
+                  <View style={styles.avatarPreviewRow} testID="avatar-preview-box">
+                    <View style={styles.previewAvatarWrapper}>
+                      {editAvatarUrl ? (
+                        <Image
+                          source={{ uri: editAvatarUrl }}
+                          style={styles.avatarPreviewImage}
+                          onError={() => {}}
+                        />
+                      ) : (
+                        <View style={styles.avatarFallback}>
+                          <Text style={styles.avatarInitialsText}>{initials}</Text>
+                        </View>
+                      )}
+                    </View>
+                    <View style={styles.previewTextCol}>
+                      <Text variant="bodyBold" color="primary">
+                        Avatar Preview
+                      </Text>
+                      <Text variant="caption" color="muted">
+                        Select an athletic preset, enter an image URL, or upload a photo.
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Athletic Presets */}
+                  <Text variant="caption" color="muted" style={styles.presetLabel}>
+                    Athletic Presets:
+                  </Text>
+                  <View style={styles.presetsRow}>
+                    {ATHLETIC_AVATAR_PRESETS.map((p) => (
+                      <Pressable
+                        key={p.id}
+                        testID={`avatar-preset-${p.id}`}
+                        onPress={() => {
+                          pendingAvatarFileRef.current = null;
+                          editAvatarUrlRef.current = p.url;
+                          setEditAvatarUrl(p.url);
+                        }}
+                        style={[
+                          styles.presetChip,
+                          editAvatarUrl === p.url && styles.presetChipActive,
+                        ]}
+                      >
+                        <Text variant="caption" color={editAvatarUrl === p.url ? 'accent' : 'secondary'}>
+                          {p.label}
+                        </Text>
+                      </Pressable>
+                    ))}
+                    {editAvatarUrl ? (
+                      <Pressable
+                        testID="clear-avatar-button"
+                        onPress={() => {
+                          pendingAvatarFileRef.current = null;
+                          editAvatarUrlRef.current = '';
+                          setEditAvatarUrl('');
+                        }}
+                        style={styles.presetChipClear}
+                      >
+                        <Text variant="caption" color="muted">
+                          ✕ Clear
+                        </Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+
+                  {/* Web File Upload if supported */}
+                  {Platform.OS === 'web' && typeof document !== 'undefined' && (
+                    <View style={styles.uploadRow}>
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/gif"
+                        style={{ display: 'none' }}
+                        ref={fileInputRef}
+                        onChange={(e: any) => {
+                          const file = e.target?.files?.[0];
+                          if (!file) return;
+                          const validation = avatarService.validateAvatarFile(file);
+                          if (!validation.valid) {
+                            setErrorMessage(validation.error || 'Invalid image file.');
+                            return;
+                          }
+                          setErrorMessage(null);
+                          pendingAvatarFileRef.current = { file, mimeType: file.type || 'image/jpeg' };
+
+                          if (typeof URL !== 'undefined' && URL.createObjectURL) {
+                            const previewUrl = URL.createObjectURL(file);
+                            editAvatarUrlRef.current = previewUrl;
+                            setEditAvatarUrl(previewUrl);
+                          } else {
+                            const reader = new FileReader();
+                            reader.onload = (uploadEvent) => {
+                              const result = uploadEvent.target?.result as string;
+                              if (result) {
+                                editAvatarUrlRef.current = result;
+                                setEditAvatarUrl(result);
+                              }
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                          // Clear input value to allow re-selection of the same file
+                          e.target.value = '';
+                        }}
+                      />
+                      <Button
+                        testID="upload-avatar-button"
+                        title={uploadingAvatar ? 'Uploading...' : '📷 Upload Photo'}
+                        variant="secondary"
+                        size="sm"
+                        disabled={uploadingAvatar}
+                        onPress={() => fileInputRef.current?.click()}
+                        style={styles.uploadButton}
+                      />
+                    </View>
+                  )}
+
+                  {/* Avatar URL Text Input */}
                   <TextInput
                     testID="input-avatar-url"
                     value={editAvatarUrl}
@@ -839,7 +1038,7 @@ export default function SettingsScreen() {
                       editAvatarUrlRef.current = val;
                       setEditAvatarUrl(val);
                     }}
-                    placeholder="https://..."
+                    placeholder="Or enter image URL (https://...)"
                     placeholderTextColor={colors.dark.textMuted}
                     style={styles.textInput}
                     autoCapitalize="none"
@@ -1051,7 +1250,39 @@ export default function SettingsScreen() {
           </View>
         </Card>
 
-        {/* 5. App Information Card */}
+        {/* 5. Development & Diagnostic Tools Card (Testing Only) */}
+        <Card style={styles.devToolsCard} testID="settings-dev-tools-card">
+          <View style={styles.cardHeaderRow}>
+            <Text variant="caption" color="muted" style={styles.devToolsHeading}>
+              DEVELOPMENT & DIAGNOSTIC TOOLS (TESTING ONLY)
+            </Text>
+          </View>
+
+          <Text variant="caption" color="secondary" style={styles.devToolsDesc}>
+            These diagnostic actions are for engineering verification and do not affect normal athletic use.
+          </Text>
+
+          <View style={styles.devActionsRow}>
+            <Button
+              testID="dev-clear-cache-button"
+              title="Clear Local Cache"
+              onPress={handleClearCache}
+              variant="outline"
+              size="sm"
+              style={styles.devButton}
+            />
+            <Button
+              testID="dev-reset-onboarding-button"
+              title="Reset Onboarding (Dev Only)"
+              onPress={handleDevResetOnboarding}
+              variant="ghost"
+              size="sm"
+              style={styles.devResetButton}
+            />
+          </View>
+        </Card>
+
+        {/* 6. App Information Card */}
         <Card style={styles.sectionCard} testID="settings-app-info-card">
           <Text variant="label" color="muted" style={styles.sectionLabel}>
             APP INFORMATION
@@ -1311,5 +1542,96 @@ const styles = StyleSheet.create({
   },
   versionText: {
     opacity: 0.7,
+  },
+  avatarPreviewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.dark.surfaceElevated,
+    padding: spacing.sm,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.dark.border,
+  },
+  previewAvatarWrapper: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    overflow: 'hidden',
+    backgroundColor: colors.dark.surfaceSubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarPreviewImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+  },
+  previewTextCol: {
+    flex: 1,
+    gap: 2,
+  },
+  presetLabel: {
+    marginTop: spacing.xs,
+  },
+  presetsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  presetChip: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    borderRadius: radii.sm,
+    backgroundColor: colors.dark.surfaceElevated,
+    borderWidth: 1,
+    borderColor: colors.dark.border,
+  },
+  presetChipActive: {
+    borderColor: colors.dark.primary,
+    backgroundColor: 'rgba(56, 189, 248, 0.1)',
+  },
+  presetChipClear: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    borderRadius: radii.sm,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: colors.dark.borderLight,
+  },
+  uploadRow: {
+    alignSelf: 'flex-start',
+    marginVertical: 2,
+  },
+  uploadButton: {
+    paddingHorizontal: spacing.md,
+  },
+  devToolsCard: {
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.25)',
+    backgroundColor: 'rgba(239, 68, 68, 0.03)',
+    gap: spacing.sm,
+  },
+  devToolsHeading: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    color: '#EF4444',
+  },
+  devToolsDesc: {
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  devActionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  devButton: {
+    borderColor: colors.dark.borderLight,
+  },
+  devResetButton: {
+    opacity: 0.8,
   },
 });

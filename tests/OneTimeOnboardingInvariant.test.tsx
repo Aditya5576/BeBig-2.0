@@ -13,6 +13,7 @@ import { supabase } from '../src/lib/supabase';
 import { workoutRepository } from '../src/features/workout';
 import { templateRepository } from '../src/features/templates';
 import { guestStorage } from '../src/lib/storage';
+import { BottomNavBar } from '../src/components/navigation/BottomNavBar';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -195,8 +196,8 @@ describe('BeBig 2.0 — Permanent Product Invariant: Onboarding is One-Time Only
     expect(useOnboardingStore.getState().hasCompletedOnboarding).toBe(true);
   });
 
-  // C. Completed account -> Edit Profile -> no questionnaire
-  it('C: tapping Edit Profile from Home navigates to /settings and never launches onboarding', async () => {
+  // C. Completed account -> Navigate to Profile -> no questionnaire
+  it('C: navigating to Profile via bottom nav navigates to /settings and never launches onboarding', async () => {
     useAuthStore.setState({
       status: 'authenticated',
       isGuest: false,
@@ -208,10 +209,10 @@ describe('BeBig 2.0 — Permanent Product Invariant: Onboarding is One-Time Only
     store.setExperienceLevel('advanced');
     store.completeOnboarding();
 
-    const { getByTestId } = await render(<HomeScreen />);
-    await waitFor(() => expect(getByTestId('edit-profile-link')).toBeTruthy());
+    const { getByTestId } = await render(<BottomNavBar />);
+    await waitFor(() => expect(getByTestId('tab-profile')).toBeTruthy());
 
-    await fireEvent.press(getByTestId('edit-profile-link'));
+    await fireEvent.press(getByTestId('tab-profile'));
 
     expect(mockPush).toHaveBeenCalledWith('/settings');
     expect(mockPush).not.toHaveBeenCalledWith(expect.stringContaining('/onboarding'));
@@ -251,6 +252,7 @@ describe('BeBig 2.0 — Permanent Product Invariant: Onboarding is One-Time Only
     );
     expect(mockPush).not.toHaveBeenCalledWith(expect.stringContaining('/onboarding'));
     expect(mockReplace).not.toHaveBeenCalledWith(expect.stringContaining('/onboarding'));
+    upsertSpy.mockRestore();
   });
 
   // E. Change Experience -> remains Profile/Home
@@ -285,6 +287,7 @@ describe('BeBig 2.0 — Permanent Product Invariant: Onboarding is One-Time Only
       }),
     );
     expect(mockPush).not.toHaveBeenCalledWith(expect.stringContaining('/onboarding'));
+    upsertSpy.mockRestore();
   });
 
   // F. Change Preferences -> remains Profile/Home
@@ -322,6 +325,7 @@ describe('BeBig 2.0 — Permanent Product Invariant: Onboarding is One-Time Only
       }),
     );
     expect(mockPush).not.toHaveBeenCalledWith(expect.stringContaining('/onboarding'));
+    upsertSpy.mockRestore();
   });
 
   // G. Change Name/Age/Height/Weight -> remains Profile/Home
@@ -364,6 +368,7 @@ describe('BeBig 2.0 — Permanent Product Invariant: Onboarding is One-Time Only
         onboarding_completed: true,
       }),
     );
+    upsertSpy.mockRestore();
   });
 
   // H. Profile edit preserves onboarding_completed=true in service layer
