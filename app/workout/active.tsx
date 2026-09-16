@@ -605,10 +605,16 @@ export default function ActiveWorkoutScreen() {
                           >
                             SET {set.setNumber}
                           </Text>
-                          {set.completed && (
+                          {set.completed ? (
                             <View style={styles.completedBadge}>
                               <Text variant="caption" style={styles.completedBadgeText}>
-                                Logged
+                                ✓ Logged
+                              </Text>
+                            </View>
+                          ) : (
+                            <View style={styles.pendingBadge}>
+                              <Text variant="caption" style={styles.pendingBadgeText}>
+                                Pending
                               </Text>
                             </View>
                           )}
@@ -1019,6 +1025,17 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     color: colors.dark.primary,
+  },
+  pendingBadge: {
+    backgroundColor: 'rgba(148, 163, 184, 0.12)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: radii.full,
+  },
+  pendingBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.dark.textMuted,
   },
   deleteSetButton: {
     minHeight: 44,

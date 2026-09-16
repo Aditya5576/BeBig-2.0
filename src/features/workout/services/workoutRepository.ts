@@ -199,6 +199,7 @@ export class WorkoutRepository {
         weight: lastSet ? lastSet.weight : 0,
         reps: lastSet ? lastSet.reps : 10,
         rir: lastSet ? lastSet.rir : 2,
+        notes: lastSet && lastSet.notes ? lastSet.notes : undefined,
         completed: false,
       };
 
