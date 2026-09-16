@@ -155,7 +155,7 @@ export default function ActiveWorkoutScreen() {
   const handleRemoveExercise = (exercise: WorkoutExercise) => {
     Alert.alert(
       'Remove Exercise',
-      `Remove "${exercise.exerciseName}" and its logged sets from this workout?`,
+      `Remove "${exercise.exerciseName}" and all of its logged sets from this active workout?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {

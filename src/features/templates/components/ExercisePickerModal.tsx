@@ -10,7 +10,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { ScreenContainer, Text, Button, Card } from '../../../components/ui';
-import { exerciseRepository, Exercise, STANDARD_CATEGORIES } from '../../exercises';
+import { exerciseRepository, exerciseCacheStorage, Exercise, STANDARD_CATEGORIES } from '../../exercises';
 import { colors, spacing, radii } from '../../../constants/theme';
 
 export interface ExercisePickerModalProps {
@@ -37,7 +37,20 @@ export function ExercisePickerModal({
     let isMounted = true;
 
     async function loadExercises() {
-      setLoading(true);
+      // Instant local cache check first to avoid blocking user during weak network / offline
+      const cachedInitial = exerciseCacheStorage.searchCached({
+        query: searchQuery.trim() || undefined,
+        category: selectedCategory !== 'all' ? selectedCategory : undefined,
+        limit: 30,
+      });
+
+      if (cachedInitial.length > 0) {
+        setExercises(cachedInitial);
+        setLoading(false);
+      } else {
+        setLoading(true);
+      }
+
       try {
         const result = await exerciseRepository.getExercises({
           query: searchQuery.trim() || undefined,
@@ -49,8 +62,13 @@ export function ExercisePickerModal({
           setExercises(result.exercises);
         }
       } catch {
-        if (isMounted) {
-          setExercises([]);
+        if (isMounted && cachedInitial.length === 0) {
+          const cachedFallback = exerciseCacheStorage.searchCached({
+            query: searchQuery.trim() || undefined,
+            category: selectedCategory !== 'all' ? selectedCategory : undefined,
+            limit: 30,
+          });
+          setExercises(cachedFallback);
         }
       } finally {
         if (isMounted) {
