@@ -82,9 +82,9 @@ export default function WorkoutHistoryDetailScreen() {
     );
   }
 
-  const completedExercises = workout.exercises.filter(
-    (ex) => ex.actualSets && ex.actualSets.some((s) => s.completed),
-  );
+  const displayExercises = [...workout.exercises]
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    .filter((ex) => ex.actualSets && ex.actualSets.length > 0);
 
   return (
     <ScreenContainer>
@@ -157,7 +157,7 @@ export default function WorkoutHistoryDetailScreen() {
               testID="history-detail-exercises-count"
               style={styles.metricValue}
             >
-              {completedExercises.length}
+              {displayExercises.length}
             </Text>
           </Card>
 
@@ -182,8 +182,9 @@ export default function WorkoutHistoryDetailScreen() {
             Exercise Performance
           </Text>
 
-          {completedExercises.map((ex) => {
+          {displayExercises.map((ex) => {
             const finishedSets = ex.actualSets.filter((s) => s.completed);
+            const setsToRender = finishedSets.length > 0 ? finishedSets : ex.actualSets;
 
             return (
               <Card
@@ -211,7 +212,7 @@ export default function WorkoutHistoryDetailScreen() {
 
                 {/* Read-Only Sets List */}
                 <View style={styles.setsList}>
-                  {finishedSets.map((s) => (
+                  {setsToRender.map((s) => (
                     <View
                       key={s.id}
                       style={styles.setRow}
