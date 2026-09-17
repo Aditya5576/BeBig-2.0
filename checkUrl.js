@@ -1,0 +1,1 @@
+const https = require('https'); https.get('https://be-big-2-0-aditya-works.vercel.app', (res) => { let body = ''; res.on('data', c => body += c); res.on('end', () => console.log(body.match(/https:\/\/[^"]+\.supabase\.co/g))); });

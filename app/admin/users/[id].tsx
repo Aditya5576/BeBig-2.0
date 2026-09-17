@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { colors } from '../../../src/constants/theme';
+import { colors, spacing, radii, typography } from '../../../src/constants/theme';
 import {
   getAdminUserDetails,
   AdminUserDetails,
@@ -93,7 +93,11 @@ export default function UserDetailScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+    >
       {/* Header Back Bar */}
       <View style={styles.topBar}>
         <Pressable style={styles.backButton} onPress={() => router.back()}>
@@ -109,10 +113,12 @@ export default function UserDetailScreen() {
           </Text>
         </View>
         <View style={styles.profileHeaderDetails}>
-          <Text style={styles.profileName}>
+          <Text style={styles.profileName} numberOfLines={1} ellipsizeMode="tail">
             {user.display_name || 'No display name'}
           </Text>
-          <Text style={styles.profileEmail}>{user.email || 'No email registered'}</Text>
+          <Text style={styles.profileEmail} numberOfLines={1} ellipsizeMode="tail">
+            {user.email || 'No email registered'}
+          </Text>
           <View style={styles.badgeRow}>
             <View
               style={[
@@ -138,20 +144,30 @@ export default function UserDetailScreen() {
       {/* Identity Card */}
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Identity & Account</Text>
-        
+
         <View style={styles.infoRow}>
           <Text style={styles.infoLabel}>User ID</Text>
-          <Text style={[styles.infoValue, styles.monoText]}>{user.id}</Text>
+          <Text
+            style={[styles.infoValue, styles.monoText]}
+            numberOfLines={1}
+            ellipsizeMode="middle"
+          >
+            {user.id}
+          </Text>
         </View>
 
         <View style={styles.infoRow}>
           <Text style={styles.infoLabel}>Email</Text>
-          <Text style={styles.infoValue}>{user.email || 'N/A'}</Text>
+          <Text style={[styles.infoValue, styles.wrapText]}>
+            {user.email || 'N/A'}
+          </Text>
         </View>
 
         <View style={styles.infoRow}>
           <Text style={styles.infoLabel}>Display Name</Text>
-          <Text style={styles.infoValue}>{user.display_name || 'N/A'}</Text>
+          <Text style={[styles.infoValue, styles.wrapText]}>
+            {user.display_name || 'N/A'}
+          </Text>
         </View>
 
         <View style={styles.infoRow}>
@@ -190,12 +206,14 @@ export default function UserDetailScreen() {
 
         <View style={styles.infoRow}>
           <Text style={styles.infoLabel}>Primary Goal</Text>
-          <Text style={styles.infoValue}>{formatEnumValue(user.goal)}</Text>
+          <Text style={[styles.infoValue, styles.wrapText]}>
+            {formatEnumValue(user.goal)}
+          </Text>
         </View>
 
         <View style={styles.infoRow}>
           <Text style={styles.infoLabel}>Experience Level</Text>
-          <Text style={styles.infoValue}>
+          <Text style={[styles.infoValue, styles.wrapText]}>
             {formatEnumValue(user.experience_level)}
           </Text>
         </View>
@@ -209,26 +227,28 @@ export default function UserDetailScreen() {
 
         <View style={styles.infoRow}>
           <Text style={styles.infoLabel}>Workout Duration</Text>
-          <Text style={styles.infoValue}>
+          <Text style={[styles.infoValue, styles.wrapText]}>
             {formatEnumValue(user.workout_duration)}
           </Text>
         </View>
 
         <View style={styles.infoRow}>
           <Text style={styles.infoLabel}>Available Equipment</Text>
-          <Text style={styles.infoValue}>{formatEnumValue(user.equipment)}</Text>
+          <Text style={[styles.infoValue, styles.wrapText]}>
+            {formatEnumValue(user.equipment)}
+          </Text>
         </View>
 
         <View style={styles.infoRow}>
           <Text style={styles.infoLabel}>Workout Style</Text>
-          <Text style={styles.infoValue}>
+          <Text style={[styles.infoValue, styles.wrapText]}>
             {formatEnumValue(user.workout_style)}
           </Text>
         </View>
 
         <View style={styles.infoRow}>
           <Text style={styles.infoLabel}>Preferred Days</Text>
-          <Text style={styles.infoValue}>
+          <Text style={[styles.infoValue, styles.wrapText]}>
             {user.preferred_training_days && user.preferred_training_days.length > 0
               ? user.preferred_training_days.join(', ')
               : 'Not set'}
@@ -265,221 +285,233 @@ export default function UserDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0a0a0a',
+    backgroundColor: colors.dark.background,
   },
   content: {
-    paddingBottom: 40,
-    gap: 16,
+    paddingBottom: spacing.xxl,
+    gap: spacing.md,
   },
   topBar: {
-    marginBottom: 8,
+    marginBottom: spacing.xs,
   },
   backButton: {
     alignSelf: 'flex-start',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    backgroundColor: '#161616',
-    borderRadius: 6,
+    paddingVertical: spacing.xs + 2,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.dark.surface,
+    borderRadius: radii.xs,
     borderWidth: 1,
-    borderColor: '#282828',
+    borderColor: colors.dark.border,
+    minHeight: 38,
+    justifyContent: 'center',
   },
   backButtonText: {
-    color: '#aaa',
-    fontSize: 13,
-    fontWeight: '600',
+    ...typography.label,
+    color: colors.dark.textSecondary,
   },
   profileHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#111',
-    borderRadius: 12,
+    backgroundColor: colors.dark.surface,
+    borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: '#222',
-    padding: 20,
-    gap: 16,
+    borderColor: colors.dark.border,
+    padding: spacing.md,
+    gap: spacing.md,
   },
   avatarPlaceholder: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#222',
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: colors.dark.surfaceSubtle,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
     borderColor: colors.dark.primary,
   },
   avatarText: {
+    ...typography.titleMedium,
     color: colors.dark.primary,
-    fontSize: 24,
     fontWeight: 'bold',
   },
   profileHeaderDetails: {
     flex: 1,
+    flexShrink: 1,
   },
   profileName: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: 'bold',
+    ...typography.titleMedium,
+    color: colors.dark.textPrimary,
     marginBottom: 2,
   },
   profileEmail: {
-    color: '#888',
-    fontSize: 14,
-    marginBottom: 8,
+    ...typography.body,
+    fontSize: 13,
+    color: colors.dark.textSecondary,
+    marginBottom: spacing.xs + 2,
   },
   badgeRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: spacing.xs,
     flexWrap: 'wrap',
   },
   badge: {
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 6,
+    borderRadius: radii.xs,
   },
   badgeOnboarded: {
-    backgroundColor: '#064e3b',
+    backgroundColor: '#064E3B',
   },
   badgePending: {
-    backgroundColor: '#27272a',
+    backgroundColor: colors.dark.surfaceSubtle,
   },
   badgeText: {
-    color: '#e2e8f0',
-    fontSize: 11,
+    ...typography.caption,
+    color: colors.dark.textPrimary,
     fontWeight: '600',
   },
   badgeRole: {
-    backgroundColor: '#1e293b',
+    backgroundColor: colors.dark.surfaceSubtle,
     borderWidth: 1,
-    borderColor: '#38bdf8',
+    borderColor: colors.dark.primary,
   },
   badgeRoleText: {
-    color: '#38bdf8',
-    fontSize: 11,
+    ...typography.caption,
+    color: colors.dark.primary,
     fontWeight: '700',
     textTransform: 'uppercase',
   },
   card: {
-    backgroundColor: '#111',
-    borderRadius: 12,
+    backgroundColor: colors.dark.surface,
+    borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: '#222',
-    padding: 20,
+    borderColor: colors.dark.border,
+    padding: spacing.md,
   },
   cardTitle: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 16,
+    ...typography.bodyBold,
+    color: colors.dark.textPrimary,
+    marginBottom: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: '#222',
-    paddingBottom: 8,
+    borderBottomColor: colors.dark.border,
+    paddingBottom: spacing.xs + 2,
   },
   infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: spacing.xs + 2,
     borderBottomWidth: 1,
-    borderBottomColor: '#181818',
+    borderBottomColor: colors.dark.border,
+    gap: spacing.md,
   },
   infoLabel: {
-    color: '#888',
-    fontSize: 14,
+    ...typography.body,
+    fontSize: 13,
+    color: colors.dark.textSecondary,
   },
   infoValue: {
-    color: '#fff',
-    fontSize: 14,
+    ...typography.body,
+    fontSize: 13,
     fontWeight: '500',
+    color: colors.dark.textPrimary,
+    textAlign: 'right',
+  },
+  wrapText: {
+    flexShrink: 1,
+    flexWrap: 'wrap',
   },
   monoText: {
     fontFamily: 'monospace',
-    fontSize: 12,
-    color: '#aaa',
+    fontSize: 11,
+    color: colors.dark.textSecondary,
+    maxWidth: 200,
   },
   gridRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    backgroundColor: '#161616',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 12,
+    backgroundColor: colors.dark.surfaceSubtle,
+    borderRadius: radii.sm,
+    padding: spacing.sm + 2,
+    marginBottom: spacing.sm,
   },
   gridItem: {
     alignItems: 'center',
     flex: 1,
   },
   gridLabel: {
-    color: '#666',
-    fontSize: 12,
-    marginBottom: 4,
+    ...typography.caption,
+    fontSize: 11,
+    color: colors.dark.textMuted,
+    marginBottom: 2,
   },
   gridValue: {
+    ...typography.titleMedium,
     color: colors.dark.primary,
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 15,
   },
   roleHighlight: {
-    color: '#38bdf8',
+    color: colors.dark.primary,
     fontWeight: 'bold',
   },
   noRoleText: {
-    color: '#666',
+    color: colors.dark.textMuted,
   },
   readOnlyNotice: {
-    marginTop: 16,
-    backgroundColor: '#181818',
-    borderRadius: 8,
-    padding: 12,
+    marginTop: spacing.sm + 2,
+    backgroundColor: colors.dark.surfaceSubtle,
+    borderRadius: radii.sm,
+    padding: spacing.sm + 2,
     borderWidth: 1,
-    borderColor: '#262626',
+    borderColor: colors.dark.border,
   },
   readOnlyNoticeText: {
-    color: '#888',
+    ...typography.caption,
     fontSize: 12,
     lineHeight: 18,
+    color: colors.dark.textSecondary,
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
-    backgroundColor: '#0a0a0a',
+    padding: spacing.lg,
+    backgroundColor: colors.dark.background,
   },
   loadingText: {
-    color: '#888',
-    fontSize: 14,
-    marginTop: 12,
+    ...typography.body,
+    color: colors.dark.textSecondary,
+    marginTop: spacing.md,
   },
   errorTitle: {
-    color: '#ef4444',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 8,
+    ...typography.titleLarge,
+    color: colors.dark.error,
+    marginBottom: spacing.xs,
   },
   errorMessage: {
-    color: '#aaa',
-    fontSize: 14,
+    ...typography.body,
+    color: colors.dark.textSecondary,
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: spacing.md,
   },
   retryButton: {
     backgroundColor: colors.dark.primary,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 6,
-    marginBottom: 12,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.xs,
+    marginBottom: spacing.xs,
   },
   retryButtonText: {
-    color: '#000',
-    fontWeight: 'bold',
-    fontSize: 14,
+    ...typography.bodyBold,
+    color: colors.dark.primaryText,
   },
   backLink: {
-    padding: 8,
+    padding: spacing.xs,
   },
   backLinkText: {
-    color: '#888',
-    fontSize: 14,
+    ...typography.body,
+    color: colors.dark.textSecondary,
   },
 });
+
+

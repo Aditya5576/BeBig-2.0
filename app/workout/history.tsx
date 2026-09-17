@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert, TextInput } from 'react-native';
 import { useRouter, useFocusEffect as routerFocusEffect } from 'expo-router';
 import { ScreenContainer, Text, Button, Card } from '../../src/components/ui';
 import {
@@ -24,6 +24,8 @@ export default function WorkoutHistoryScreen() {
 
   const [workouts, setWorkouts] = useState<WorkoutSession[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editingWorkoutId, setEditingWorkoutId] = useState<string | null>(null);
+  const [editWorkoutName, setEditWorkoutName] = useState('');
 
   const loadHistory = useCallback(async () => {
     setLoading(true);
@@ -82,6 +84,20 @@ export default function WorkoutHistoryScreen() {
         },
       ],
     );
+  };
+
+  const handleRenameWorkout = async (workoutId: string) => {
+    if (!editWorkoutName.trim()) {
+      Alert.alert('Invalid Name', 'Workout name cannot be empty.');
+      return;
+    }
+    try {
+      await workoutRepository.updateCompletedWorkoutName(workoutId, editWorkoutName);
+      await loadHistory();
+      setEditingWorkoutId(null);
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Failed to rename workout.');
+    }
   };
 
   const monthGroups = useMemo<MonthGroup[]>(() => {
@@ -206,21 +222,53 @@ export default function WorkoutHistoryScreen() {
                       <Card key={item.id} style={styles.workoutCard} testID={`history-card-${item.id}`}>
                         <Pressable
                           testID={`history-item-${item.id}`}
-                          onPress={() => router.push(`/workout/history/${item.id}` as any)}
+                          onPress={() => {
+                            if (editingWorkoutId === item.id) return;
+                            router.push(`/workout/history/${item.id}` as any);
+                          }}
                           style={styles.cardPressable}
                         >
                           <View style={styles.cardHeader}>
-                            <Text
-                              variant="titleMedium"
-                              color="primary"
-                              style={styles.workoutName}
-                              numberOfLines={1}
-                            >
-                              {item.name}
-                            </Text>
-                            <Text variant="caption" color="muted">
-                              {formatCompletedDate(item.finishedAt || item.startedAt)}
-                            </Text>
+                            {editingWorkoutId === item.id ? (
+                              <View style={styles.editModeContainer}>
+                                <TextInput
+                                  style={styles.editInput}
+                                  value={editWorkoutName}
+                                  onChangeText={setEditWorkoutName}
+                                  autoFocus
+                                  placeholder="Workout Name"
+                                  placeholderTextColor={colors.dark.textMuted}
+                                />
+                                <View style={styles.editActions}>
+                                  <Button
+                                    title="Cancel"
+                                    onPress={() => setEditingWorkoutId(null)}
+                                    variant="outline"
+                                    size="sm"
+                                  />
+                                  <Button
+                                    title="Save"
+                                    onPress={() => handleRenameWorkout(item.id)}
+                                    variant="primary"
+                                    size="sm"
+                                  />
+                                </View>
+                              </View>
+                            ) : (
+                              <>
+                                <Text
+                                  variant="titleMedium"
+                                  color="primary"
+                                  style={styles.workoutName}
+                                  numberOfLines={1}
+                                >
+                                  {item.name}
+                                </Text>
+                                <Text variant="caption" color="muted">
+                                  {formatCompletedDate(item.finishedAt || item.startedAt)}
+                                </Text>
+                              </>
+                            )}
                           </View>
 
                           {/* Metrics Row */}
@@ -270,20 +318,35 @@ export default function WorkoutHistoryScreen() {
                           ) : null}
                         </Pressable>
 
-                        {/* Card Actions Row: Delete + View Details */}
+                        {/* Card Actions Row: Rename + Delete + View Details */}
                         <View style={styles.cardActionsRow}>
-                          <Pressable
-                            testID={`delete-workout-${item.id}`}
-                            onPress={() => handleDeleteWorkout(item)}
-                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                            style={styles.deleteButton}
-                            accessibilityLabel={`Delete ${item.name}`}
-                            accessibilityRole="button"
-                          >
-                            <Text variant="caption" style={styles.deleteButtonText}>
-                              Delete
-                            </Text>
-                          </Pressable>
+                          <View style={styles.leftActions}>
+                            <Pressable
+                              onPress={() => {
+                                setEditingWorkoutId(item.id);
+                                setEditWorkoutName(item.name);
+                              }}
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                              style={styles.renameButton}
+                            >
+                              <Text variant="caption" style={styles.renameButtonText}>
+                                Rename
+                              </Text>
+                            </Pressable>
+
+                            <Pressable
+                              testID={`delete-workout-${item.id}`}
+                              onPress={() => handleDeleteWorkout(item)}
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                              style={styles.deleteButton}
+                              accessibilityLabel={`Delete ${item.name}`}
+                              accessibilityRole="button"
+                            >
+                              <Text variant="caption" style={styles.deleteButtonText}>
+                                Delete
+                              </Text>
+                            </Pressable>
+                          </View>
 
                           <Pressable
                             onPress={() => router.push(`/workout/history/${item.id}` as any)}
@@ -444,6 +507,21 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
     marginTop: 2,
   },
+  leftActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  renameButton: {
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radii.sm,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  renameButtonText: {
+    color: colors.dark.primary,
+    fontWeight: '600',
+    fontSize: 12,
+  },
   deleteButton: {
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.sm,
@@ -457,6 +535,26 @@ const styles = StyleSheet.create({
   },
   viewDetailsText: {
     fontWeight: '700',
+  },
+  editModeContainer: {
+    flex: 1,
+    gap: spacing.sm,
+    width: '100%',
+  },
+  editInput: {
+    backgroundColor: colors.dark.surface,
+    color: colors.dark.primary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.sm,
+    fontSize: 16,
+    borderWidth: 1,
+    borderColor: colors.dark.borderLight,
+  },
+  editActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.sm,
   },
 });
 

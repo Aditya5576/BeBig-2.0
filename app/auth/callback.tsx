@@ -49,10 +49,15 @@ export default function AuthCallbackScreen() {
           const queryString = Object.entries(searchParams)
             .map(([k, v]) => `${k}=${encodeURIComponent(Array.isArray(v) ? v[0] : v)}`)
             .join('&');
-          const prefix =
-            Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.origin
-              ? `${window.location.origin}/auth/callback`
-              : 'bebig://auth/callback';
+            
+          let prefix = 'bebig://auth/callback';
+          if (Platform.OS === 'web') {
+            if (typeof window !== 'undefined' && window.location?.origin) {
+              prefix = `${window.location.origin}/auth/callback`;
+            } else {
+              prefix = 'https://bebig.vercel.app/auth/callback';
+            }
+          }
           urlToProcess = `${prefix}?${queryString}`;
         }
 

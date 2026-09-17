@@ -12,20 +12,24 @@ import { Platform } from 'react-native';
  * - Manual override (if set): process.env.EXPO_PUBLIC_AUTH_REDIRECT_URL
  */
 export const getAuthRedirectUrl = (): string => {
-  if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.origin) {
-    const envUrl = process.env.EXPO_PUBLIC_AUTH_REDIRECT_URL;
-    if (envUrl && envUrl !== 'undefined' && envUrl.startsWith('http')) {
-      return envUrl;
-    }
-    return `${window.location.origin}/auth/callback`;
-  }
-
+  // Always prioritize an explicit environment variable if set
   if (
     process.env.EXPO_PUBLIC_AUTH_REDIRECT_URL &&
     process.env.EXPO_PUBLIC_AUTH_REDIRECT_URL !== 'undefined'
   ) {
     return process.env.EXPO_PUBLIC_AUTH_REDIRECT_URL;
   }
+
+  // Handle Web
+  if (Platform.OS === 'web') {
+    if (typeof window !== 'undefined' && window.location?.origin) {
+      return `${window.location.origin}/auth/callback`;
+    }
+    // Fallback for SSR/SSG on Vercel
+    return 'https://bebig.vercel.app/auth/callback';
+  }
+
+  // Handle Mobile
   return Linking.createURL('auth/callback');
 };
 

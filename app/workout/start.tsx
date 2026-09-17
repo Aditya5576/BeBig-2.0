@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert, TextInput } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { ScreenContainer, Text, Button, Card } from '../../src/components/ui';
 import { templateRepository, WorkoutTemplate } from '../../src/features/templates';
@@ -13,6 +13,8 @@ export default function StartWorkoutScreen() {
   const [activeWorkout, setActiveWorkout] = useState<WorkoutSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const [editTemplateName, setEditTemplateName] = useState('');
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -127,6 +129,20 @@ export default function StartWorkoutScreen() {
         },
       ],
     );
+  };
+
+  const handleRenameTemplate = async (templateId: string) => {
+    if (!editTemplateName.trim()) {
+      Alert.alert('Invalid Name', 'Template name cannot be empty.');
+      return;
+    }
+    try {
+      await templateRepository.updateTemplate({ id: templateId, name: editTemplateName });
+      await loadData();
+      setEditingTemplateId(null);
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Failed to rename template.');
+    }
   };
 
   const recommendedTemplate = templates.length > 0 ? templates[0] : null;
@@ -278,28 +294,68 @@ export default function StartWorkoutScreen() {
               ) : (
                 templates.map((tpl) => (
                   <Card key={tpl.id} style={styles.templateCard} testID={`template-card-${tpl.id}`}>
-                    <View style={styles.templateInfo}>
-                      <Text variant="titleMedium" color="primary" numberOfLines={1}>
-                        {tpl.name}
-                      </Text>
-                      <Text variant="caption" color="muted">
-                        {tpl.exercises.length}{' '}
-                        {tpl.exercises.length === 1 ? 'Exercise' : 'Exercises'} •{' '}
-                        {tpl.exercises
-                          .map((e) => e.exerciseName)
-                          .slice(0, 3)
-                          .join(', ')}
-                        {tpl.exercises.length > 3 ? '...' : ''}
-                      </Text>
-                    </View>
-                    <Button
-                      testID={`start-template-${tpl.id}`}
-                      title="Start"
-                      onPress={() => handleStartFromTemplate(tpl)}
-                      variant="primary"
-                      size="sm"
-                      style={styles.startTemplateButton}
-                    />
+                    {editingTemplateId === tpl.id ? (
+                      <View style={styles.editModeContainer}>
+                        <TextInput
+                          style={styles.editInput}
+                          value={editTemplateName}
+                          onChangeText={setEditTemplateName}
+                          autoFocus
+                          placeholder="Template Name"
+                          placeholderTextColor={colors.dark.textMuted}
+                        />
+                        <View style={styles.editActions}>
+                          <Button
+                            title="Cancel"
+                            onPress={() => setEditingTemplateId(null)}
+                            variant="outline"
+                            size="sm"
+                          />
+                          <Button
+                            title="Save"
+                            onPress={() => handleRenameTemplate(tpl.id)}
+                            variant="primary"
+                            size="sm"
+                          />
+                        </View>
+                      </View>
+                    ) : (
+                      <>
+                        <View style={styles.templateInfo}>
+                          <View style={styles.templateNameRow}>
+                            <Text variant="titleMedium" color="primary" numberOfLines={1} style={styles.templateNameText}>
+                              {tpl.name}
+                            </Text>
+                            <Pressable 
+                              hitSlop={8} 
+                              onPress={() => {
+                                setEditingTemplateId(tpl.id);
+                                setEditTemplateName(tpl.name);
+                              }}
+                            >
+                              <Text variant="caption" color="accent" style={styles.editButtonText}>Edit</Text>
+                            </Pressable>
+                          </View>
+                          <Text variant="caption" color="muted">
+                            {tpl.exercises.length}{' '}
+                            {tpl.exercises.length === 1 ? 'Exercise' : 'Exercises'} •{' '}
+                            {tpl.exercises
+                              .map((e) => e.exerciseName)
+                              .slice(0, 3)
+                              .join(', ')}
+                            {tpl.exercises.length > 3 ? '...' : ''}
+                          </Text>
+                        </View>
+                        <Button
+                          testID={`start-template-${tpl.id}`}
+                          title="Start"
+                          onPress={() => handleStartFromTemplate(tpl)}
+                          variant="primary"
+                          size="sm"
+                          style={styles.startTemplateButton}
+                        />
+                      </>
+                    )}
                   </Card>
                 ))
               )}
@@ -439,6 +495,41 @@ const styles = StyleSheet.create({
   templateInfo: {
     flex: 1,
     gap: 4,
+  },
+  templateNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingRight: spacing.sm,
+  },
+  templateNameText: {
+    flex: 1,
+    marginRight: spacing.sm,
+  },
+  editButtonText: {
+    fontWeight: '700',
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+  },
+  editModeContainer: {
+    flex: 1,
+    gap: spacing.sm,
+    width: '100%',
+  },
+  editInput: {
+    backgroundColor: colors.dark.surface,
+    color: colors.dark.primary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.sm,
+    fontSize: 16,
+    borderWidth: 1,
+    borderColor: colors.dark.borderLight,
+  },
+  editActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.sm,
   },
   startTemplateButton: {
     minWidth: 80,

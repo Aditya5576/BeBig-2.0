@@ -10,7 +10,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { colors } from '../../../src/constants/theme';
+import { colors, spacing, radii, typography } from '../../../src/constants/theme';
 import {
   getAdminUsers,
   AdminUserListItem,
@@ -61,7 +61,7 @@ export default function UsersScreen() {
   useEffect(() => {
     const handler = setTimeout(() => {
       setDebouncedSearch(searchInput);
-      setPage(1); // reset to page 1 on new search
+      setPage(1);
     }, 350);
 
     return () => clearTimeout(handler);
@@ -95,7 +95,6 @@ export default function UsersScreen() {
         pageOffset: offset,
       });
 
-      // Ignore response if a newer request was dispatched
       if (currentRequestId !== requestIdRef.current) {
         return;
       }
@@ -139,10 +138,12 @@ export default function UsersScreen() {
       >
         <View style={styles.cardHeader}>
           <View style={styles.nameContainer}>
-            <Text style={styles.displayName}>
+            <Text style={styles.displayName} numberOfLines={1} ellipsizeMode="tail">
               {item.display_name || 'No display name'}
             </Text>
-            <Text style={styles.emailText}>{item.email || 'No email'}</Text>
+            <Text style={styles.emailText} numberOfLines={1} ellipsizeMode="tail">
+              {item.email || 'No email registered'}
+            </Text>
           </View>
           {item.role ? (
             <View style={styles.roleBadge}>
@@ -170,7 +171,12 @@ export default function UsersScreen() {
           <Text style={styles.dateText}>Joined {formatDate(item.created_at)}</Text>
         </View>
 
-        <Text style={styles.idText}>ID: {item.id}</Text>
+        <View style={styles.idContainer}>
+          <Text style={styles.idLabel}>UUID:</Text>
+          <Text style={styles.idText} numberOfLines={1} ellipsizeMode="middle">
+            {item.id}
+          </Text>
+        </View>
       </Pressable>
     );
   };
@@ -179,7 +185,7 @@ export default function UsersScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>User Management</Text>
       <Text style={styles.subtitle}>
-        View and inspect all accounts registered on BeBig 2.0.
+        View and inspect registered BeBig 2.0 accounts.
       </Text>
 
       {/* Search Input */}
@@ -187,7 +193,7 @@ export default function UsersScreen() {
         <TextInput
           style={styles.searchInput}
           placeholder="Search by email, name, or ID..."
-          placeholderTextColor="#666"
+          placeholderTextColor={colors.dark.textMuted}
           value={searchInput}
           onChangeText={setSearchInput}
           autoCapitalize="none"
@@ -207,6 +213,7 @@ export default function UsersScreen() {
           horizontal
           showsHorizontalScrollIndicator={false}
           style={styles.filterScrollView}
+          contentContainerStyle={styles.filterScrollContent}
         >
           {ONBOARDING_OPTIONS.map((opt) => {
             const isSelected = selectedOnboarding === opt.value;
@@ -229,6 +236,7 @@ export default function UsersScreen() {
           horizontal
           showsHorizontalScrollIndicator={false}
           style={styles.filterScrollView}
+          contentContainerStyle={styles.filterScrollContent}
         >
           {ROLE_OPTIONS.map((opt) => {
             const isSelected = selectedRole === opt.value;
@@ -256,7 +264,7 @@ export default function UsersScreen() {
       {isLoading ? (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={colors.dark.primary} />
-          <Text style={styles.loadingText}>Loading users...</Text>
+          <Text style={styles.loadingText}>Loading accounts...</Text>
         </View>
       ) : error ? (
         <View style={styles.centerContainer}>
@@ -280,6 +288,7 @@ export default function UsersScreen() {
           renderItem={renderUserCard}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          style={styles.list}
         />
       )}
 
@@ -326,70 +335,77 @@ export default function UsersScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0a0a0a',
+    backgroundColor: colors.dark.background,
   },
   title: {
-    color: '#fff',
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 4,
+    ...typography.titleLarge,
+    color: colors.dark.textPrimary,
+    marginBottom: spacing.xs,
   },
   subtitle: {
-    color: '#888',
-    fontSize: 14,
-    marginBottom: 16,
+    ...typography.body,
+    color: colors.dark.textSecondary,
+    marginBottom: spacing.md,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#141414',
-    borderRadius: 8,
+    backgroundColor: colors.dark.surface,
+    borderRadius: radii.sm,
     borderWidth: 1,
-    borderColor: '#262626',
-    paddingHorizontal: 12,
-    marginBottom: 12,
+    borderColor: colors.dark.border,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+    minHeight: 44,
   },
   searchInput: {
     flex: 1,
-    color: '#fff',
+    color: colors.dark.textPrimary,
     height: 44,
     fontSize: 14,
   },
   clearButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
   },
   clearButtonText: {
-    color: '#888',
-    fontSize: 12,
+    ...typography.caption,
+    color: colors.dark.textSecondary,
+    fontWeight: '600',
   },
   filtersSection: {
-    marginBottom: 12,
-    gap: 8,
+    marginBottom: spacing.sm,
+    gap: spacing.xs + 2,
   },
   filterScrollView: {
     flexGrow: 0,
   },
+  filterScrollContent: {
+    paddingRight: spacing.md,
+  },
   chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: '#161616',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: radii.full,
+    backgroundColor: colors.dark.surface,
     borderWidth: 1,
-    borderColor: '#282828',
-    marginRight: 8,
+    borderColor: colors.dark.border,
+    marginRight: spacing.xs + 2,
+    minHeight: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   chipActive: {
-    backgroundColor: '#262626',
+    backgroundColor: colors.dark.surfaceSubtle,
     borderColor: colors.dark.primary,
   },
   chipActiveRole: {
-    backgroundColor: '#1e293b',
-    borderColor: '#38bdf8',
+    backgroundColor: '#1E293B',
+    borderColor: colors.dark.primary,
   },
   chipText: {
-    color: '#888',
-    fontSize: 12,
+    ...typography.caption,
+    color: colors.dark.textMuted,
     fontWeight: '500',
   },
   chipTextActive: {
@@ -397,166 +413,192 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   chipTextActiveRole: {
-    color: '#38bdf8',
+    color: colors.dark.primary,
     fontWeight: '600',
   },
+  list: {
+    flex: 1,
+  },
   listContent: {
-    paddingBottom: 16,
-    gap: 12,
+    paddingBottom: spacing.md,
+    gap: spacing.sm,
   },
   card: {
-    backgroundColor: '#121212',
-    borderRadius: 10,
+    backgroundColor: colors.dark.surface,
+    borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: '#222',
-    padding: 16,
+    borderColor: colors.dark.border,
+    padding: spacing.md,
   },
   cardPressed: {
-    backgroundColor: '#1a1a1a',
-    borderColor: '#333',
+    backgroundColor: colors.dark.surfaceSubtle,
+    borderColor: colors.dark.borderLight,
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 12,
+    marginBottom: spacing.sm,
   },
   nameContainer: {
     flex: 1,
-    marginRight: 8,
+    marginRight: spacing.sm,
+    flexShrink: 1,
   },
   displayName: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+    ...typography.bodyBold,
+    color: colors.dark.textPrimary,
     marginBottom: 2,
   },
   emailText: {
-    color: '#aaa',
+    ...typography.body,
     fontSize: 13,
+    color: colors.dark.textSecondary,
   },
   roleBadge: {
-    backgroundColor: '#1e293b',
-    borderColor: '#38bdf8',
+    backgroundColor: colors.dark.surfaceSubtle,
+    borderColor: colors.dark.primary,
     borderWidth: 1,
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 6,
+    borderRadius: radii.xs,
   },
   roleBadgeText: {
-    color: '#38bdf8',
-    fontSize: 11,
+    ...typography.caption,
+    fontSize: 10,
     fontWeight: '700',
+    color: colors.dark.primary,
     textTransform: 'uppercase',
   },
   cardFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    flexWrap: 'wrap',
+    gap: spacing.xs + 2,
+    marginBottom: spacing.xs + 2,
   },
   statusContainer: {
     flexDirection: 'row',
   },
   statusBadge: {
     paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
+    paddingVertical: 3,
+    borderRadius: radii.xs,
   },
   statusCompleted: {
-    backgroundColor: '#064e3b',
+    backgroundColor: '#064E3B',
   },
   statusIncomplete: {
-    backgroundColor: '#27272a',
+    backgroundColor: colors.dark.surfaceSubtle,
   },
   statusBadgeText: {
-    color: '#e2e8f0',
-    fontSize: 11,
+    ...typography.caption,
+    color: colors.dark.textPrimary,
     fontWeight: '500',
   },
   dateText: {
-    color: '#666',
-    fontSize: 12,
+    ...typography.caption,
+    color: colors.dark.textMuted,
+  },
+  idContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: 2,
+    paddingTop: spacing.xs + 2,
+    borderTopWidth: 1,
+    borderTopColor: colors.dark.border,
+  },
+  idLabel: {
+    ...typography.caption,
+    fontSize: 10,
+    color: colors.dark.textMuted,
+    fontWeight: '600',
   },
   idText: {
-    color: '#444',
+    ...typography.caption,
     fontSize: 11,
+    color: colors.dark.textSecondary,
     fontFamily: 'monospace',
+    flex: 1,
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
+    padding: spacing.lg,
   },
   loadingText: {
-    color: '#888',
-    fontSize: 14,
-    marginTop: 12,
+    ...typography.body,
+    color: colors.dark.textSecondary,
+    marginTop: spacing.md,
   },
   errorTitle: {
-    color: '#ef4444',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 8,
+    ...typography.titleLarge,
+    color: colors.dark.error,
+    marginBottom: spacing.xs,
   },
   errorMessage: {
-    color: '#aaa',
-    fontSize: 14,
+    ...typography.body,
+    color: colors.dark.textSecondary,
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: spacing.md,
   },
   retryButton: {
     backgroundColor: colors.dark.primary,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 6,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.xs,
   },
   retryButtonText: {
-    color: '#000',
-    fontWeight: 'bold',
-    fontSize: 14,
+    ...typography.bodyBold,
+    color: colors.dark.primaryText,
   },
   emptyTitle: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 4,
+    ...typography.titleLarge,
+    color: colors.dark.textPrimary,
+    marginBottom: spacing.xs,
   },
   emptySubtitle: {
-    color: '#666',
-    fontSize: 14,
+    ...typography.body,
+    color: colors.dark.textSecondary,
     textAlign: 'center',
   },
   paginationFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: spacing.sm + 2,
     borderTopWidth: 1,
-    borderTopColor: '#1a1a1a',
+    borderTopColor: colors.dark.border,
   },
   pageButton: {
-    backgroundColor: '#1c1c1c',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 6,
+    backgroundColor: colors.dark.surface,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.xs,
     borderWidth: 1,
-    borderColor: '#2a2a2a',
+    borderColor: colors.dark.border,
+    minHeight: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   pageButtonDisabled: {
     opacity: 0.4,
   },
   pageButtonText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '600',
+    ...typography.label,
+    color: colors.dark.textPrimary,
   },
   pageButtonTextDisabled: {
-    color: '#666',
+    color: colors.dark.textMuted,
   },
   pageIndicator: {
-    color: '#888',
+    ...typography.body,
+    color: colors.dark.textSecondary,
     fontSize: 13,
   },
 });
+
+

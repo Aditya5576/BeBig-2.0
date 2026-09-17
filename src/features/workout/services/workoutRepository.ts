@@ -472,6 +472,52 @@ export class WorkoutRepository {
   }
 
   /**
+   * Updates the name of a completed workout from history.
+   * Produces a durable pending_upload for sync if authenticated.
+   */
+  async updateCompletedWorkoutName(id: string, newName: string, scope?: UserScope | null): Promise<WorkoutSession> {
+    const resolvedScope = scope !== undefined ? scope : getCurrentUserScope();
+    const existing = await workoutStorage.getCompletedWorkoutById(id, resolvedScope);
+    if (!existing) {
+      throw new Error(`Completed workout with id "${id}" not found.`);
+    }
+
+    const trimmedName = newName.trim();
+    if (!trimmedName) {
+      throw new Error('Workout name cannot be empty.');
+    }
+
+    const updated: WorkoutSession = {
+      ...existing,
+      name: trimmedName,
+    };
+
+    // 1. Local durable save first (Source of Truth)
+    await workoutStorage.saveCompletedWorkout(updated, resolvedScope);
+
+    // 2. Mark pending upload in sync metadata (authenticated only)
+    if (resolvedScope && resolvedScope.ownerType === 'authenticated') {
+      try {
+        await syncMetadataStore.markPendingUpload(
+          'workout',
+          updated.id,
+          new Date().toISOString(), // Use current time for the sync trigger
+          resolvedScope,
+        );
+      } catch {
+        // Durability: Local save succeeded. Crash recovery scanner will reconstruct missing metadata.
+      }
+
+      // 3. Fire-and-forget sync trigger (asynchronous, non-blocking)
+      void syncLifecycleManager.triggerSync({ reason: 'workout_completed', scope: resolvedScope }).catch(() => {
+        // Silently caught; sync failure cannot throw or affect caller
+      });
+    }
+
+    return updated;
+  }
+
+  /**
    * Invalidates volatile in-memory storage cache on logout/user switch.
    */
   clearInMemoryState(): void {
