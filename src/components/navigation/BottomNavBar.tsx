@@ -47,6 +47,7 @@ export function BottomNavBar() {
     firstSegment === 'onboarding' ||
     firstSegment === 'auth' ||
     firstSegment === 'index' ||
+    firstSegment === 'admin' ||
     !firstSegment ||
     (firstSegment === 'workout' && secondSegment === 'active');
 

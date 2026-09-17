@@ -84,6 +84,7 @@ export default function RootLayout() {
           }}
         >
           <Stack.Screen name="index" />
+          <Stack.Screen name="admin" />
           <Stack.Screen name="onboarding" />
           <Stack.Screen name="home" />
           <Stack.Screen name="settings" />
