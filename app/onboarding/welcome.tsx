@@ -147,7 +147,7 @@ export default function WelcomeScreen() {
             testID="welcome-sign-in-button"
             title="Log In"
             onPress={handleLogin}
-            variant="secondary"
+            variant="outline"
             size="lg"
             style={styles.secondaryButton}
           />
@@ -181,10 +181,11 @@ const styles = StyleSheet.create({
   },
   headerSection: {
     alignItems: 'center',
-    gap: spacing.sm,
+    gap: spacing.md,
   },
   badgeContainer: {
     flexDirection: 'row',
+    paddingTop: spacing.sm,
   },
   badge: {
     backgroundColor: colors.dark.surfaceElevated,
@@ -222,7 +223,7 @@ const styles = StyleSheet.create({
   },
   titleSection: {
     alignItems: 'center',
-    gap: spacing.xs,
+    gap: spacing.sm,
     paddingHorizontal: spacing.sm,
   },
   title: {
@@ -265,9 +266,9 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   actionSection: {
-    gap: spacing.sm,
+    gap: spacing.md,
     paddingTop: spacing.xs,
-    paddingBottom: spacing.sm,
+    paddingBottom: spacing.md,
   },
   primaryActionWrapper: {
     width: '100%',
@@ -286,9 +287,6 @@ const styles = StyleSheet.create({
     width: '100%',
     minHeight: 52,
     borderRadius: radii.lg,
-    backgroundColor: colors.dark.surfaceElevated,
-    borderColor: colors.dark.borderLight,
-    borderWidth: 1,
   },
   guestLink: {
     alignItems: 'center',
