@@ -330,7 +330,7 @@ export default function HomeScreen() {
           <View style={styles.todayActions}>
             <Button
               testID="start-workout-button"
-              title="START WORKOUT"
+              title="Start Workout"
               onPress={async () => {
                 if (analytics.suggestedTemplate) {
                   await handleStartTemplate(analytics.suggestedTemplate);
@@ -396,7 +396,7 @@ export default function HomeScreen() {
               <View
                 style={[
                   styles.progressBarFill,
-                  { width: `${Math.max(4, analytics.weeklyGoalPercent)}%` },
+                  { width: `${Math.min(100, Math.max(4, analytics.weeklyGoalPercent))}%` },
                 ]}
               />
             </View>
@@ -441,8 +441,8 @@ export default function HomeScreen() {
               </Text>
             </Card>
 
-            {/* PRs Card */}
-            <Card style={styles.metricCard} testID="metric-prs-card">
+            {/* PRs Card (Interactive) */}
+            <Card style={[styles.metricCard, styles.metricCardInteractive]} testID="metric-prs-card">
               <Pressable
                 testID="home-prs-button"
                 onPress={() => router.push('/workout/progress/prs' as any)}
@@ -747,7 +747,7 @@ const styles = StyleSheet.create({
     borderColor: colors.dark.borderLight,
     borderWidth: 1.5,
     padding: spacing.md,
-    gap: spacing.sm,
+    gap: spacing.md,
   },
   todayHeaderRow: {
     flexDirection: 'row',
@@ -782,8 +782,8 @@ const styles = StyleSheet.create({
     borderColor: colors.dark.border,
   },
   todayActions: {
-    gap: spacing.sm,
-    marginTop: spacing.xs,
+    gap: spacing.md,
+    marginTop: spacing.sm,
   },
   todayStartButton: {
     width: '100%',
@@ -799,7 +799,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
   },
   analyticsSection: {
-    gap: spacing.sm,
+    gap: spacing.md,
   },
   sectionHeading: {
     fontSize: 18,
@@ -809,12 +809,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.dark.surface,
     borderColor: colors.dark.border,
     padding: spacing.md,
-    gap: spacing.sm,
+    gap: spacing.md,
   },
   goalHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
   },
   goalNumbers: {
     fontSize: 20,
@@ -854,7 +854,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.dark.surface,
     borderColor: colors.dark.border,
     padding: spacing.md,
-    gap: 4,
+    gap: spacing.xs,
+  },
+  metricCardInteractive: {
+    backgroundColor: colors.dark.surfaceElevated,
+    borderColor: colors.dark.borderLight,
+    borderWidth: 1,
   },
   metricLabel: {
     fontSize: 11,
@@ -866,7 +871,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   metricPressable: {
-    gap: 4,
+    gap: spacing.xs,
   },
   metricHeaderRow: {
     flexDirection: 'row',
@@ -878,7 +883,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   templatesSection: {
-    gap: spacing.sm,
+    gap: spacing.md,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
@@ -886,7 +891,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   templatesList: {
-    gap: spacing.xs,
+    gap: spacing.sm,
   },
   templateRowCard: {
     flexDirection: 'row',
@@ -905,16 +910,16 @@ const styles = StyleSheet.create({
     minHeight: 36,
   },
   historySection: {
-    gap: spacing.sm,
+    gap: spacing.md,
   },
   historyList: {
-    gap: spacing.xs,
+    gap: spacing.sm,
   },
   historyItemCard: {
     backgroundColor: colors.dark.surface,
     borderColor: colors.dark.border,
     padding: spacing.md,
-    gap: 4,
+    gap: spacing.xs,
   },
   historyItemTop: {
     flexDirection: 'row',
@@ -925,6 +930,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  historyStatChips: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
   },
   emptyCard: {
     backgroundColor: colors.dark.surface,
