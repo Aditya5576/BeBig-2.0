@@ -97,19 +97,19 @@ export default function WorkoutHistoryDetailScreen() {
             style={styles.backButton}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           >
-            <Text variant="bodyBold" color="accent" style={styles.backButtonText}>
+            <Text variant="bodyBold" color="primary">
               ‹ History
             </Text>
           </Pressable>
 
           <View style={styles.titleArea}>
             <View style={styles.historyBadge}>
-              <Text variant="caption" color="accent" style={styles.historyBadgeText}>
+              <Text variant="caption" color="primary" style={styles.historyBadgeText}>
                 COMPLETED WORKOUT LOG (READ-ONLY)
               </Text>
             </View>
             <Text variant="display" color="primary" testID="history-detail-name">
-              {workout.name}
+              {workout.name || 'Completed Workout'}
             </Text>
             <Text variant="body" color="secondary" testID="history-detail-date">
               {formatCompletedDate(workout.finishedAt || workout.startedAt)}
@@ -117,63 +117,63 @@ export default function WorkoutHistoryDetailScreen() {
           </View>
         </View>
 
-        {/* High-level Summary Metrics Cards */}
+        {/* High-level Summary Metrics Cards Grid */}
         <View style={styles.metricsGrid}>
-          <Card style={styles.metricCard}>
-            <Text variant="caption" color="muted" style={styles.metricLabel}>
-              DURATION
-            </Text>
-            <Text
-              variant="titleLarge"
-              color="primary"
-              testID="history-detail-duration"
-              style={styles.metricValue}
-            >
-              {formatDuration(workout.totalDuration)}
-            </Text>
-          </Card>
+          <View style={styles.metricsRow}>
+            <Card style={styles.metricCard}>
+              <Text variant="caption" color="muted" style={styles.metricLabel}>
+                DURATION
+              </Text>
+              <Text
+                variant="numeric"
+                color="primary"
+                testID="history-detail-duration"
+              >
+                {formatDuration(workout.totalDuration)}
+              </Text>
+            </Card>
 
-          <Card style={styles.metricCard}>
-            <Text variant="caption" color="muted" style={styles.metricLabel}>
-              TOTAL VOLUME
-            </Text>
-            <Text
-              variant="titleLarge"
-              color="accent"
-              testID="history-detail-volume"
-              style={styles.metricValue}
-            >
-              {(workout.totalVolume ?? 0).toLocaleString()} kg
-            </Text>
-          </Card>
+            <Card style={styles.metricCard}>
+              <Text variant="caption" color="muted" style={styles.metricLabel}>
+                TOTAL VOLUME
+              </Text>
+              <Text
+                variant="numeric"
+                color="primary"
+                testID="history-detail-volume"
+              >
+                {(workout.totalVolume ?? 0).toLocaleString()} kg
+              </Text>
+            </Card>
+          </View>
 
-          <Card style={styles.metricCard}>
-            <Text variant="caption" color="muted" style={styles.metricLabel}>
-              EXERCISES
-            </Text>
-            <Text
-              variant="titleLarge"
-              color="primary"
-              testID="history-detail-exercises-count"
-              style={styles.metricValue}
-            >
-              {displayExercises.length}
-            </Text>
-          </Card>
+          <View style={styles.metricsRow}>
+            <Card style={styles.metricCard}>
+              <Text variant="caption" color="muted" style={styles.metricLabel}>
+                EXERCISES
+              </Text>
+              <Text
+                variant="numeric"
+                color="primary"
+                testID="history-detail-exercises-count"
+              >
+                {displayExercises.length}
+              </Text>
+            </Card>
 
-          <Card style={styles.metricCard}>
-            <Text variant="caption" color="muted" style={styles.metricLabel}>
-              COMPLETED SETS
-            </Text>
-            <Text
-              variant="titleLarge"
-              color="primary"
-              testID="history-detail-sets-count"
-              style={styles.metricValue}
-            >
-              {workout.completedSetsCount ?? 0}
-            </Text>
-          </Card>
+            <Card style={styles.metricCard}>
+              <Text variant="caption" color="muted" style={styles.metricLabel}>
+                COMPLETED SETS
+              </Text>
+              <Text
+                variant="numeric"
+                color="primary"
+                testID="history-detail-sets-count"
+              >
+                {workout.completedSetsCount ?? 0}
+              </Text>
+            </Card>
+          </View>
         </View>
 
         {/* Completed Exercises & Logged Sets Breakdown */}
@@ -195,7 +195,7 @@ export default function WorkoutHistoryDetailScreen() {
                 <View style={styles.exerciseHeader}>
                   <View style={styles.exerciseTitleGroup}>
                     <Text variant="titleMedium" color="primary" style={styles.exerciseName}>
-                      {ex.exerciseName}
+                      {ex.exerciseName || 'Exercise'}
                     </Text>
                     {ex.categoryName ? (
                       <Text variant="caption" color="muted">
@@ -204,7 +204,7 @@ export default function WorkoutHistoryDetailScreen() {
                     ) : null}
                   </View>
                   <View style={styles.setsBadge}>
-                    <Text variant="caption" color="accent" style={styles.setsBadgeText}>
+                    <Text variant="caption" color="primary" style={styles.setsBadgeText}>
                       {finishedSets.length} sets
                     </Text>
                   </View>
@@ -212,34 +212,37 @@ export default function WorkoutHistoryDetailScreen() {
 
                 {/* Read-Only Sets List */}
                 <View style={styles.setsList}>
-                  {setsToRender.map((s) => (
-                    <View
-                      key={s.id}
-                      style={styles.setRow}
-                      testID={`history-set-${ex.exerciseId}-${s.setNumber}`}
-                    >
-                      <View style={styles.setIndexBadge}>
-                        <Text variant="caption" color="primary" style={styles.setIndexText}>
-                          SET {s.setNumber}
-                        </Text>
-                      </View>
+                  {setsToRender.map((s, index) => {
+                    const isLastSet = index === setsToRender.length - 1;
+                    return (
+                      <View
+                        key={s.id}
+                        style={[styles.setRow, isLastSet && styles.lastSetRow]}
+                        testID={`history-set-${ex.exerciseId}-${s.setNumber}`}
+                      >
+                        <View style={styles.setIndexBadge}>
+                          <Text variant="caption" color="primary" style={styles.setIndexText}>
+                            SET {s.setNumber}
+                          </Text>
+                        </View>
 
-                      <View style={styles.setMetricsGroup}>
-                        <Text variant="bodyBold" color="primary" style={styles.metricsText}>
-                          {s.weight > 0 ? `${s.weight} kg` : 'Bodyweight'} × {s.reps} reps
-                        </Text>
-                        <Text variant="caption" color="muted">
-                          RIR {s.rir}
-                        </Text>
-                      </View>
+                        <View style={styles.setMetricsGroup}>
+                          <Text variant="bodyBold" color="primary">
+                            {s.weight > 0 ? `${s.weight} kg` : 'Bodyweight'} × {s.reps} reps
+                          </Text>
+                          <Text variant="caption" color="muted">
+                            RIR {s.rir}
+                          </Text>
+                        </View>
 
-                      {s.notes ? (
-                        <Text variant="caption" color="secondary" style={styles.setNotesText}>
-                          {`"${s.notes}"`}
-                        </Text>
-                      ) : null}
-                    </View>
-                  ))}
+                        {s.notes ? (
+                          <Text variant="caption" color="secondary" style={styles.setNotesText}>
+                            {`"${s.notes}"`}
+                          </Text>
+                        ) : null}
+                      </View>
+                    );
+                  })}
                 </View>
               </Card>
             );
@@ -273,7 +276,6 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
     alignSelf: 'flex-start',
   },
-  backButtonText: {},
   titleArea: {
     gap: spacing.xs,
   },
@@ -287,30 +289,25 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   historyBadgeText: {
-    fontSize: 10,
     fontWeight: '800',
     letterSpacing: 0.5,
   },
   metricsGrid: {
+    gap: spacing.sm,
+  },
+  metricsRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: spacing.sm,
   },
   metricCard: {
     flex: 1,
-    minWidth: '45%',
     padding: spacing.md,
     gap: 4,
     backgroundColor: colors.dark.surfaceElevated,
   },
   metricLabel: {
-    fontSize: 10,
     fontWeight: '800',
     letterSpacing: 0.5,
-  },
-  metricValue: {
-    fontSize: 22,
-    fontWeight: '800',
   },
   breakdownSection: {
     gap: spacing.sm,
@@ -336,7 +333,6 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   exerciseName: {
-    fontSize: 16,
     fontWeight: '700',
   },
   setsBadge: {
@@ -355,25 +351,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    paddingVertical: 6,
+    paddingVertical: spacing.xs + 2,
     borderBottomWidth: 1,
     borderBottomColor: colors.dark.border,
     flexWrap: 'wrap',
+  },
+  lastSetRow: {
+    borderBottomWidth: 0,
   },
   setIndexBadge: {
     minWidth: 44,
   },
   setIndexText: {
     fontWeight: '800',
-    fontSize: 11,
   },
   setMetricsGroup: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-  },
-  metricsText: {
-    fontSize: 14,
   },
   setNotesText: {
     fontStyle: 'italic',
