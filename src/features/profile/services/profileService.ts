@@ -97,6 +97,10 @@ export const profileService: IProfileService = {
             // Profile genuinely does not exist in DB yet
             break;
           }
+          if (error && (error.code === '42501' || error.code === 'PGRST116' || (error as any).status === 403 || error.code === '403')) {
+            // RLS blocks access, profile does not exist or user isn't authorized to view it (typical for new users)
+            break;
+          }
         } catch {
           // Network or client blip; retry once
         }

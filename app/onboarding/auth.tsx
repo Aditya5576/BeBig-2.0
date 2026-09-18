@@ -60,29 +60,38 @@ export default function AuthScreen({
   const configured = isSupabaseConfigured();
 
   const handlePostAuthSuccess = async (session: any) => {
-    if (!session?.user?.id) {
+    try {
+      if (!session?.user?.id) {
+        setAuthSession(session);
+        router.replace('/home');
+        return;
+      }
+
+      const userId = session.user.id;
+
+      // Reset local onboarding store to ensure answers from a previous user/guest never leak
+      useOnboardingStore.getState().resetOnboarding();
+
+      // Establish auth session in store
       setAuthSession(session);
-      router.replace('/home');
-      return;
+
+      // Authoritative profile-driven routing resolution
+      const resolution = await resolveAuthenticatedUserRoute(userId);
+
+      // Account isolation check: verify user ID still matches at async boundary
+      if (!resolution || useAuthStore.getState().user?.id !== userId) {
+        setLoading(false);
+        return;
+      }
+
+      router.replace(resolution.route as any);
+    } catch (err: any) {
+      setLoading(false);
+      setStatusMessage({
+        text: err?.message || 'An unexpected error occurred during account setup.',
+        type: 'error',
+      });
     }
-
-    const userId = session.user.id;
-
-    // Reset local onboarding store to ensure answers from a previous user/guest never leak
-    useOnboardingStore.getState().resetOnboarding();
-
-    // Establish auth session in store
-    setAuthSession(session);
-
-    // Authoritative profile-driven routing resolution
-    const resolution = await resolveAuthenticatedUserRoute(userId);
-
-    // Account isolation check: verify user ID still matches at async boundary
-    if (!resolution || useAuthStore.getState().user?.id !== userId) {
-      return;
-    }
-
-    router.replace(resolution.route as any);
   };
 
   const handleContinueAsGuest = async () => {
