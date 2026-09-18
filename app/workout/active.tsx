@@ -35,6 +35,11 @@ export default function ActiveWorkoutScreen() {
   const [lastPerformanceMap, setLastPerformanceMap] = useState<
     Record<string, { workoutDate?: string; sets: WorkoutSet[] }>
   >({});
+  const [expandedNotesSetIds, setExpandedNotesSetIds] = useState<Record<string, boolean>>({});
+
+  const toggleNotesForSet = (setId: string) => {
+    setExpandedNotesSetIds((prev) => ({ ...prev, [setId]: !prev[setId] }));
+  };
 
   // Fetch last performance per exercise from local completed history
   useEffect(() => {
@@ -739,10 +744,12 @@ export default function ActiveWorkoutScreen() {
                           <Pressable
                             testID={`delete-set-${ex.exerciseId}-${set.setNumber}`}
                             onPress={() => handleDeleteSet(ex.exerciseId, set.id)}
-                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                             style={styles.deleteSetButton}
+                            accessibilityLabel={`Delete set ${set.setNumber}`}
+                            accessibilityRole="button"
                           >
-                            <Text variant="caption" color="muted">
+                            <Text variant="caption" style={styles.deleteSetText}>
                               Delete Set
                             </Text>
                           </Pressable>
@@ -765,7 +772,10 @@ export default function ActiveWorkoutScreen() {
                             onChangeText={(val) =>
                               handleUpdateSetField(ex.exerciseId, set.id, 'weight', val)
                             }
-                            style={styles.metricInput}
+                            style={[
+                              styles.metricInput,
+                              set.completed ? styles.metricInputCompleted : null,
+                            ]}
                           />
                         </View>
 
@@ -783,7 +793,10 @@ export default function ActiveWorkoutScreen() {
                             onChangeText={(val) =>
                               handleUpdateSetField(ex.exerciseId, set.id, 'reps', val)
                             }
-                            style={styles.metricInput}
+                            style={[
+                              styles.metricInput,
+                              set.completed ? styles.metricInputCompleted : null,
+                            ]}
                           />
                         </View>
 
@@ -801,27 +814,44 @@ export default function ActiveWorkoutScreen() {
                             onChangeText={(val) =>
                               handleUpdateSetField(ex.exerciseId, set.id, 'rir', val)
                             }
-                            style={styles.metricInput}
+                            style={[
+                              styles.metricInput,
+                              set.completed ? styles.metricInputCompleted : null,
+                            ]}
                           />
                         </View>
                       </View>
 
-                      {/* Full-width Notes Field */}
-                      <View style={styles.notesContainer}>
-                        <Text variant="caption" color="muted" style={styles.inputLabel}>
-                          NOTES (OPTIONAL)
-                        </Text>
-                        <TextInput
-                          testID={`set-notes-${ex.exerciseId}-${set.setNumber}`}
-                          defaultValue={set.notes || ''}
-                          placeholder="Form cues, tempo, notes..."
-                          placeholderTextColor={colors.dark.textMuted}
-                          onChangeText={(val) =>
-                            handleUpdateSetField(ex.exerciseId, set.id, 'notes', val)
-                          }
-                          style={styles.notesInput}
-                        />
-                      </View>
+                      {/* Smart Collapsible Notes Field */}
+                      {Boolean(set.notes && set.notes.trim().length > 0) ||
+                      Boolean(expandedNotesSetIds[set.id]) ? (
+                        <View style={styles.notesContainer}>
+                          <Text variant="caption" color="muted" style={styles.inputLabel}>
+                            NOTES (OPTIONAL)
+                          </Text>
+                          <TextInput
+                            testID={`set-notes-${ex.exerciseId}-${set.setNumber}`}
+                            defaultValue={set.notes || ''}
+                            placeholder="Form cues, tempo, notes..."
+                            placeholderTextColor={colors.dark.textMuted}
+                            onChangeText={(val) =>
+                              handleUpdateSetField(ex.exerciseId, set.id, 'notes', val)
+                            }
+                            style={styles.notesInput}
+                            autoFocus={!set.notes && Boolean(expandedNotesSetIds[set.id])}
+                          />
+                        </View>
+                      ) : (
+                        <Pressable
+                          onPress={() => toggleNotesForSet(set.id)}
+                          style={styles.addNoteTrigger}
+                          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                        >
+                          <Text variant="caption" color="secondary" style={styles.addNoteText}>
+                            + Add Note
+                          </Text>
+                        </Pressable>
+                      )}
 
                       {/* Prominent Full-Width Complete Set Button */}
                       <Pressable
@@ -958,13 +988,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.dark.surfaceElevated,
     borderColor: colors.dark.primary,
     borderWidth: 1.5,
-    padding: spacing.md,
+    padding: spacing.sm,
   },
   restCompleteCard: {
     backgroundColor: colors.dark.surfaceElevated,
     borderColor: colors.dark.success,
     borderWidth: 1.5,
-    padding: spacing.md,
+    padding: spacing.sm,
   },
   restBannerContent: {
     flexDirection: 'row',
@@ -973,35 +1003,31 @@ const styles = StyleSheet.create({
   },
   restInfo: {
     flex: 1,
-    gap: 3,
+    gap: 2,
   },
   restLabel: {
-    fontSize: 10,
     fontWeight: '800',
     letterSpacing: 0.5,
   },
   restCompleteLabel: {
-    fontSize: 10,
     fontWeight: '800',
     letterSpacing: 0.5,
     color: colors.dark.success,
   },
   restCountdownText: {
-    fontSize: 24,
     fontWeight: '900',
     letterSpacing: 0.5,
   },
   restCompleteTitle: {
-    fontSize: 16,
     fontWeight: '800',
   },
   skipRestButton: {
-    minHeight: 44,
-    minWidth: 95,
+    minHeight: 40,
+    minWidth: 90,
   },
   dismissRestButton: {
-    minHeight: 44,
-    minWidth: 95,
+    minHeight: 40,
+    minWidth: 90,
   },
   emptyExercisesCard: {
     padding: spacing.xl,
@@ -1048,7 +1074,6 @@ const styles = StyleSheet.create({
     opacity: 0.3,
   },
   controlIcon: {
-    fontSize: 12,
     fontWeight: '700',
   },
   exerciseTitleGroup: {
@@ -1068,14 +1093,12 @@ const styles = StyleSheet.create({
   },
   indexBadgeText: {
     fontWeight: '800',
-    fontSize: 11,
   },
   exerciseNameContainer: {
     flex: 1,
     gap: 2,
   },
   exerciseName: {
-    fontSize: 17,
     fontWeight: '700',
   },
   removeExButton: {
@@ -1097,7 +1120,6 @@ const styles = StyleSheet.create({
     borderColor: colors.dark.border,
   },
   targetsText: {
-    fontSize: 11,
     fontWeight: '600',
   },
   lastTimeContainer: {
@@ -1115,7 +1137,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   lastTimeTitle: {
-    fontSize: 10,
     fontWeight: '800',
     letterSpacing: 0.5,
     color: colors.dark.primary,
@@ -1126,7 +1147,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   lastTimeSetChip: {
-    fontSize: 11,
     fontWeight: '600',
     color: colors.dark.textSecondary,
   },
@@ -1135,7 +1155,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   noLastTimeText: {
-    fontSize: 11,
     fontStyle: 'italic',
     color: colors.dark.textMuted,
   },
@@ -1165,38 +1184,41 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   setNumberText: {
-    fontSize: 12,
     fontWeight: '800',
     letterSpacing: 0.5,
   },
   completedBadge: {
     backgroundColor: 'rgba(56, 189, 248, 0.15)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: radii.full,
   },
   completedBadgeText: {
-    fontSize: 10,
     fontWeight: '700',
     color: colors.dark.primary,
   },
   pendingBadge: {
     backgroundColor: 'rgba(148, 163, 184, 0.12)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: radii.full,
   },
   pendingBadgeText: {
-    fontSize: 10,
     fontWeight: '700',
     color: colors.dark.textMuted,
   },
   deleteSetButton: {
-    minHeight: 44,
-    minWidth: 44,
+    minHeight: 36,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: radii.xs,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
     justifyContent: 'center',
-    alignItems: 'flex-end',
-    paddingHorizontal: spacing.xs,
+    alignItems: 'center',
+  },
+  deleteSetText: {
+    color: colors.dark.error,
+    fontWeight: '600',
   },
   metricsRow: {
     flexDirection: 'row',
@@ -1207,7 +1229,6 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   inputLabel: {
-    fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.5,
   },
@@ -1223,6 +1244,19 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
     minHeight: 46,
+  },
+  metricInputCompleted: {
+    backgroundColor: colors.dark.surfaceSubtle,
+    borderColor: 'rgba(56, 189, 248, 0.3)',
+  },
+  addNoteTrigger: {
+    alignSelf: 'flex-start',
+    paddingVertical: 4,
+    paddingHorizontal: spacing.xs,
+    marginTop: 2,
+  },
+  addNoteText: {
+    fontWeight: '600',
   },
   notesContainer: {
     gap: 4,
