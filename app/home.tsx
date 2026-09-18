@@ -598,10 +598,10 @@ export default function HomeScreen() {
                 >
                   <Card style={styles.historyItemCard}>
                     <View style={styles.historyItemTop}>
-                      <Text variant="titleMedium" color="primary">
+                      <Text variant="titleMedium" color="primary" style={styles.historyTitle}>
                         {w.name}
                       </Text>
-                      <Text variant="caption" color="accent">
+                      <Text variant="caption" color="accent" style={styles.historyDate}>
                         {formatCompletedDate(w.finishedAt || w.startedAt)}
                       </Text>
                     </View>
@@ -924,7 +924,14 @@ const styles = StyleSheet.create({
   historyItemTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  historyTitle: {
+    flex: 1,
+  },
+  historyDate: {
+    flexShrink: 0,
   },
   historyItemStats: {
     flexDirection: 'row',
