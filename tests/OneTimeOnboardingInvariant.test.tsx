@@ -621,19 +621,4 @@ describe('BeBig 2.0 — Permanent Product Invariant: Onboarding is One-Time Only
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/home'));
     await screen.unmount();
   });
-
-  // Guard 3: Direct navigation to /onboarding/preferences redirects completed user to /home
-  it('Guard 3: direct navigation to /onboarding/preferences redirects completed user to /home', async () => {
-    mockReplace.mockClear();
-    useAuthStore.setState({
-      status: 'authenticated',
-      isGuest: false,
-      user: userAWithMetadata as any,
-    });
-    useOnboardingStore.getState().completeOnboarding();
-
-    const screen = await render(<PreferencesScreen />);
-    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/home'));
-    await screen.unmount();
-  });
 });

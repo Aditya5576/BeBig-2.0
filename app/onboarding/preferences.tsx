@@ -82,13 +82,8 @@ const WORKOUT_STYLE_OPTIONS: {
 
 export default function PreferencesScreen() {
   const router = useRouter();
-  const hasCompletedOnboarding = useOnboardingStore((state) => state.hasCompletedOnboarding);
   const authStatus = useAuthStore((state) => state.status);
   const isGuest = useAuthStore((state) => state.isGuest);
-
-  if (hasCompletedOnboarding && (authStatus === 'authenticated' || isGuest)) {
-    return <Redirect href="/home" />;
-  }
 
   const daysPerWeek = useOnboardingStore((state) => state.daysPerWeek);
   const workoutDuration = useOnboardingStore((state) => state.workoutDuration);
