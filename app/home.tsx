@@ -15,6 +15,7 @@ import { templateRepository, WorkoutTemplate } from '../src/features/templates';
 import { profileService } from '../src/features/profile';
 import { guestStorage } from '../src/lib/storage';
 import { spacing, colors, radii } from '../src/constants/theme';
+import { env } from '../src/config/env';
 
 const useFocusEffect =
   routerFocusEffect ||
@@ -633,8 +634,8 @@ export default function HomeScreen() {
           />
 
           <View style={styles.appFooter}>
-            <Text variant="caption" color="muted" style={styles.appFooterText}>
-              BeBig 2.0 • Developed by Aditya Patil
+            <Text variant="caption" color="muted" style={styles.appFooterText} testID="app-version-indicator">
+              BeBig 2.0 v{env.version} • Developed by Aditya Patil
             </Text>
           </View>
         </View>
