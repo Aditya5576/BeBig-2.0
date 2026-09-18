@@ -260,7 +260,8 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    paddingVertical: spacing.md,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xxl + spacing.lg,
     gap: spacing.lg,
   },
   header: {
@@ -272,9 +273,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
     alignSelf: 'flex-start',
   },
-  backButtonText: {
-    fontSize: 17,
-  },
+  backButtonText: {},
   titleArea: {
     gap: spacing.xs,
   },

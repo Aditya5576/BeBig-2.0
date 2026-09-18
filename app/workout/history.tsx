@@ -351,8 +351,9 @@ export default function WorkoutHistoryScreen() {
                           <Pressable
                             onPress={() => router.push(`/workout/history/${item.id}` as any)}
                             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            style={styles.viewDetailsButton}
                           >
-                            <Text variant="caption" color="accent" style={styles.viewDetailsText}>
+                            <Text variant="caption" style={styles.viewDetailsText}>
                               View Details ›
                             </Text>
                           </Pressable>
@@ -373,7 +374,8 @@ export default function WorkoutHistoryScreen() {
 const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
-    paddingVertical: spacing.md,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xxl + spacing.lg,
     gap: spacing.lg,
   },
   header: {
@@ -385,9 +387,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
     alignSelf: 'flex-start',
   },
-  backButtonText: {
-    fontSize: 17,
-  },
+  backButtonText: {},
   titleContainer: {
     gap: spacing.xs,
   },
@@ -469,7 +469,6 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   workoutName: {
-    fontSize: 18,
     fontWeight: '700',
   },
   metricsRow: {
@@ -512,10 +511,13 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   renameButton: {
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
     borderRadius: radii.sm,
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    minHeight: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   renameButtonText: {
     color: colors.dark.primary,
@@ -523,18 +525,32 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   deleteButton: {
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
     borderRadius: radii.sm,
     backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    minHeight: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   deleteButtonText: {
     color: colors.dark.error,
     fontWeight: '600',
     fontSize: 12,
   },
+  viewDetailsButton: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.sm,
+    backgroundColor: 'rgba(56, 189, 248, 0.1)',
+    minHeight: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   viewDetailsText: {
-    fontWeight: '700',
+    color: colors.dark.primary,
+    fontWeight: '600',
+    fontSize: 12,
   },
   editModeContainer: {
     flex: 1,
