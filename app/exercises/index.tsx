@@ -154,16 +154,10 @@ export default function ExerciseListScreen() {
               </Text>
             </View>
 
-            {item.isCustom ? (
+            {item.isCustom && (
               <View style={styles.customBadge} testID="custom-badge">
                 <Text variant="caption" color="accent" style={styles.badgeText}>
                   CUSTOM
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.providerBadge}>
-                <Text variant="caption" color="muted" style={styles.badgeText}>
-                  WGER
                 </Text>
               </View>
             )}
@@ -266,7 +260,7 @@ export default function ExerciseListScreen() {
       {/* Offline/Cached Subtle Banner */}
       {isCachedOnly && (
         <View testID="exercise-offline-banner" style={styles.offlineBanner}>
-          <Text variant="caption" color="accent" style={styles.offlineBannerText}>
+          <Text variant="caption" color="primary" style={styles.offlineBannerText}>
             ⚡ Offline / Weak Network — Showing Cached Movements
           </Text>
         </View>
@@ -391,7 +385,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   listContent: {
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.sm,
+    paddingBottom: spacing.xxl + spacing.xl,
     gap: spacing.sm,
   },
   cardPressable: {
@@ -419,17 +414,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xs + 2,
     paddingVertical: 2,
     borderRadius: radii.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  providerBadge: {
-    backgroundColor: colors.dark.surfaceElevated,
-    borderColor: colors.dark.border,
-    borderWidth: 1,
-    paddingHorizontal: spacing.xs + 2,
-    paddingVertical: 2,
-    borderRadius: radii.sm,
-  },
+
   badgeText: {
-    fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.5,
   },
@@ -468,8 +457,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   offlineBannerText: {
-    fontSize: 11,
     fontWeight: '600',
     letterSpacing: 0.3,
   },
 });
+
