@@ -809,11 +809,23 @@ export default function SettingsScreen() {
                   <Text variant="caption" color="muted">
                     Preferred Days
                   </Text>
-                  <Text variant="bodyBold" color="accent" testID="profile-view-days">
-                    {storeDays && storeDays.length > 0
-                      ? storeDays.map((d) => d.slice(0, 3).toUpperCase()).join(', ')
-                      : 'Flexible'}
-                  </Text>
+                  <View style={styles.daysBadgeRow} testID="profile-view-days">
+                    {storeDays && storeDays.length > 0 ? (
+                      storeDays.map((d) => (
+                        <View key={d} style={styles.dayBadge}>
+                          <Text variant="caption" color="accent" style={styles.dayBadgeText}>
+                            {d.slice(0, 3).toUpperCase()}
+                          </Text>
+                        </View>
+                      ))
+                    ) : (
+                      <View style={styles.dayBadge}>
+                        <Text variant="caption" color="secondary" style={styles.dayBadgeText}>
+                          Flexible
+                        </Text>
+                      </View>
+                    )}
+                  </View>
                 </View>
               </View>
             </Card>
@@ -1235,7 +1247,7 @@ export default function SettingsScreen() {
             title={isGuest ? 'Exit Guest Mode' : 'Log Out'}
             onPress={handleSignOut}
             variant="outline"
-            size="lg"
+            size="md"
             style={styles.logoutButton}
           />
 
@@ -1277,7 +1289,6 @@ export default function SettingsScreen() {
               onPress={handleDevResetOnboarding}
               variant="ghost"
               size="sm"
-              style={styles.devResetButton}
             />
           </View>
         </Card>
@@ -1312,7 +1323,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingVertical: spacing.md,
     gap: spacing.md,
-    paddingBottom: spacing.xxl * 2,
+    paddingBottom: spacing.xxl * 3,
   },
   header: {
     gap: spacing.xs,
@@ -1371,7 +1382,7 @@ const styles = StyleSheet.create({
   avatarWrapper: {
     width: 64,
     height: 64,
-    borderRadius: 32,
+    borderRadius: radii.full,
     overflow: 'hidden',
     borderWidth: 2,
     borderColor: '#E5A93C',
@@ -1431,14 +1442,12 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     fontWeight: '700',
-    fontSize: 11,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   guestBadgeText: {
     color: colors.dark.textSecondary,
     fontWeight: '700',
-    fontSize: 11,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
@@ -1453,6 +1462,24 @@ const styles = StyleSheet.create({
   noBorder: {
     borderBottomWidth: 0,
     paddingBottom: 0,
+  },
+  daysBadgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    alignItems: 'center',
+  },
+  dayBadge: {
+    backgroundColor: 'rgba(229, 169, 60, 0.12)',
+    borderColor: 'rgba(229, 169, 60, 0.3)',
+    borderWidth: 1,
+    borderRadius: radii.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+  },
+  dayBadgeText: {
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   formRow: {
     flexDirection: 'row',
@@ -1472,7 +1499,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     color: colors.dark.textPrimary,
-    fontSize: 15,
+    fontSize: 16,
   },
   profileViewContainer: {
     gap: 0,
@@ -1487,7 +1514,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    fontSize: 13,
   },
   optionsList: {
     gap: spacing.sm,
@@ -1517,10 +1543,10 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(239, 68, 68, 0.4)',
   },
   deletionNoticeBox: {
-    marginTop: spacing.sm,
-    padding: spacing.sm,
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    borderRadius: radii.sm,
+    marginTop: spacing.md,
+    padding: spacing.md,
+    backgroundColor: colors.dark.surfaceElevated,
+    borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.dark.border,
     gap: spacing.xs,
@@ -1529,10 +1555,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    fontSize: 11,
   },
   deletionText: {
-    lineHeight: 16,
+    lineHeight: 18,
   },
   appInfoContent: {
     gap: spacing.xs,
@@ -1556,7 +1581,7 @@ const styles = StyleSheet.create({
   previewAvatarWrapper: {
     width: 48,
     height: 48,
-    borderRadius: 24,
+    borderRadius: radii.full,
     overflow: 'hidden',
     backgroundColor: colors.dark.surfaceSubtle,
     alignItems: 'center',
@@ -1565,7 +1590,7 @@ const styles = StyleSheet.create({
   avatarPreviewImage: {
     width: 48,
     height: 48,
-    borderRadius: 24,
+    borderRadius: radii.full,
   },
   previewTextCol: {
     flex: 1,
@@ -1607,20 +1632,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   devToolsCard: {
-    borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.25)',
-    backgroundColor: 'rgba(239, 68, 68, 0.03)',
+    backgroundColor: colors.dark.surface,
+    borderColor: colors.dark.borderLight,
+    padding: spacing.md,
     gap: spacing.sm,
   },
   devToolsHeading: {
-    fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.8,
-    color: '#EF4444',
+    color: colors.dark.textMuted,
   },
   devToolsDesc: {
-    fontSize: 11,
-    lineHeight: 15,
+    lineHeight: 18,
   },
   devActionsRow: {
     flexDirection: 'row',
@@ -1630,8 +1653,5 @@ const styles = StyleSheet.create({
   },
   devButton: {
     borderColor: colors.dark.borderLight,
-  },
-  devResetButton: {
-    opacity: 0.8,
   },
 });
