@@ -992,69 +992,76 @@ export default function SettingsScreen() {
                     ) : null}
                   </View>
 
-                  {/* Web File Upload if supported */}
-                  {Platform.OS === 'web' && typeof document !== 'undefined' && (
-                    <View style={styles.uploadRow}>
-                      <input
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp,image/gif"
-                        style={{ display: 'none' }}
-                        ref={fileInputRef}
-                        onChange={(e: any) => {
-                          const file = e.target?.files?.[0];
-                          if (!file) return;
-                          const validation = avatarService.validateAvatarFile(file);
-                          if (!validation.valid) {
-                            setErrorMessage(validation.error || 'Invalid image file.');
-                            return;
-                          }
-                          setErrorMessage(null);
-                          pendingAvatarFileRef.current = { file, mimeType: file.type || 'image/jpeg' };
+                  {/* Custom Avatar Grouping */}
+                  <View style={styles.avatarCustomGroup}>
+                    <Text variant="caption" color="muted">
+                      Custom Avatar Photo or Image URL:
+                    </Text>
 
-                          if (typeof URL !== 'undefined' && URL.createObjectURL) {
-                            const previewUrl = URL.createObjectURL(file);
-                            editAvatarUrlRef.current = previewUrl;
-                            setEditAvatarUrl(previewUrl);
-                          } else {
-                            const reader = new FileReader();
-                            reader.onload = (uploadEvent) => {
-                              const result = uploadEvent.target?.result as string;
-                              if (result) {
-                                editAvatarUrlRef.current = result;
-                                setEditAvatarUrl(result);
-                              }
-                            };
-                            reader.readAsDataURL(file);
-                          }
-                          // Clear input value to allow re-selection of the same file
-                          e.target.value = '';
-                        }}
-                      />
-                      <Button
-                        testID="upload-avatar-button"
-                        title={uploadingAvatar ? 'Uploading...' : '📷 Upload Photo'}
-                        variant="secondary"
-                        size="sm"
-                        disabled={uploadingAvatar}
-                        onPress={() => fileInputRef.current?.click()}
-                        style={styles.uploadButton}
-                      />
-                    </View>
-                  )}
+                    {/* Web File Upload if supported */}
+                    {Platform.OS === 'web' && typeof document !== 'undefined' && (
+                      <View style={styles.uploadRow}>
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,image/gif"
+                          style={{ display: 'none' }}
+                          ref={fileInputRef}
+                          onChange={(e: any) => {
+                            const file = e.target?.files?.[0];
+                            if (!file) return;
+                            const validation = avatarService.validateAvatarFile(file);
+                            if (!validation.valid) {
+                              setErrorMessage(validation.error || 'Invalid image file.');
+                              return;
+                            }
+                            setErrorMessage(null);
+                            pendingAvatarFileRef.current = { file, mimeType: file.type || 'image/jpeg' };
 
-                  {/* Avatar URL Text Input */}
-                  <TextInput
-                    testID="input-avatar-url"
-                    value={editAvatarUrl}
-                    onChangeText={(val) => {
-                      editAvatarUrlRef.current = val;
-                      setEditAvatarUrl(val);
-                    }}
-                    placeholder="Or enter image URL (https://...)"
-                    placeholderTextColor={colors.dark.textMuted}
-                    style={styles.textInput}
-                    autoCapitalize="none"
-                  />
+                            if (typeof URL !== 'undefined' && URL.createObjectURL) {
+                              const previewUrl = URL.createObjectURL(file);
+                              editAvatarUrlRef.current = previewUrl;
+                              setEditAvatarUrl(previewUrl);
+                            } else {
+                              const reader = new FileReader();
+                              reader.onload = (uploadEvent) => {
+                                const result = uploadEvent.target?.result as string;
+                                if (result) {
+                                  editAvatarUrlRef.current = result;
+                                  setEditAvatarUrl(result);
+                                }
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                            // Clear input value to allow re-selection of the same file
+                            e.target.value = '';
+                          }}
+                        />
+                        <Button
+                          testID="upload-avatar-button"
+                          title={uploadingAvatar ? 'Uploading...' : '📷 Upload Photo'}
+                          variant="secondary"
+                          size="sm"
+                          disabled={uploadingAvatar}
+                          onPress={() => fileInputRef.current?.click()}
+                          style={styles.uploadButton}
+                        />
+                      </View>
+                    )}
+
+                    {/* Avatar URL Text Input */}
+                    <TextInput
+                      testID="input-avatar-url"
+                      value={editAvatarUrl}
+                      onChangeText={(val) => {
+                        editAvatarUrlRef.current = val;
+                        setEditAvatarUrl(val);
+                      }}
+                      placeholder="Or enter image URL (https://...)"
+                      placeholderTextColor={colors.dark.textMuted}
+                      style={styles.textInput}
+                      autoCapitalize="none"
+                    />
+                  </View>
                 </View>
               </View>
 
@@ -1151,6 +1158,7 @@ export default function SettingsScreen() {
                   selectedValues={editPreferredDays}
                   onSelect={handleToggleDay}
                   multiSelect={true}
+                  chipStyle={styles.multiSelectDayChip}
                 />
               </View>
 
@@ -1515,12 +1523,29 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
+  multiSelectDayChip: {
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+  },
+  avatarCustomGroup: {
+    backgroundColor: colors.dark.surfaceElevated,
+    borderColor: colors.dark.border,
+    borderWidth: 1,
+    borderRadius: radii.md,
+    padding: spacing.sm,
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+  },
   optionsList: {
     gap: spacing.sm,
   },
   editActionRow: {
     gap: spacing.sm,
     marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.dark.border,
   },
   saveButton: {
     width: '100%',
