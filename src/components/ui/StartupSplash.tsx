@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, Image, Animated, ActivityIndicator, Easing } from 'react-native';
+import { View, StyleSheet, Image, Animated, ActivityIndicator, Easing, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from './Text';
 import { colors, spacing } from '../../constants/theme';
@@ -20,13 +20,13 @@ export function StartupSplash({ testID = 'startup-splash-screen' }: StartupSplas
         toValue: 1,
         duration: 550,
         easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== 'web',
       }),
       Animated.spring(scaleAnim, {
         toValue: 1,
         friction: 8,
         tension: 40,
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== 'web',
       }),
     ]).start();
 
@@ -37,13 +37,13 @@ export function StartupSplash({ testID = 'startup-splash-screen' }: StartupSplas
           toValue: 1,
           duration: 1800,
           easing: Easing.inOut(Easing.quad),
-          useNativeDriver: true,
+          useNativeDriver: Platform.OS !== 'web',
         }),
         Animated.timing(breathingAnim, {
           toValue: 0,
           duration: 1800,
           easing: Easing.inOut(Easing.quad),
-          useNativeDriver: true,
+          useNativeDriver: Platform.OS !== 'web',
         }),
       ]),
     );
