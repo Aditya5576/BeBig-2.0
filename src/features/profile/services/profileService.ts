@@ -170,100 +170,70 @@ export const profileService: IProfileService = {
         ? Boolean(data.onboarding_completed)
         : false;
 
-    const payload: Partial<ProfileUpsertPayload> = {
-      ...data,
-      id: userId,
-      onboarding_completed: resolvedOnboardingCompleted,
-    };
-
-    if (isSupabaseConfigured()) {
-      try {
-        const { data: updated, error } = await supabase
-          .from('profiles')
-          .upsert(payload)
-          .select()
-          .single();
-
-        if (!error && updated) {
-          const profile = {
-            ...(updated as UserProfile),
-            onboarding_completed: resolvedOnboardingCompleted,
-          };
-          await writeLocalProfile(userId, profile);
-          try {
-            const { useAuthStore } = require('../../auth/store/useAuthStore');
-            useAuthStore.getState().updateUserProfile(profile);
-          } catch {
-            // Silently handled
-          }
-          try {
-            await supabase.auth.updateUser({
-              data: {
-                profile,
-                onboarding_completed: resolvedOnboardingCompleted,
-              },
-            });
-          } catch {
-            // Silently handled
-          }
-          return profile;
-        }
-      } catch {
-        // Fallback to local profile cache and auth metadata below
-      }
-    }
-
     const merged: UserProfile = {
       id: userId,
-      display_name:
-        data.display_name !== undefined ? data.display_name : (existing?.display_name ?? null),
+      display_name: data.display_name !== undefined ? data.display_name : (existing?.display_name ?? null),
       age: data.age !== undefined ? data.age : (existing?.age ?? null),
       height: data.height !== undefined ? data.height : (existing?.height ?? null),
       weight: data.weight !== undefined ? data.weight : (existing?.weight ?? null),
-      avatar_url:
-        data.avatar_url !== undefined ? data.avatar_url : (existing?.avatar_url ?? null),
+      avatar_url: data.avatar_url !== undefined ? data.avatar_url : (existing?.avatar_url ?? null),
       goal: data.goal !== undefined ? data.goal : (existing?.goal ?? null),
-      experience_level:
-        data.experience_level !== undefined
-          ? data.experience_level
-          : (existing?.experience_level ?? null),
-      days_per_week:
-        data.days_per_week !== undefined ? data.days_per_week : (existing?.days_per_week ?? null),
-      workout_duration:
-        data.workout_duration !== undefined
-          ? data.workout_duration
-          : (existing?.workout_duration ?? null),
+      experience_level: data.experience_level !== undefined ? data.experience_level : (existing?.experience_level ?? null),
+      days_per_week: data.days_per_week !== undefined ? data.days_per_week : (existing?.days_per_week ?? null),
+      workout_duration: data.workout_duration !== undefined ? data.workout_duration : (existing?.workout_duration ?? null),
       training_location: data.training_location || existing?.training_location || 'gym',
       equipment: data.equipment !== undefined ? data.equipment : (existing?.equipment ?? null),
-      preferred_training_days:
-        data.preferred_training_days !== undefined
-          ? data.preferred_training_days
-          : (existing?.preferred_training_days ?? []),
-      workout_style:
-        data.workout_style !== undefined ? data.workout_style : (existing?.workout_style ?? null),
+      preferred_training_days: data.preferred_training_days !== undefined ? data.preferred_training_days : (existing?.preferred_training_days ?? []),
+      workout_style: data.workout_style !== undefined ? data.workout_style : (existing?.workout_style ?? null),
       onboarding_completed: resolvedOnboardingCompleted,
     };
 
-    if (isSupabaseConfigured()) {
-      try {
-        await supabase.auth.updateUser({
-          data: {
-            profile: merged,
-            onboarding_completed: resolvedOnboardingCompleted,
-          },
-        });
-      } catch {
-        // Silently handled
-      }
-    }
-
+    // 1. Save local and auth_metadata first (recovery/fallback)
     await writeLocalProfile(userId, merged);
     try {
       const { useAuthStore } = require('../../auth/store/useAuthStore');
       useAuthStore.getState().updateUserProfile(merged);
-    } catch {
-      // Silently handled
+    } catch {}
+
+    if (isSupabaseConfigured()) {
+      // 2. Write to public.profiles (AUTHORITATIVE)
+      const { data: updated, error } = await supabase
+        .from('profiles')
+        .upsert(merged)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('[PROFILE] Cloud upsert failed:', error.message);
+        throw new Error(error.message || 'Failed to save profile to cloud database.');
+      }
+
+      if (updated) {
+        const cloudProfile = {
+          ...(updated as UserProfile),
+          onboarding_completed: resolvedOnboardingCompleted,
+        };
+
+        // 3. Keep auth metadata updated for cross-device fallback compatibility AFTER DB success
+        try {
+          await supabase.auth.updateUser({
+            data: {
+              profile: cloudProfile,
+              onboarding_completed: resolvedOnboardingCompleted,
+            },
+          });
+        } catch {}
+
+        // Re-write local with confirmed cloud data
+        await writeLocalProfile(userId, cloudProfile);
+        try {
+          const { useAuthStore } = require('../../auth/store/useAuthStore');
+          useAuthStore.getState().updateUserProfile(cloudProfile);
+        } catch {}
+        return cloudProfile;
+      }
     }
+
     return merged;
   },
 
