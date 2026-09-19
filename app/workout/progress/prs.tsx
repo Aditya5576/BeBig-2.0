@@ -180,7 +180,10 @@ export default function PersonalRecordsScreen() {
                           params: { id: pr.exerciseId, name: pr.exerciseName },
                         } as any)
                       }
-                      style={styles.prPressable}
+                      style={({ pressed }) => [
+                        styles.prPressable,
+                        pressed && styles.prPressablePressed,
+                      ]}
                     >
                       <View style={styles.prMainRow}>
                         {/* Rank Badge */}
@@ -193,10 +196,10 @@ export default function PersonalRecordsScreen() {
                         {/* Exercise & Date Info */}
                         <View style={styles.prInfo}>
                           <Text
-                            variant="titleMedium"
+                            variant="bodyBold"
                             color="primary"
                             style={styles.exerciseName}
-                            numberOfLines={1}
+                            numberOfLines={2}
                             testID={`pr-name-${pr.exerciseId}`}
                           >
                             {pr.exerciseName}
@@ -214,7 +217,7 @@ export default function PersonalRecordsScreen() {
                         {/* Max Weight Display */}
                         <View style={styles.weightContainer}>
                           <Text
-                            variant="titleLarge"
+                            variant="titleMedium"
                             color="accent"
                             style={styles.weightValue}
                             testID={`pr-weight-${pr.exerciseId}`}
@@ -244,27 +247,27 @@ export default function PersonalRecordsScreen() {
 
 const styles = StyleSheet.create({
   scrollContent: {
-    paddingBottom: spacing.xxl,
+    paddingBottom: spacing.xxl * 3,
   },
   header: {
-    paddingTop: spacing.md,
-    paddingBottom: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
   },
   backButton: {
     alignSelf: 'flex-start',
     paddingVertical: spacing.xs,
     paddingRight: spacing.md,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
   },
   backButtonText: {
-    fontSize: 16,
+    fontWeight: '700',
   },
   titleContainer: {
     marginTop: spacing.xs,
   },
   trophyBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
     borderRadius: radii.full,
@@ -288,6 +291,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     marginTop: spacing.md,
     borderRadius: radii.lg,
+    backgroundColor: colors.dark.surface,
+    borderColor: colors.dark.border,
   },
   emptyIconContainer: {
     width: 64,
@@ -319,76 +324,82 @@ const styles = StyleSheet.create({
   summaryGrid: {
     flexDirection: 'row',
     gap: spacing.sm,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
   },
   summaryCard: {
     flex: 1,
-    padding: spacing.sm,
+    padding: spacing.sm + 2,
     borderRadius: radii.md,
-    justifyContent: 'center',
+    backgroundColor: colors.dark.surface,
+    borderColor: colors.dark.border,
+    justifyContent: 'space-between',
+    gap: spacing.xs,
   },
   summaryLabel: {
-    fontSize: 10,
     fontWeight: '700',
-    letterSpacing: 0.5,
-    marginBottom: 2,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
   },
   summaryValue: {
-    fontWeight: '800',
-    marginVertical: 2,
+    fontWeight: '700',
   },
   listHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'baseline',
-    marginBottom: spacing.sm,
+    alignItems: 'center',
+    marginBottom: spacing.xs + 2,
     paddingHorizontal: spacing.xs,
   },
   recordsList: {
-    gap: spacing.sm,
+    gap: spacing.xs + 2,
   },
   prCard: {
     padding: 0,
     borderRadius: radii.md,
+    backgroundColor: colors.dark.surface,
+    borderColor: colors.dark.border,
     overflow: 'hidden',
   },
   prPressable: {
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 2,
+    paddingVertical: spacing.sm,
+  },
+  prPressablePressed: {
+    backgroundColor: colors.dark.surfaceElevated,
   },
   prMainRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   rankContainer: {
-    width: 32,
+    width: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: spacing.sm,
+    marginRight: spacing.xs + 2,
   },
   rankText: {
-    fontSize: 16,
+    fontWeight: '700',
   },
   prInfo: {
     flex: 1,
+    flexShrink: 1,
     paddingRight: spacing.sm,
   },
   exerciseName: {
     fontWeight: '700',
-    marginBottom: 2,
+    lineHeight: 20,
   },
   achievedDate: {
-    fontSize: 12,
+    marginTop: 2,
   },
   weightContainer: {
     alignItems: 'flex-end',
     marginRight: spacing.xs,
   },
   weightValue: {
-    fontWeight: '800',
+    fontWeight: '700',
   },
   chevron: {
-    fontSize: 18,
     marginLeft: spacing.xs,
   },
 });
