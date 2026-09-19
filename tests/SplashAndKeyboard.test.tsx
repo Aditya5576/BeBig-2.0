@@ -57,15 +57,16 @@ describe('BeBig 2.0 — Startup Splash & Keyboard Overlap Fix', () => {
   });
 
   describe('Objective 2: Startup Splash Screen', () => {
-    it('3: StartupSplash renders BeBig branding, tagline, and loading indicator', async () => {
+    it('3: StartupSplash renders BeBig branding, athletic manifesto, and loading indicator', async () => {
       const { getByTestId, getByText } = await render(<StartupSplash />);
 
       expect(getByTestId('startup-splash-screen')).toBeTruthy();
       expect(getByText('BEBIG')).toBeTruthy();
-      expect(getByText('Your workout. Your progress. Your BeBig.')).toBeTruthy();
+      expect(getByText('ATHLETIC OVERLOAD INTELLIGENCE')).toBeTruthy();
+      expect(getByText('BUILD • TRACK • BECOME')).toBeTruthy();
       expect(getByText('Developed by Aditya Patil')).toBeTruthy();
       expect(getByTestId('auth-loading-indicator')).toBeTruthy();
-      expect(getByTestId('splash-athlete-image')).toBeTruthy();
+      expect(getByTestId('splash-brand-mark')).toBeTruthy();
     });
 
     it('4: app.json configures native Expo splash with athlete asset and dark obsidian background', () => {
