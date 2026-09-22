@@ -1,16 +1,35 @@
-import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
+import { useAppTheme } from '../../../src/features/theme';
+import React, { useEffect, useState, useRef } from 'react';
+import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, TextInput } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ScreenContainer, Text, Button, Card } from '../../../src/components/ui';
 import { workoutRepository, WorkoutSession } from '../../../src/features/workout';
-import { colors, spacing, radii } from '../../../src/constants/theme';
+import { templateRepository } from '../../../src/features/templates';
+import { convertWorkoutToTemplateInput } from '../summary';
+import { spacing, radii } from '../../../src/constants/theme';
 
 export default function WorkoutHistoryDetailScreen() {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id?: string }>();
 
   const [workout, setWorkout] = useState<WorkoutSession | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Save as Template state
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [templateNameInput, setTemplateNameInput] = useState('');
+  const templateNameInputRef = useRef('');
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const [templateSaved, setTemplateSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const updateTemplateName = (val: string) => {
+    templateNameInputRef.current = val;
+    setTemplateNameInput(val);
+  };
 
   useEffect(() => {
     async function loadWorkoutDetail() {
@@ -29,6 +48,29 @@ export default function WorkoutHistoryDetailScreen() {
 
     void loadWorkoutDetail();
   }, [id]);
+
+  const handleConfirmSaveTemplate = async () => {
+    if (!workout) return;
+    const nameToUse = templateNameInputRef.current !== undefined ? templateNameInputRef.current : templateNameInput;
+    if (!nameToUse || !nameToUse.trim()) {
+      setSaveError('Template name is required.');
+      return;
+    }
+
+    setSavingTemplate(true);
+    setSaveError(null);
+
+    try {
+      const input = convertWorkoutToTemplateInput(workout, nameToUse);
+      await templateRepository.createTemplate(input);
+      setTemplateSaved(true);
+      setShowSaveModal(false);
+    } catch (err: any) {
+      setSaveError(err?.message || 'Failed to save template. Please try again.');
+    } finally {
+      setSavingTemplate(false);
+    }
+  };
 
   const formatCompletedDate = (dateStr?: string) => {
     if (!dateStr) return 'Recent';
@@ -56,7 +98,7 @@ export default function WorkoutHistoryDetailScreen() {
     return (
       <ScreenContainer>
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={colors.dark.primary} />
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
       </ScreenContainer>
     );
@@ -124,11 +166,7 @@ export default function WorkoutHistoryDetailScreen() {
               <Text variant="caption" color="muted" style={styles.metricLabel}>
                 DURATION
               </Text>
-              <Text
-                variant="numeric"
-                color="primary"
-                testID="history-detail-duration"
-              >
+              <Text variant="numeric" color="primary" testID="history-detail-duration">
                 {formatDuration(workout.totalDuration)}
               </Text>
             </Card>
@@ -137,11 +175,7 @@ export default function WorkoutHistoryDetailScreen() {
               <Text variant="caption" color="muted" style={styles.metricLabel}>
                 TOTAL VOLUME
               </Text>
-              <Text
-                variant="numeric"
-                color="primary"
-                testID="history-detail-volume"
-              >
+              <Text variant="numeric" color="primary" testID="history-detail-volume">
                 {(workout.totalVolume ?? 0).toLocaleString()} kg
               </Text>
             </Card>
@@ -152,11 +186,7 @@ export default function WorkoutHistoryDetailScreen() {
               <Text variant="caption" color="muted" style={styles.metricLabel}>
                 EXERCISES
               </Text>
-              <Text
-                variant="numeric"
-                color="primary"
-                testID="history-detail-exercises-count"
-              >
+              <Text variant="numeric" color="primary" testID="history-detail-exercises-count">
                 {displayExercises.length}
               </Text>
             </Card>
@@ -165,11 +195,7 @@ export default function WorkoutHistoryDetailScreen() {
               <Text variant="caption" color="muted" style={styles.metricLabel}>
                 COMPLETED SETS
               </Text>
-              <Text
-                variant="numeric"
-                color="primary"
-                testID="history-detail-sets-count"
-              >
+              <Text variant="numeric" color="primary" testID="history-detail-sets-count">
                 {workout.completedSetsCount ?? 0}
               </Text>
             </Card>
@@ -248,12 +274,91 @@ export default function WorkoutHistoryDetailScreen() {
             );
           })}
         </View>
+
+        {/* Save as Template Section */}
+        <View style={styles.templateSection}>
+          {templateSaved ? (
+            <View testID="save-template-success" style={styles.successBox}>
+              <Text variant="bodyBold" color="accent">
+                ✓ Saved to My Templates!
+              </Text>
+              <Button
+                testID="view-my-templates-button"
+                title="View My Templates"
+                onPress={() => router.push('/templates' as any)}
+                variant="ghost"
+                size="sm"
+              />
+            </View>
+          ) : !showSaveModal ? (
+            <Button
+              testID="history-save-template-button"
+              title="Save as Template"
+              onPress={() => {
+                const defaultName = workout.name || 'Quick Workout';
+                updateTemplateName(defaultName);
+                setSaveError(null);
+                setShowSaveModal(true);
+              }}
+              variant="outline"
+              size="lg"
+              style={styles.saveTemplateButton}
+            />
+          ) : (
+            <Card style={styles.saveModalCard} testID="template-save-modal">
+              <Text variant="titleMedium" color="primary">
+                Save as Template
+              </Text>
+              <Text variant="caption" color="secondary">
+                Convert this historical workout into a reusable template plan.
+              </Text>
+
+              {saveError ? (
+                <Text testID="save-template-error" variant="caption" style={styles.errorText}>
+                  ⚠ {saveError}
+                </Text>
+              ) : null}
+
+              <TextInput
+                testID="input-template-name"
+                value={templateNameInput}
+                onChangeText={updateTemplateName}
+                placeholder="e.g. Historical Workout Template"
+                placeholderTextColor={colors.textMuted}
+                style={styles.textInput}
+              />
+
+              <View style={styles.modalActionsRow}>
+                <Button
+                  testID="confirm-save-template-button"
+                  title={savingTemplate ? 'Saving...' : 'Save Template'}
+                  onPress={handleConfirmSaveTemplate}
+                  variant="primary"
+                  size="md"
+                  disabled={savingTemplate}
+                  style={styles.confirmSaveButton}
+                />
+                <Button
+                  testID="cancel-save-template-button"
+                  title="Cancel"
+                  onPress={() => {
+                    setShowSaveModal(false);
+                    setSaveError(null);
+                  }}
+                  variant="ghost"
+                  size="md"
+                  disabled={savingTemplate}
+                />
+              </View>
+            </Card>
+          )}
+        </View>
       </ScrollView>
     </ScreenContainer>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -281,10 +386,10 @@ const styles = StyleSheet.create({
   },
   historyBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: colors.dark.surfaceElevated,
+    backgroundColor: colors.surfaceElevated,
     borderRadius: radii.xs,
     borderWidth: 1,
-    borderColor: colors.dark.borderLight,
+    borderColor: colors.borderLight,
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
   },
@@ -303,7 +408,7 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: spacing.md,
     gap: 4,
-    backgroundColor: colors.dark.surfaceElevated,
+    backgroundColor: colors.surfaceElevated,
   },
   metricLabel: {
     fontWeight: '800',
@@ -316,7 +421,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   exerciseCard: {
-    backgroundColor: colors.dark.surfaceElevated,
+    backgroundColor: colors.surfaceElevated,
     padding: spacing.md,
     gap: spacing.sm,
   },
@@ -325,7 +430,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     borderBottomWidth: 1,
-    borderBottomColor: colors.dark.borderLight,
+    borderBottomColor: colors.borderLight,
     paddingBottom: spacing.xs,
   },
   exerciseTitleGroup: {
@@ -336,7 +441,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   setsBadge: {
-    backgroundColor: colors.dark.surface,
+    backgroundColor: colors.surface,
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
     borderRadius: radii.xs,
@@ -353,7 +458,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingVertical: spacing.xs + 2,
     borderBottomWidth: 1,
-    borderBottomColor: colors.dark.border,
+    borderBottomColor: colors.border,
     flexWrap: 'wrap',
   },
   lastSetRow: {
@@ -378,5 +483,49 @@ const styles = StyleSheet.create({
   },
   notFoundButton: {
     minWidth: 160,
+  },
+  templateSection: {
+    marginTop: spacing.xs,
+  },
+  saveTemplateButton: {
+    minHeight: 48,
+  },
+  saveModalCard: {
+    padding: spacing.md,
+    gap: spacing.sm,
+    backgroundColor: colors.surfaceElevated,
+    borderColor: colors.border,
+  },
+  textInput: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    color: colors.textPrimary,
+    fontSize: 15,
+  },
+  modalActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  confirmSaveButton: {
+    flex: 1,
+  },
+  successBox: {
+    backgroundColor: 'rgba(34, 197, 94, 0.12)',
+    borderColor: 'rgba(34, 197, 94, 0.4)',
+    borderWidth: 1,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  errorText: {
+    color: colors.error,
+    fontWeight: '700',
   },
 });

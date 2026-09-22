@@ -1,3 +1,4 @@
+import { useAppTheme } from '../../src/features/theme';
 import React, { useState } from 'react';
 import {
   View,
@@ -14,7 +15,7 @@ import { authService, useAuthStore, resolveAuthenticatedUserRoute } from '../../
 import { profileService } from '../../src/features/profile';
 import { supabase, isSupabaseConfigured } from '../../src/lib/supabase';
 import { getAuthRedirectUrl } from '../../src/features/auth/utils/redirect';
-import { spacing, colors, radii } from '../../src/constants/theme';
+import { spacing, radii } from '../../src/constants/theme';
 
 type EmailMode = 'sign_in' | 'sign_up';
 
@@ -39,6 +40,9 @@ export default function AuthScreen({
   initialStatusMessage = null,
   initialEmail = '',
 }: AuthScreenProps = {}) {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+
   const router = useRouter();
   const searchParams = useLocalSearchParams<{ mode?: string; email?: string }>();
   const completeOnboarding = useOnboardingStore((state) => state.completeOnboarding);
@@ -669,7 +673,7 @@ export default function AuthScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   topNavRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -693,9 +697,9 @@ const styles = StyleSheet.create({
     marginTop: -2,
   },
   brandBadge: {
-    backgroundColor: colors.dark.surfaceElevated,
+    backgroundColor: colors.surfaceElevated,
     borderWidth: 1,
-    borderColor: colors.dark.borderLight,
+    borderColor: colors.borderLight,
     paddingHorizontal: spacing.sm + 4,
     paddingVertical: 3,
     borderRadius: radii.full,
@@ -729,26 +733,26 @@ const styles = StyleSheet.create({
   headingSubtitle: {
     fontSize: 14,
     lineHeight: 20,
-    color: colors.dark.textSecondary,
+    color: colors.textSecondary,
   },
   unconfiguredCard: {
-    backgroundColor: colors.dark.surfaceElevated,
-    borderColor: colors.dark.warning,
+    backgroundColor: colors.surfaceElevated,
+    borderColor: colors.warning,
     gap: spacing.xs,
   },
   cardBadge: {
     fontWeight: '700',
   },
   statusCard: {
-    backgroundColor: colors.dark.surfaceElevated,
-    borderColor: colors.dark.borderLight,
+    backgroundColor: colors.surfaceElevated,
+    borderColor: colors.borderLight,
   },
   statusCardError: {
-    borderColor: colors.dark.error,
+    borderColor: colors.error,
     backgroundColor: '#2A1215',
   },
   statusCardSuccess: {
-    borderColor: colors.dark.success,
+    borderColor: colors.success,
     backgroundColor: '#0F291E',
   },
   statusBannerTitle: {
@@ -760,11 +764,11 @@ const styles = StyleSheet.create({
   },
   modeTabs: {
     flexDirection: 'row',
-    backgroundColor: colors.dark.surface,
+    backgroundColor: colors.surface,
     borderRadius: radii.lg,
     padding: spacing.xs,
     borderWidth: 1,
-    borderColor: colors.dark.border,
+    borderColor: colors.border,
   },
   tabButton: {
     flex: 1,
@@ -773,8 +777,8 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
   },
   tabButtonActive: {
-    backgroundColor: colors.dark.surfaceElevated,
-    borderColor: colors.dark.borderLight,
+    backgroundColor: colors.surfaceElevated,
+    borderColor: colors.borderLight,
     borderWidth: 1,
   },
   tabText: {
@@ -807,8 +811,8 @@ const styles = StyleSheet.create({
     textDecorationLine: 'underline',
   },
   forgotPasswordCard: {
-    backgroundColor: colors.dark.surface,
-    borderColor: colors.dark.borderLight,
+    backgroundColor: colors.surface,
+    borderColor: colors.borderLight,
     gap: spacing.md,
     padding: spacing.md,
   },
@@ -826,7 +830,7 @@ const styles = StyleSheet.create({
     minHeight: 52,
     borderRadius: radii.lg,
     marginTop: spacing.xs,
-    shadowColor: colors.dark.primary,
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 6,
@@ -849,7 +853,7 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: colors.dark.border,
+    backgroundColor: colors.border,
   },
   dividerText: {
     letterSpacing: 1.2,
@@ -865,8 +869,8 @@ const styles = StyleSheet.create({
     borderRadius: radii.lg,
   },
   googleButton: {
-    backgroundColor: colors.dark.surfaceElevated,
-    borderColor: colors.dark.borderLight,
+    backgroundColor: colors.surfaceElevated,
+    borderColor: colors.borderLight,
     borderWidth: 1,
     minHeight: 48,
     borderRadius: radii.lg,
@@ -878,7 +882,7 @@ const styles = StyleSheet.create({
   },
   guestButton: {
     width: '100%',
-    borderColor: colors.dark.borderLight,
+    borderColor: colors.borderLight,
     borderRadius: radii.lg,
   },
   guestCaption: {

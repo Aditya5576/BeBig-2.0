@@ -1,5 +1,6 @@
+import { useAppTheme } from '../src/features/theme';
 import React, { useState, useCallback, useMemo } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable, Alert, Image } from 'react-native';
 import { useRouter, useFocusEffect as routerFocusEffect } from 'expo-router';
 import { ScreenContainer, Text, Button, Card } from '../src/components/ui';
 import { useOnboardingStore } from '../src/features/onboarding';
@@ -12,9 +13,9 @@ import {
   formatVolume,
 } from '../src/features/workout';
 import { templateRepository, WorkoutTemplate } from '../src/features/templates';
-import { profileService } from '../src/features/profile';
+import { profileService, getInitials } from '../src/features/profile';
 import { guestStorage } from '../src/lib/storage';
-import { spacing, colors, radii } from '../src/constants/theme';
+import { spacing, radii } from '../src/constants/theme';
 import { env } from '../src/config/env';
 
 const useFocusEffect =
@@ -27,6 +28,9 @@ const useFocusEffect =
   });
 
 export default function HomeScreen() {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+
   const router = useRouter();
 
   const user = useAuthStore((state) => state.user);
@@ -37,6 +41,8 @@ export default function HomeScreen() {
   const [activeWorkout, setActiveWorkout] = useState<WorkoutSession | null>(null);
   const [templates, setTemplates] = useState<WorkoutTemplate[]>([]);
   const [profileDisplayName, setProfileDisplayName] = useState<string | null>(null);
+  const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(null);
+  const [avatarLoadError, setAvatarLoadError] = useState(false);
 
   const loadDashboardData = useCallback(async () => {
     try {
@@ -47,6 +53,8 @@ export default function HomeScreen() {
         try {
           const profile = await profileService.getProfile(currentUser.id);
           setProfileDisplayName(profile?.display_name ?? null);
+          setProfileAvatarUrl(profile?.avatar_url ?? null);
+          setAvatarLoadError(false);
           if (!useOnboardingStore.getState().hasCompletedOnboarding && profile && profile.onboarding_completed) {
             const store = useOnboardingStore.getState();
             if (profile.goal) store.setGoal(profile.goal);
@@ -61,6 +69,9 @@ export default function HomeScreen() {
           // Silently handled
         }
       } else if (isGuestUser) {
+        setProfileDisplayName(null);
+        setProfileAvatarUrl(null);
+        setAvatarLoadError(false);
         try {
           const guestData = await guestStorage.getOnboardingData();
           if (guestData) {
@@ -227,6 +238,11 @@ export default function HomeScreen() {
     user?.user_metadata?.display_name ||
     (user?.email ? user.email.split('@')[0] : 'Athlete');
 
+  const initials = getInitials(
+    profileDisplayName || user?.user_metadata?.profile?.display_name || user?.user_metadata?.display_name,
+    user?.email,
+  );
+
   return (
     <ScreenContainer>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -238,6 +254,27 @@ export default function HomeScreen() {
                 {badgeText}
               </Text>
             </View>
+
+            <Pressable
+              testID="home-profile-button"
+              onPress={() => router.push('/settings' as any)}
+              accessibilityRole="button"
+              accessibilityLabel="Open Profile & Settings"
+              style={styles.headerAvatarContainer}
+            >
+              {profileAvatarUrl && !avatarLoadError ? (
+                <Image
+                  source={{ uri: profileAvatarUrl }}
+                  style={styles.headerAvatarImage}
+                  onError={() => setAvatarLoadError(true)}
+                  testID="home-avatar-image"
+                />
+              ) : (
+                <View style={styles.headerAvatarFallback} testID="home-avatar-fallback">
+                  <Text style={styles.headerAvatarInitialsText}>{initials}</Text>
+                </View>
+              )}
+            </Pressable>
           </View>
 
           <Text variant="display" color="primary" testID="home-title" style={styles.greetingTitle}>
@@ -635,7 +672,7 @@ export default function HomeScreen() {
 
           <View style={styles.appFooter}>
             <Text variant="caption" color="muted" style={styles.appFooterText} testID="app-version-indicator">
-              BeBig 2.0 v{env.version} • Developed by Aditya Patil
+              BeBig 2.0 {env.displayVersion} • Developed by Aditya Patil
             </Text>
           </View>
         </View>
@@ -644,80 +681,108 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
-    paddingVertical: spacing.md,
-    gap: spacing.lg,
+    paddingVertical: spacing.xs + 2,
+    gap: spacing.sm + 4,
   },
   loadingContainer: {
-    paddingVertical: spacing.xxl,
+    paddingVertical: spacing.lg,
     alignItems: 'center',
     justifyContent: 'center',
   },
   header: {
-    gap: spacing.xs,
+    gap: 2,
   },
   headerTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: spacing.xs,
+    marginBottom: 2,
   },
   settingsHeaderButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: colors.dark.surface,
-    borderColor: colors.dark.border,
-    borderWidth: 1,
-    paddingHorizontal: spacing.sm + 4,
-    paddingVertical: 6,
-    borderRadius: radii.full,
-    minHeight: 44,
-  },
-  settingsHeaderIcon: {
-    fontSize: 14,
-  },
-  settingsHeaderText: {
-    fontWeight: '600',
-    color: colors.dark.textSecondary,
-  },
-  badge: {
-    backgroundColor: '#0E291B',
-    borderColor: colors.dark.success,
+    gap: 4,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
     borderWidth: 1,
     paddingHorizontal: spacing.sm + 2,
     paddingVertical: 4,
     borderRadius: radii.full,
+    minHeight: 36,
+  },
+  settingsHeaderIcon: {
+    fontSize: 13,
+  },
+  settingsHeaderText: {
+    fontWeight: '600',
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  badge: {
+    backgroundColor: '#0E291B',
+    borderColor: colors.success,
+    borderWidth: 1,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radii.full,
+  },
+  headerAvatarContainer: {
+    borderRadius: radii.full,
+    overflow: 'hidden',
+  },
+  headerAvatarImage: {
+    width: 36,
+    height: 36,
+    borderRadius: radii.full,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+  },
+  headerAvatarFallback: {
+    width: 36,
+    height: 36,
+    borderRadius: radii.full,
+    backgroundColor: colors.surfaceElevated,
+    borderWidth: 1.5,
+    borderColor: colors.borderLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerAvatarInitialsText: {
+    color: colors.textPrimary,
+    fontSize: 13,
+    fontWeight: '700',
   },
   badgeText: {
-    color: colors.dark.success,
+    color: colors.success,
+    fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.5,
   },
   greetingTitle: {
-    fontSize: 28,
-    lineHeight: 34,
+    fontSize: 22,
+    lineHeight: 28,
     fontWeight: '700',
   },
   activeWorkoutCard: {
-    backgroundColor: colors.dark.surfaceElevated,
-    borderColor: colors.dark.primary,
+    backgroundColor: colors.surfaceElevated,
+    borderColor: colors.primary,
     borderWidth: 1.5,
-    padding: spacing.md,
-    gap: spacing.xs,
+    padding: spacing.sm + 2,
+    gap: 4,
   },
   activeBadgeRow: {
     flexDirection: 'row',
   },
   activeBadge: {
-    backgroundColor: colors.dark.surface,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.xs + 2,
+    paddingVertical: 2,
     borderRadius: radii.xs,
     borderWidth: 1,
-    borderColor: colors.dark.primary,
+    borderColor: colors.primary,
   },
   activeBadgeText: {
     fontSize: 10,
@@ -725,29 +790,29 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   activeWorkoutTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
   },
   activeWorkoutActions: {
     flexDirection: 'row',
     gap: spacing.sm,
-    marginTop: spacing.xs,
+    marginTop: 4,
   },
   activeResumeBtn: {
     flex: 2,
-    minHeight: 44,
+    minHeight: 40,
   },
   activeDiscardBtn: {
     flex: 1,
-    minHeight: 44,
-    borderColor: colors.dark.error,
+    minHeight: 40,
+    borderColor: colors.error,
   },
   todayCard: {
-    backgroundColor: colors.dark.surface,
-    borderColor: colors.dark.borderLight,
+    backgroundColor: colors.surface,
+    borderColor: colors.borderLight,
     borderWidth: 1.5,
-    padding: spacing.md,
-    gap: spacing.md,
+    padding: spacing.sm + 2,
+    gap: spacing.sm,
   },
   todayHeaderRow: {
     flexDirection: 'row',
@@ -759,57 +824,57 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   todayTitle: {
-    fontSize: 22,
-    lineHeight: 28,
+    fontSize: 19,
+    lineHeight: 24,
     fontWeight: '700',
   },
   todaySubtitle: {
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 17,
   },
   exercisePreviewChips: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.xs,
-    marginVertical: spacing.xs,
+    gap: 4,
+    marginVertical: 2,
   },
   exerciseChip: {
-    backgroundColor: colors.dark.surfaceElevated,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
+    backgroundColor: colors.surfaceElevated,
+    paddingHorizontal: spacing.xs + 2,
+    paddingVertical: 2,
     borderRadius: radii.xs,
     borderWidth: 1,
-    borderColor: colors.dark.border,
+    borderColor: colors.border,
   },
   todayActions: {
-    gap: spacing.md,
-    marginTop: spacing.sm,
+    gap: spacing.xs + 2,
+    marginTop: 2,
   },
   todayStartButton: {
     width: '100%',
-    minHeight: 52,
+    minHeight: 44,
   },
   secondaryStartRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: 4,
+    paddingTop: 2,
   },
   linkAction: {
-    paddingVertical: spacing.xs,
+    paddingVertical: 2,
   },
   analyticsSection: {
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   sectionHeading: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
   },
   goalCard: {
-    backgroundColor: colors.dark.surface,
-    borderColor: colors.dark.border,
-    padding: spacing.md,
-    gap: spacing.md,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    padding: spacing.sm + 2,
+    gap: spacing.sm,
   },
   goalHeaderRow: {
     flexDirection: 'row',
@@ -817,61 +882,65 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   goalNumbers: {
-    fontSize: 20,
+    fontSize: 17,
+    lineHeight: 22,
     fontWeight: '700',
     marginTop: 2,
   },
   goalBadge: {
-    backgroundColor: colors.dark.surfaceElevated,
+    backgroundColor: colors.surfaceElevated,
     paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
+    paddingVertical: 2,
     borderRadius: radii.full,
     borderWidth: 1,
-    borderColor: colors.dark.primary,
+    borderColor: colors.primary,
   },
   goalBadgeText: {
     fontWeight: '700',
+    fontSize: 11,
   },
   progressBarTrack: {
-    height: 8,
-    backgroundColor: colors.dark.surfaceSubtle,
+    height: 6,
+    backgroundColor: colors.surfaceSubtle,
     borderRadius: radii.full,
     overflow: 'hidden',
   },
   progressBarFill: {
     height: '100%',
-    backgroundColor: colors.dark.primary,
+    backgroundColor: colors.primary,
     borderRadius: radii.full,
   },
   metricsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.sm,
+    gap: spacing.xs + 2,
   },
   metricCard: {
     flex: 1,
     minWidth: '47%',
-    backgroundColor: colors.dark.surface,
-    borderColor: colors.dark.border,
-    padding: spacing.md,
-    gap: spacing.xs,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    padding: spacing.sm + 2,
+    gap: 2,
+    borderRadius: radii.sm,
   },
   metricCardInteractive: {
-    backgroundColor: colors.dark.surfaceElevated,
-    borderColor: colors.dark.borderLight,
+    backgroundColor: colors.surfaceElevated,
+    borderColor: colors.borderLight,
     borderWidth: 1,
   },
   metricLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.5,
   },
   metricValue: {
-    fontSize: 18,
+    fontSize: 16,
+    lineHeight: 20,
     fontWeight: '700',
   },
   metricPressable: {
-    gap: spacing.xs,
+    gap: 2,
   },
   metricHeaderRow: {
     flexDirection: 'row',
@@ -879,11 +948,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   viewMoreArrow: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '700',
   },
   templatesSection: {
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
@@ -891,35 +960,37 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   templatesList: {
-    gap: spacing.sm,
+    gap: spacing.xs + 2,
   },
   templateRowCard: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: colors.dark.surface,
-    borderColor: colors.dark.border,
-    padding: spacing.md,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    padding: spacing.sm + 2,
+    borderRadius: radii.sm,
   },
   templateInfoPressable: {
     flex: 1,
-    gap: 2,
+    gap: 1,
   },
   templateStartBtn: {
-    minWidth: 70,
-    minHeight: 36,
+    minWidth: 60,
+    minHeight: 32,
   },
   historySection: {
-    gap: spacing.md,
-  },
-  historyList: {
     gap: spacing.sm,
   },
+  historyList: {
+    gap: spacing.xs + 2,
+  },
   historyItemCard: {
-    backgroundColor: colors.dark.surface,
-    borderColor: colors.dark.border,
-    padding: spacing.md,
-    gap: spacing.xs,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    padding: spacing.sm + 2,
+    gap: 2,
+    borderRadius: radii.sm,
   },
   historyItemTop: {
     flexDirection: 'row',
@@ -929,9 +1000,11 @@ const styles = StyleSheet.create({
   },
   historyTitle: {
     flex: 1,
+    fontSize: 15,
   },
   historyDate: {
     flexShrink: 0,
+    fontSize: 12,
   },
   historyItemStats: {
     flexDirection: 'row',
@@ -945,40 +1018,43 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   emptyCard: {
-    backgroundColor: colors.dark.surface,
-    borderColor: colors.dark.border,
-    padding: spacing.lg,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    padding: spacing.sm + 4,
     alignItems: 'center',
     textAlign: 'center',
-    gap: spacing.xs,
+    gap: 2,
   },
   emptyIcon: {
-    fontSize: 32,
-    marginBottom: spacing.xs,
+    fontSize: 24,
+    marginBottom: 2,
   },
   emptyText: {
     textAlign: 'center',
-    marginBottom: spacing.sm,
+    marginBottom: 2,
+    fontSize: 12,
   },
   emptyButton: {
-    minWidth: 160,
+    minWidth: 140,
+    minHeight: 34,
   },
   quickNavSection: {
-    gap: spacing.md,
-    paddingBottom: spacing.xl,
+    gap: spacing.sm,
+    paddingBottom: spacing.md,
   },
   navButton: {
     width: '100%',
+    minHeight: 42,
   },
   accountCard: {
-    backgroundColor: colors.dark.surfaceElevated,
-    borderColor: colors.dark.borderLight,
+    backgroundColor: colors.surfaceElevated,
+    borderColor: colors.borderLight,
     gap: spacing.xs,
   },
   profileCard: {
-    backgroundColor: colors.dark.surface,
-    borderColor: colors.dark.border,
-    padding: spacing.md,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    padding: spacing.sm + 2,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -990,15 +1066,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: spacing.sm + 2,
+    paddingVertical: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: colors.dark.border,
+    borderBottomColor: colors.border,
   },
   noBorder: {
     borderBottomWidth: 0,
   },
   signOutButton: {
-    borderColor: colors.dark.error,
+    borderColor: colors.error,
   },
   devDivider: {
     flexDirection: 'row',
@@ -1009,7 +1085,7 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: colors.dark.border,
+    backgroundColor: colors.border,
   },
   dividerLabel: {
     letterSpacing: 1,
@@ -1023,10 +1099,10 @@ const styles = StyleSheet.create({
   },
   appFooter: {
     alignItems: 'center',
-    paddingTop: spacing.md,
+    paddingTop: 4,
   },
   appFooterText: {
-    fontSize: 12,
+    fontSize: 11,
     letterSpacing: 0.5,
     opacity: 0.7,
     fontWeight: '500',

@@ -7,7 +7,8 @@
 import React, { useEffect, useRef } from 'react';
 import { StyleSheet, ViewStyle, StyleProp, Animated, Platform } from 'react-native';
 import { SafeAreaView, Edge } from 'react-native-safe-area-context';
-import { colors, spacing } from '../../constants/theme';
+import { spacing } from '../../constants/theme';
+import { useAppTheme } from '../../features/theme';
 
 export interface ScreenContainerProps {
   children: React.ReactNode;
@@ -25,6 +26,7 @@ export function ScreenContainer({
   const isTest = process.env.NODE_ENV === 'test';
   const shouldDisableAnim = disableAnimation || isTest;
   const fadeAnim = useRef(new Animated.Value(shouldDisableAnim ? 1 : 0.9)).current;
+  const { colors } = useAppTheme();
 
   useEffect(() => {
     if (shouldDisableAnim) return;
@@ -46,7 +48,7 @@ export function ScreenContainer({
   }, [fadeAnim, shouldDisableAnim]);
 
   return (
-    <SafeAreaView edges={edges} style={[styles.container, style]}>
+    <SafeAreaView edges={edges} style={[{ flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.md }, style]}>
       <Animated.View style={[styles.animatedContent, { opacity: fadeAnim }]}>
         {children}
       </Animated.View>
@@ -55,11 +57,6 @@ export function ScreenContainer({
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.dark.background,
-    paddingHorizontal: spacing.md,
-  },
   animatedContent: {
     flex: 1,
   },

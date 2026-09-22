@@ -1,12 +1,16 @@
+import { useAppTheme } from '../../features/theme';
 import React from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import { useRouter, useSegments } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, Icon } from '../ui';
 import { useAuthStore } from '../../features/auth';
-import { colors, radii } from '../../constants/theme';
+import { radii } from '../../constants/theme';
 
 export function BottomNavBar() {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+
   const router = typeof useRouter === 'function' ? useRouter() : null;
   let segments: string[] = [];
   try {
@@ -177,7 +181,7 @@ export function BottomNavBar() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     position: 'relative',
     flexDirection: 'row',
@@ -185,7 +189,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     backgroundColor: '#111218',
     borderTopWidth: 1,
-    borderTopColor: colors.dark.border,
+    borderTopColor: colors.border,
     paddingTop: 8,
     minHeight: 64,
   },
@@ -214,7 +218,7 @@ const styles = StyleSheet.create({
     color: '#E5A93C',
   },
   tabLabelInactive: {
-    color: colors.dark.textMuted,
+    color: colors.textMuted,
   },
   centerTabWrapper: {
     flex: 1,

@@ -9,6 +9,7 @@ import { useAuthStore, resolveAuthenticatedUserRoute } from '../src/features/aut
 import { WebAlertModal } from '../src/components/ui';
 import { BottomNavBar } from '../src/components/navigation';
 import { initErrorMonitoring } from '../src/services/monitoring/errorMonitoring';
+import { useThemeStore, useWebThemeSync, useAppTheme } from '../src/features/theme';
 
 function useProtectedRoute() {
   const router = typeof useRouter === 'function' ? useRouter() : null;
@@ -18,9 +19,10 @@ function useProtectedRoute() {
   const status = useAuthStore((state) => state.status);
   const userId = useAuthStore((state) => state.user?.id);
 
-  // 1. Kick off monitoring & auth initialization on root mount
+  // 1. Kick off monitoring, theme, & auth initialization on root mount
   useEffect(() => {
     initErrorMonitoring();
+    useThemeStore.getState().initializeTheme();
     if (useAuthStore.getState().status === 'initializing') {
       void useAuthStore.getState().initializeAuth();
     }
@@ -71,15 +73,23 @@ function useProtectedRoute() {
 export default function RootLayout() {
   useSyncLifecycle();
   useProtectedRoute();
+  
+  useWebThemeSync();
+  const { colors, activeMode } = useAppTheme();
+  const isHydrated = useThemeStore((state) => state.isHydrated);
+
+  if (!isHydrated) {
+    return null; // Or a splash screen
+  }
 
   return (
     <SafeAreaProvider>
-      <StatusBar style="light" />
-      <View style={{ flex: 1, backgroundColor: colors.dark.background }}>
+      <StatusBar style={activeMode === 'light' ? 'dark' : 'light'} />
+      <View style={{ flex: 1, backgroundColor: colors.background }}>
         <Stack
           screenOptions={{
             headerShown: false,
-            contentStyle: { backgroundColor: colors.dark.background },
+            contentStyle: { backgroundColor: colors.background },
             animation: 'fade',
           }}
         >

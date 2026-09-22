@@ -4,10 +4,11 @@
  * Provides iOS-first back navigation, step indicators, and progress bar.
  */
 
+import { useAppTheme } from '../../theme';
 import React from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import { Text } from '../../../components/ui/Text';
-import { colors, spacing, radii } from '../../../constants/theme';
+import { spacing, radii } from '../../../constants/theme';
 
 export interface OnboardingHeaderProps {
   currentStep: number;
@@ -22,6 +23,9 @@ export function OnboardingHeader({
   onBack,
   canGoBack = true,
 }: OnboardingHeaderProps) {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+
   const progressPercent = Math.min(100, Math.max(0, (currentStep / totalSteps) * 100));
 
   return (
@@ -66,7 +70,7 @@ export function OnboardingHeader({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     paddingTop: spacing.xs,
     paddingBottom: spacing.md,
@@ -110,14 +114,14 @@ const styles = StyleSheet.create({
   },
   progressTrack: {
     height: 4,
-    backgroundColor: colors.dark.surfaceSubtle,
+    backgroundColor: colors.surfaceSubtle,
     borderRadius: radii.full,
     overflow: 'hidden',
     width: '100%',
   },
   progressBar: {
     height: '100%',
-    backgroundColor: colors.dark.primary,
+    backgroundColor: colors.primary,
     borderRadius: radii.full,
   },
 });

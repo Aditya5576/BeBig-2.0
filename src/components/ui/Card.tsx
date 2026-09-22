@@ -4,9 +4,10 @@
  * Theme-aware surface container with athletic border styling.
  */
 
+import { useAppTheme } from '../../features/theme';
 import React from 'react';
 import { View, StyleSheet, ViewProps, StyleProp, ViewStyle } from 'react-native';
-import { colors, spacing, radii } from '../../constants/theme';
+import { spacing, radii } from '../../constants/theme';
 
 export interface CardProps extends ViewProps {
   style?: StyleProp<ViewStyle>;
@@ -14,6 +15,9 @@ export interface CardProps extends ViewProps {
 }
 
 export function Card({ style, children, ...props }: CardProps) {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+
   return (
     <View style={[styles.card, style]} {...props}>
       {children}
@@ -21,10 +25,10 @@ export function Card({ style, children, ...props }: CardProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   card: {
-    backgroundColor: colors.dark.surface,
-    borderColor: colors.dark.border,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
     borderWidth: 1,
     borderRadius: radii.lg,
     padding: spacing.md,

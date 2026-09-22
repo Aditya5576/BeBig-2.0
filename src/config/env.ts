@@ -10,6 +10,8 @@
  *    private provider keys) to this file or any mobile client file.
  */
 
+import { appVersionInfo } from './version';
+
 export type AppEnvironment = 'development' | 'staging' | 'production';
 
 export interface AppConfig {
@@ -19,6 +21,10 @@ export interface AppConfig {
   readonly appName: string;
   /** Semver application version */
   readonly version: string;
+  /** Short Git commit SHA or dev build fallback */
+  readonly commitSha: string;
+  /** Formatted version display string */
+  readonly displayVersion: string;
   /** Base API endpoint for the future BeBig backend */
   readonly apiUrl?: string;
   /** Future Supabase public URL */
@@ -43,7 +49,9 @@ const appEnv: AppEnvironment = validEnvs[rawAppEnv ?? ''] ?? 'development';
 export const env: AppConfig = Object.freeze({
   appEnv,
   appName: 'BeBig',
-  version: '1.0.0',
+  version: appVersionInfo.version,
+  commitSha: appVersionInfo.commitSha,
+  displayVersion: appVersionInfo.displayVersion,
   apiUrl: process.env.EXPO_PUBLIC_API_URL || undefined,
   supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL || undefined,
   supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || undefined,

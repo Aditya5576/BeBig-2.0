@@ -1,3 +1,4 @@
+import { useAppTheme } from '../../features/theme';
 import React, { useEffect, useRef } from 'react';
 import {
   View,
@@ -10,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from './Text';
-import { colors, spacing } from '../../constants/theme';
+import { spacing } from '../../constants/theme';
 
 export interface StartupSplashProps {
   testID?: string;
@@ -37,6 +38,9 @@ export interface StartupSplashProps {
  *    - Composition gently elevates (scale 1.025, slight Y lift, soft diffusion) into the app
  */
 export function StartupSplash({ testID = 'startup-splash-screen' }: StartupSplashProps) {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+
   const useNativeDriver = Platform.OS !== 'web';
 
   // 1. Atmosphere & Light Sweep Drivers
@@ -443,7 +447,7 @@ export function StartupSplash({ testID = 'startup-splash-screen' }: StartupSplas
       <ActivityIndicator
         testID="auth-loading-indicator"
         size="small"
-        color={colors.dark.primary}
+        color={colors.primary}
         style={styles.hiddenIndicator}
       />
 
@@ -464,7 +468,7 @@ export function StartupSplash({ testID = 'startup-splash-screen' }: StartupSplas
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   safeContainer: {
     flex: 1,
     backgroundColor: '#090D16',

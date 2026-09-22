@@ -4,10 +4,11 @@
  * Accessible, cross-platform touchable primitive with theme-aware styling.
  */
 
+import { useAppTheme } from '../../features/theme';
 import React from 'react';
 import { Pressable, StyleSheet, ActivityIndicator, ViewStyle, StyleProp } from 'react-native';
 import { Text } from './Text';
-import { colors, spacing, radii } from '../../constants/theme';
+import { spacing, radii } from '../../constants/theme';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost';
 export type ButtonSize = 'sm' | 'md' | 'lg';
@@ -35,6 +36,9 @@ export function Button({
   style,
   testID,
 }: ButtonProps) {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+
   const isInteractive = !disabled && !loading;
 
   const containerVariantStyle: ViewStyle = (() => {
@@ -88,7 +92,7 @@ export function Button({
       {loading ? (
         <ActivityIndicator
           size="small"
-          color={variant === 'primary' ? colors.dark.primaryText : colors.dark.primary}
+          color={variant === 'primary' ? colors.primaryText : colors.primary}
         />
       ) : (
         <Text variant={textVariant} color={textColor}>
@@ -99,7 +103,7 @@ export function Button({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   base: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -113,15 +117,15 @@ const styles = StyleSheet.create({
     opacity: 0.45,
   },
   primaryContainer: {
-    backgroundColor: colors.dark.primary,
+    backgroundColor: colors.primary,
   },
   secondaryContainer: {
-    backgroundColor: colors.dark.surfaceElevated,
+    backgroundColor: colors.surfaceElevated,
   },
   outlineContainer: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: colors.dark.primary,
+    borderColor: colors.primary,
   },
   ghostContainer: {
     backgroundColor: 'transparent',

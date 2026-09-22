@@ -1,3 +1,4 @@
+import { useAppTheme } from '../../src/features/theme';
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -11,9 +12,12 @@ import {
 import { useRouter } from 'expo-router';
 import { ScreenContainer, Text, Button, Card } from '../../src/components/ui';
 import { exerciseRepository, Exercise, STANDARD_CATEGORIES } from '../../src/features/exercises';
-import { colors, spacing, radii } from '../../src/constants/theme';
+import { spacing, radii } from '../../src/constants/theme';
 
 export default function ExerciseListScreen() {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+
   const router = useRouter();
 
   const [exercises, setExercises] = useState<Exercise[]>(() => {
@@ -206,7 +210,7 @@ export default function ExerciseListScreen() {
             testID="exercise-search-input"
             style={styles.searchInput}
             placeholder="Search exercises by name..."
-            placeholderTextColor={colors.dark.textMuted}
+            placeholderTextColor={colors.textMuted}
             value={searchQuery}
             onChangeText={setSearchQuery}
             autoCapitalize="none"
@@ -272,7 +276,7 @@ export default function ExerciseListScreen() {
           <ActivityIndicator
             testID="exercise-loading-indicator"
             size="large"
-            color={colors.dark.primary}
+            color={colors.primary}
           />
           <Text variant="caption" color="muted" style={styles.loadingText}>
             Loading exercises...
@@ -326,7 +330,7 @@ export default function ExerciseListScreen() {
           ListFooterComponent={
             loadingMore ? (
               <View style={styles.footerLoading}>
-                <ActivityIndicator size="small" color={colors.dark.primary} />
+                <ActivityIndicator size="small" color={colors.primary} />
               </View>
             ) : null
           }
@@ -336,12 +340,12 @@ export default function ExerciseListScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   header: {
     paddingVertical: spacing.sm,
     gap: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: colors.dark.borderLight,
+    borderBottomColor: colors.borderLight,
     paddingBottom: spacing.sm,
   },
   headerTitleRow: {
@@ -356,13 +360,13 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   searchInput: {
-    backgroundColor: colors.dark.surface,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.dark.borderLight,
+    borderColor: colors.borderLight,
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
-    color: colors.dark.textPrimary,
+    color: colors.textPrimary,
     fontSize: 16,
   },
   categoryScroll: {
@@ -373,13 +377,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs + 2,
     borderRadius: radii.full,
-    backgroundColor: colors.dark.surface,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.dark.borderLight,
+    borderColor: colors.borderLight,
   },
   categoryChipActive: {
-    backgroundColor: colors.dark.surfaceElevated,
-    borderColor: colors.dark.primary,
+    backgroundColor: colors.surfaceElevated,
+    borderColor: colors.primary,
   },
   chipText: {
     fontWeight: '600',
@@ -393,8 +397,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   exerciseCard: {
-    backgroundColor: colors.dark.surface,
-    borderColor: colors.dark.borderLight,
+    backgroundColor: colors.surface,
+    borderColor: colors.borderLight,
     gap: spacing.xs,
   },
   cardHeader: {
@@ -409,7 +413,7 @@ const styles = StyleSheet.create({
   },
   customBadge: {
     backgroundColor: '#1E2C1A',
-    borderColor: colors.dark.success,
+    borderColor: colors.success,
     borderWidth: 1,
     paddingHorizontal: spacing.xs + 2,
     paddingVertical: 2,

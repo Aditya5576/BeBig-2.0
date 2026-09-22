@@ -1,3 +1,4 @@
+import { useAppTheme } from '../../../src/features/theme';
 import React, { useState, useCallback, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { useRouter, useFocusEffect as routerFocusEffect } from 'expo-router';
@@ -8,11 +9,14 @@ import {
   PersonalRecord,
   formatWorkoutDate,
 } from '../../../src/features/workout';
-import { colors, spacing, radii } from '../../../src/constants/theme';
+import { spacing, radii } from '../../../src/constants/theme';
 
 const useFocusEffect = routerFocusEffect || React.useEffect;
 
 export default function PersonalRecordsScreen() {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+
   const router = useRouter();
 
   const [records, setRecords] = useState<PersonalRecord[]>([]);
@@ -86,7 +90,7 @@ export default function PersonalRecordsScreen() {
 
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={colors.dark.primary} />
+            <ActivityIndicator size="large" color={colors.primary} />
           </View>
         ) : records.length === 0 ? (
           /* Empty State */
@@ -245,7 +249,7 @@ export default function PersonalRecordsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   scrollContent: {
     paddingBottom: spacing.xxl * 3,
   },
@@ -291,8 +295,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     marginTop: spacing.md,
     borderRadius: radii.lg,
-    backgroundColor: colors.dark.surface,
-    borderColor: colors.dark.border,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
   },
   emptyIconContainer: {
     width: 64,
@@ -330,8 +334,8 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: spacing.sm + 2,
     borderRadius: radii.md,
-    backgroundColor: colors.dark.surface,
-    borderColor: colors.dark.border,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
     justifyContent: 'space-between',
     gap: spacing.xs,
   },
@@ -356,8 +360,8 @@ const styles = StyleSheet.create({
   prCard: {
     padding: 0,
     borderRadius: radii.md,
-    backgroundColor: colors.dark.surface,
-    borderColor: colors.dark.border,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
     overflow: 'hidden',
   },
   prPressable: {
@@ -365,7 +369,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   prPressablePressed: {
-    backgroundColor: colors.dark.surfaceElevated,
+    backgroundColor: colors.surfaceElevated,
   },
   prMainRow: {
     flexDirection: 'row',

@@ -1,11 +1,15 @@
+import { useAppTheme } from '../../src/features/theme';
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Image, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ScreenContainer, Text, Button, Card } from '../../src/components/ui';
 import { exerciseRepository, Exercise } from '../../src/features/exercises';
-import { colors, spacing, radii } from '../../src/constants/theme';
+import { spacing, radii } from '../../src/constants/theme';
 
 export default function ExerciseDetailScreen() {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
 
@@ -47,7 +51,7 @@ export default function ExerciseDetailScreen() {
   if (loading) {
     return (
       <ScreenContainer style={styles.centerContainer}>
-        <ActivityIndicator size="large" color={colors.dark.primary} testID="detail-loading" />
+        <ActivityIndicator size="large" color={colors.primary} testID="detail-loading" />
         <Text variant="caption" color="muted">
           Loading exercise details...
         </Text>
@@ -198,7 +202,7 @@ export default function ExerciseDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   scrollContent: {
     paddingVertical: spacing.md,
     gap: spacing.lg,
@@ -223,11 +227,11 @@ const styles = StyleSheet.create({
   imageContainer: {
     width: '100%',
     height: 220,
-    backgroundColor: colors.dark.surface,
+    backgroundColor: colors.surface,
     borderRadius: radii.lg,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: colors.dark.borderLight,
+    borderColor: colors.borderLight,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -245,20 +249,20 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   categoryBadge: {
-    backgroundColor: colors.dark.surfaceElevated,
+    backgroundColor: colors.surfaceElevated,
     paddingHorizontal: spacing.sm,
     paddingVertical: 4,
     borderRadius: radii.sm,
     borderWidth: 1,
-    borderColor: colors.dark.border,
+    borderColor: colors.border,
   },
   sourceBadge: {
-    backgroundColor: colors.dark.surface,
+    backgroundColor: colors.surface,
     paddingHorizontal: spacing.sm,
     paddingVertical: 4,
     borderRadius: radii.sm,
     borderWidth: 1,
-    borderColor: colors.dark.borderLight,
+    borderColor: colors.borderLight,
   },
   customBadge: {
     backgroundColor: '#1E2C1A',
@@ -266,7 +270,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: radii.sm,
     borderWidth: 1,
-    borderColor: colors.dark.success,
+    borderColor: colors.success,
   },
   badgeText: {
     fontSize: 11,
@@ -274,23 +278,23 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   infoCard: {
-    backgroundColor: colors.dark.surface,
-    borderColor: colors.dark.borderLight,
+    backgroundColor: colors.surface,
+    borderColor: colors.borderLight,
     gap: spacing.md,
   },
   infoRow: {
     gap: 4,
     paddingBottom: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: colors.dark.borderLight,
+    borderBottomColor: colors.borderLight,
   },
   noBorder: {
     borderBottomWidth: 0,
     paddingBottom: 0,
   },
   instructionsCard: {
-    backgroundColor: colors.dark.surface,
-    borderColor: colors.dark.borderLight,
+    backgroundColor: colors.surface,
+    borderColor: colors.borderLight,
     gap: spacing.sm,
   },
   instructionsTitle: {

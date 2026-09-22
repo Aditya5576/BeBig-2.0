@@ -1,3 +1,4 @@
+import { useAppTheme } from '../../src/features/theme';
 import React, { useState, useCallback, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert, TextInput } from 'react-native';
 import { useRouter, useFocusEffect as routerFocusEffect } from 'expo-router';
@@ -9,7 +10,7 @@ import {
   getMonthGroupKey,
   getMonthGroupLabel,
 } from '../../src/features/workout';
-import { colors, spacing, radii } from '../../src/constants/theme';
+import { spacing, radii } from '../../src/constants/theme';
 
 const useFocusEffect = routerFocusEffect || React.useEffect;
 
@@ -20,6 +21,9 @@ interface MonthGroup {
 }
 
 export default function WorkoutHistoryScreen() {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+
   const router = useRouter();
 
   const [workouts, setWorkouts] = useState<WorkoutSession[]>([]);
@@ -158,7 +162,7 @@ export default function WorkoutHistoryScreen() {
 
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={colors.dark.primary} />
+            <ActivityIndicator size="large" color={colors.primary} />
           </View>
         ) : workouts.length === 0 ? (
           /* Empty State */
@@ -237,7 +241,7 @@ export default function WorkoutHistoryScreen() {
                                   onChangeText={setEditWorkoutName}
                                   autoFocus
                                   placeholder="Workout Name"
-                                  placeholderTextColor={colors.dark.textMuted}
+                                  placeholderTextColor={colors.textMuted}
                                 />
                                 <View style={styles.editActions}>
                                   <Button
@@ -371,7 +375,7 @@ export default function WorkoutHistoryScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingTop: spacing.md,
@@ -399,13 +403,13 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
     alignItems: 'center',
     gap: spacing.md,
-    backgroundColor: colors.dark.surfaceElevated,
+    backgroundColor: colors.surfaceElevated,
   },
   emptyIconContainer: {
     width: 64,
     height: 64,
     borderRadius: radii.full,
-    backgroundColor: colors.dark.surface,
+    backgroundColor: colors.surface,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -437,7 +441,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xs,
     paddingBottom: spacing.xs,
     borderBottomWidth: 1,
-    borderBottomColor: colors.dark.borderLight,
+    borderBottomColor: colors.borderLight,
     marginBottom: spacing.xs,
   },
   monthTitle: {
@@ -458,7 +462,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   workoutCard: {
-    backgroundColor: colors.dark.surfaceElevated,
+    backgroundColor: colors.surfaceElevated,
     padding: spacing.md,
     gap: spacing.sm,
   },
@@ -474,7 +478,7 @@ const styles = StyleSheet.create({
   metricsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.dark.surface,
+    backgroundColor: colors.surface,
     borderRadius: radii.sm,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
@@ -487,7 +491,7 @@ const styles = StyleSheet.create({
   metricDivider: {
     width: 1,
     height: 24,
-    backgroundColor: colors.dark.borderLight,
+    backgroundColor: colors.borderLight,
   },
   metricLabel: {
     fontSize: 10,
@@ -520,7 +524,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   renameButtonText: {
-    color: colors.dark.primary,
+    color: colors.primary,
     fontWeight: '600',
     fontSize: 12,
   },
@@ -534,7 +538,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   deleteButtonText: {
-    color: colors.dark.error,
+    color: colors.error,
     fontWeight: '600',
     fontSize: 12,
   },
@@ -548,7 +552,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   viewDetailsText: {
-    color: colors.dark.primary,
+    color: colors.primary,
     fontWeight: '600',
     fontSize: 12,
   },
@@ -558,14 +562,14 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   editInput: {
-    backgroundColor: colors.dark.surface,
-    color: colors.dark.primary,
+    backgroundColor: colors.surface,
+    color: colors.primary,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: radii.sm,
     fontSize: 16,
     borderWidth: 1,
-    borderColor: colors.dark.borderLight,
+    borderColor: colors.borderLight,
   },
   editActions: {
     flexDirection: 'row',

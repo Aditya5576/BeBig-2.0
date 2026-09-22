@@ -5,9 +5,10 @@
  * high gym-contrast visibility, and proper active states.
  */
 
+import { useAppTheme } from '../../features/theme';
 import React from 'react';
 import { View, Platform, StyleSheet, Text as RNText } from 'react-native';
-import { colors } from '../../constants/theme';
+
 
 export type IconName =
   | 'home'
@@ -35,7 +36,10 @@ export interface IconProps {
 }
 
 export function Icon({ name, size = 22, color, focused = false }: IconProps) {
-  const resolvedColor = color || (focused ? '#E5A93C' : colors.dark.textSecondary);
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+
+  const resolvedColor = color || (focused ? '#E5A93C' : colors.textSecondary);
   const strokeWidth = focused ? 2.4 : 1.8;
 
   if (Platform.OS === 'web') {
@@ -330,7 +334,7 @@ export function Icon({ name, size = 22, color, focused = false }: IconProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     alignItems: 'center',
     justifyContent: 'center',

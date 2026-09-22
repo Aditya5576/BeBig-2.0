@@ -1,3 +1,4 @@
+import { useAppTheme } from '../../src/features/theme';
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -20,9 +21,12 @@ import {
 } from '../../src/features/workout';
 import { ExercisePickerModal } from '../../src/features/templates/components/ExercisePickerModal';
 import { Exercise } from '../../src/features/exercises';
-import { colors, spacing, radii } from '../../src/constants/theme';
+import { spacing, radii } from '../../src/constants/theme';
 
 export default function ActiveWorkoutScreen() {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+
   const router = useRouter();
 
   const [session, setSession] = useState<WorkoutSession | null>(null);
@@ -372,6 +376,21 @@ export default function ActiveWorkoutScreen() {
     }
   };
 
+  // Extend active rest timer by +10s or +20s
+  const handleExtendRest = async (addedSeconds: number) => {
+    if (!session || !session.activeRestTimer) return;
+    if (session.activeRestTimer.targetEndTime <= Date.now()) return;
+
+    const updated = workoutRepository.extendRestTimer(session, addedSeconds);
+    const now = Date.now();
+    if (updated.activeRestTimer) {
+      const diff = Math.max(0, Math.ceil((updated.activeRestTimer.targetEndTime - now) / 1000));
+      setRestRemaining(diff);
+      setIsRestFinished(false);
+    }
+    await updateSessionAndAutosave(updated);
+  };
+
   // Skip rest timer
   const handleSkipRest = async () => {
     if (!session) return;
@@ -450,7 +469,7 @@ export default function ActiveWorkoutScreen() {
     return (
       <ScreenContainer>
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={colors.dark.primary} />
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
       </ScreenContainer>
     );
@@ -530,14 +549,34 @@ export default function ActiveWorkoutScreen() {
                     </Text>
                   ) : null}
                 </View>
-                <Button
-                  testID="skip-rest-timer-button"
-                  title="Skip Rest"
-                  onPress={handleSkipRest}
-                  variant="secondary"
-                  size="sm"
-                  style={styles.skipRestButton}
-                />
+                <View style={styles.restControlsGroup}>
+                  <View style={styles.extendButtonsRow}>
+                    <Button
+                      testID="extend-rest-10-button"
+                      title="+10s"
+                      onPress={() => handleExtendRest(10)}
+                      variant="outline"
+                      size="sm"
+                      style={styles.extendRestButton}
+                    />
+                    <Button
+                      testID="extend-rest-20-button"
+                      title="+20s"
+                      onPress={() => handleExtendRest(20)}
+                      variant="outline"
+                      size="sm"
+                      style={styles.extendRestButton}
+                    />
+                  </View>
+                  <Button
+                    testID="skip-rest-timer-button"
+                    title="Skip Rest"
+                    onPress={handleSkipRest}
+                    variant="secondary"
+                    size="sm"
+                    style={styles.skipRestButton}
+                  />
+                </View>
               </View>
             </Card>
           )}
@@ -767,7 +806,7 @@ export default function ActiveWorkoutScreen() {
                             testID={`set-weight-${ex.exerciseId}-${set.setNumber}`}
                             defaultValue={set.weight ? String(set.weight) : ''}
                             placeholder="0"
-                            placeholderTextColor={colors.dark.textMuted}
+                            placeholderTextColor={colors.textMuted}
                             keyboardType="decimal-pad"
                             onChangeText={(val) =>
                               handleUpdateSetField(ex.exerciseId, set.id, 'weight', val)
@@ -788,7 +827,7 @@ export default function ActiveWorkoutScreen() {
                             testID={`set-reps-${ex.exerciseId}-${set.setNumber}`}
                             defaultValue={set.reps ? String(set.reps) : ''}
                             placeholder="10"
-                            placeholderTextColor={colors.dark.textMuted}
+                            placeholderTextColor={colors.textMuted}
                             keyboardType="number-pad"
                             onChangeText={(val) =>
                               handleUpdateSetField(ex.exerciseId, set.id, 'reps', val)
@@ -809,7 +848,7 @@ export default function ActiveWorkoutScreen() {
                             testID={`set-rir-${ex.exerciseId}-${set.setNumber}`}
                             defaultValue={set.rir !== undefined ? String(set.rir) : '2'}
                             placeholder="2"
-                            placeholderTextColor={colors.dark.textMuted}
+                            placeholderTextColor={colors.textMuted}
                             keyboardType="decimal-pad"
                             onChangeText={(val) =>
                               handleUpdateSetField(ex.exerciseId, set.id, 'rir', val)
@@ -833,7 +872,7 @@ export default function ActiveWorkoutScreen() {
                             testID={`set-notes-${ex.exerciseId}-${set.setNumber}`}
                             defaultValue={set.notes || ''}
                             placeholder="Form cues, tempo, notes..."
-                            placeholderTextColor={colors.dark.textMuted}
+                            placeholderTextColor={colors.textMuted}
                             onChangeText={(val) =>
                               handleUpdateSetField(ex.exerciseId, set.id, 'notes', val)
                             }
@@ -930,7 +969,7 @@ export default function ActiveWorkoutScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   keyboardContainer: {
     flex: 1,
   },
@@ -951,7 +990,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingBottom: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: colors.dark.borderLight,
+    borderBottomColor: colors.borderLight,
     gap: spacing.sm,
   },
   headerTitleArea: {
@@ -978,21 +1017,21 @@ const styles = StyleSheet.create({
   discardButton: {
     minHeight: 44,
     paddingHorizontal: spacing.sm,
-    borderColor: colors.dark.error,
+    borderColor: colors.error,
   },
   finishButton: {
     minHeight: 44,
     paddingHorizontal: spacing.md,
   },
   restBannerCard: {
-    backgroundColor: colors.dark.surfaceElevated,
-    borderColor: colors.dark.primary,
+    backgroundColor: colors.surfaceElevated,
+    borderColor: colors.primary,
     borderWidth: 1.5,
     padding: spacing.sm,
   },
   restCompleteCard: {
-    backgroundColor: colors.dark.surfaceElevated,
-    borderColor: colors.dark.success,
+    backgroundColor: colors.surfaceElevated,
+    borderColor: colors.success,
     borderWidth: 1.5,
     padding: spacing.sm,
   },
@@ -1012,7 +1051,7 @@ const styles = StyleSheet.create({
   restCompleteLabel: {
     fontWeight: '800',
     letterSpacing: 0.5,
-    color: colors.dark.success,
+    color: colors.success,
   },
   restCountdownText: {
     fontWeight: '900',
@@ -1022,8 +1061,20 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   skipRestButton: {
-    minHeight: 40,
-    minWidth: 90,
+    minHeight: 34,
+    minWidth: 80,
+  },
+  restControlsGroup: {
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  extendButtonsRow: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  extendRestButton: {
+    minHeight: 32,
+    paddingHorizontal: 8,
   },
   dismissRestButton: {
     minHeight: 40,
@@ -1043,15 +1094,15 @@ const styles = StyleSheet.create({
   exerciseCard: {
     gap: spacing.md,
     padding: spacing.md,
-    backgroundColor: colors.dark.surface,
-    borderColor: colors.dark.borderLight,
+    backgroundColor: colors.surface,
+    borderColor: colors.borderLight,
   },
   exerciseCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     borderBottomWidth: 1,
-    borderBottomColor: colors.dark.borderLight,
+    borderBottomColor: colors.borderLight,
     paddingBottom: spacing.sm,
   },
   exerciseHeaderActions: {
@@ -1061,12 +1112,12 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   arrowButton: {
-    backgroundColor: colors.dark.surfaceElevated,
+    backgroundColor: colors.surfaceElevated,
     minWidth: 36,
     minHeight: 32,
     borderRadius: radii.xs,
     borderWidth: 1,
-    borderColor: colors.dark.border,
+    borderColor: colors.border,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1083,12 +1134,12 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   indexBadge: {
-    backgroundColor: colors.dark.surfaceElevated,
+    backgroundColor: colors.surfaceElevated,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: radii.xs,
     borderWidth: 1,
-    borderColor: colors.dark.primary,
+    borderColor: colors.primary,
     marginTop: 2,
   },
   indexBadgeText: {
@@ -1108,16 +1159,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   removeExText: {
-    color: colors.dark.error,
+    color: colors.error,
     fontWeight: '600',
   },
   targetsBadge: {
-    backgroundColor: colors.dark.surfaceElevated,
+    backgroundColor: colors.surfaceElevated,
     paddingVertical: 6,
     paddingHorizontal: spacing.sm + 2,
     borderRadius: radii.xs,
     borderWidth: 1,
-    borderColor: colors.dark.border,
+    borderColor: colors.border,
   },
   targetsText: {
     fontWeight: '600',
@@ -1139,7 +1190,7 @@ const styles = StyleSheet.create({
   lastTimeTitle: {
     fontWeight: '800',
     letterSpacing: 0.5,
-    color: colors.dark.primary,
+    color: colors.primary,
   },
   lastTimeSetsRow: {
     flexDirection: 'row',
@@ -1148,7 +1199,7 @@ const styles = StyleSheet.create({
   },
   lastTimeSetChip: {
     fontWeight: '600',
-    color: colors.dark.textSecondary,
+    color: colors.textSecondary,
   },
   noLastTimeContainer: {
     paddingVertical: 2,
@@ -1156,21 +1207,21 @@ const styles = StyleSheet.create({
   },
   noLastTimeText: {
     fontStyle: 'italic',
-    color: colors.dark.textMuted,
+    color: colors.textMuted,
   },
   setsContainer: {
     gap: spacing.md,
   },
   setCard: {
-    backgroundColor: colors.dark.surfaceElevated,
+    backgroundColor: colors.surfaceElevated,
     borderRadius: radii.md,
     padding: spacing.md,
     gap: spacing.sm,
     borderWidth: 1,
-    borderColor: colors.dark.border,
+    borderColor: colors.border,
   },
   setCardCompleted: {
-    borderColor: colors.dark.primary,
+    borderColor: colors.primary,
     backgroundColor: 'rgba(56, 189, 248, 0.06)',
   },
   setHeaderRow: {
@@ -1195,7 +1246,7 @@ const styles = StyleSheet.create({
   },
   completedBadgeText: {
     fontWeight: '700',
-    color: colors.dark.primary,
+    color: colors.primary,
   },
   pendingBadge: {
     backgroundColor: 'rgba(148, 163, 184, 0.12)',
@@ -1205,7 +1256,7 @@ const styles = StyleSheet.create({
   },
   pendingBadgeText: {
     fontWeight: '700',
-    color: colors.dark.textMuted,
+    color: colors.textMuted,
   },
   deleteSetButton: {
     minHeight: 36,
@@ -1217,7 +1268,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   deleteSetText: {
-    color: colors.dark.error,
+    color: colors.error,
     fontWeight: '600',
   },
   metricsRow: {
@@ -1233,20 +1284,20 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   metricInput: {
-    backgroundColor: colors.dark.surface,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.dark.border,
+    borderColor: colors.border,
     borderRadius: radii.sm,
     paddingHorizontal: spacing.xs,
     paddingVertical: spacing.xs,
-    color: colors.dark.textPrimary,
+    color: colors.textPrimary,
     fontSize: 16,
     fontWeight: '700',
     textAlign: 'center',
     minHeight: 46,
   },
   metricInputCompleted: {
-    backgroundColor: colors.dark.surfaceSubtle,
+    backgroundColor: colors.surfaceSubtle,
     borderColor: 'rgba(56, 189, 248, 0.3)',
   },
   addNoteTrigger: {
@@ -1262,13 +1313,13 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   notesInput: {
-    backgroundColor: colors.dark.surface,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.dark.border,
+    borderColor: colors.border,
     borderRadius: radii.sm,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
-    color: colors.dark.textPrimary,
+    color: colors.textPrimary,
     fontSize: 16,
     minHeight: 44,
   },
@@ -1283,22 +1334,22 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   completeSetButtonActive: {
-    backgroundColor: colors.dark.primary,
+    backgroundColor: colors.primary,
   },
   completeSetButtonDone: {
     backgroundColor: 'rgba(56, 189, 248, 0.15)',
     borderWidth: 1,
-    borderColor: colors.dark.primary,
+    borderColor: colors.primary,
   },
   completeSetButtonText: {
     fontSize: 14,
     fontWeight: '700',
   },
   completeSetTextActive: {
-    color: colors.dark.background,
+    color: colors.background,
   },
   completeSetTextDone: {
-    color: colors.dark.primary,
+    color: colors.primary,
   },
   addSetButton: {
     minHeight: 44,

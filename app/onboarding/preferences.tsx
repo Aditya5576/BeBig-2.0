@@ -1,3 +1,4 @@
+import { useAppTheme } from '../../src/features/theme';
 import React from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { useRouter, Redirect } from 'expo-router';
@@ -14,7 +15,7 @@ import {
 } from '../../src/features/onboarding';
 import { useAuthStore } from '../../src/features/auth';
 import { profileService } from '../../src/features/profile';
-import { spacing, colors, radii } from '../../src/constants/theme';
+import { spacing, radii } from '../../src/constants/theme';
 
 const DAYS_PER_WEEK_OPTIONS: { label: string; value: number }[] = [
   { label: '2 days', value: 2 },
@@ -81,6 +82,9 @@ const WORKOUT_STYLE_OPTIONS: {
 ];
 
 export default function PreferencesScreen() {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+
   const router = useRouter();
   const authStatus = useAuthStore((state) => state.status);
   const isGuest = useAuthStore((state) => state.isGuest);
@@ -280,7 +284,7 @@ export default function PreferencesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   scrollContent: {
     paddingVertical: spacing.md,
     gap: spacing.xl,
@@ -301,20 +305,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderColor: colors.dark.primary,
-    backgroundColor: colors.dark.surfaceSubtle,
+    borderColor: colors.primary,
+    backgroundColor: colors.surfaceSubtle,
   },
   locationContent: {
     flex: 1,
     gap: 2,
   },
   supportedBadge: {
-    backgroundColor: colors.dark.surfaceElevated,
+    backgroundColor: colors.surfaceElevated,
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
     borderRadius: radii.full,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.dark.primary,
+    borderColor: colors.primary,
   },
   badgeText: {
     fontSize: 11,

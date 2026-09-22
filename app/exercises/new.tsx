@@ -1,3 +1,4 @@
+import { useAppTheme } from '../../src/features/theme';
 import React, { useState } from 'react';
 import {
   View,
@@ -16,9 +17,12 @@ import {
   STANDARD_CATEGORIES,
   STANDARD_EQUIPMENT,
 } from '../../src/features/exercises';
-import { colors, spacing, radii } from '../../src/constants/theme';
+import { spacing, radii } from '../../src/constants/theme';
 
 export default function CreateCustomExerciseScreen() {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+
   const router = useRouter();
 
   const [name, setName] = useState('');
@@ -120,7 +124,7 @@ export default function CreateCustomExerciseScreen() {
               testID="custom-exercise-name-input"
               style={styles.input}
               placeholder="e.g. Incline Smith Machine Press"
-              placeholderTextColor={colors.dark.textMuted}
+              placeholderTextColor={colors.textMuted}
               value={name}
               onChangeText={setName}
               autoFocus
@@ -200,7 +204,7 @@ export default function CreateCustomExerciseScreen() {
               testID="custom-exercise-muscles-input"
               style={styles.input}
               placeholder="e.g. Upper Chest, Front Delts"
-              placeholderTextColor={colors.dark.textMuted}
+              placeholderTextColor={colors.textMuted}
               value={primaryMuscles}
               onChangeText={setPrimaryMuscles}
             />
@@ -215,7 +219,7 @@ export default function CreateCustomExerciseScreen() {
               testID="custom-exercise-secondary-muscles-input"
               style={styles.input}
               placeholder="e.g. Triceps"
-              placeholderTextColor={colors.dark.textMuted}
+              placeholderTextColor={colors.textMuted}
               value={secondaryMuscles}
               onChangeText={setSecondaryMuscles}
             />
@@ -230,7 +234,7 @@ export default function CreateCustomExerciseScreen() {
               testID="custom-exercise-instructions-input"
               style={[styles.input, styles.multilineInput]}
               placeholder="Add key form cues, grip setup, or execution tips..."
-              placeholderTextColor={colors.dark.textMuted}
+              placeholderTextColor={colors.textMuted}
               value={description}
               onChangeText={setDescription}
               multiline
@@ -255,7 +259,7 @@ export default function CreateCustomExerciseScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   keyboardAvoiding: {
     flex: 1,
   },
@@ -274,20 +278,20 @@ const styles = StyleSheet.create({
   },
   errorCard: {
     backgroundColor: '#2A1215',
-    borderColor: colors.dark.error,
+    borderColor: colors.error,
     padding: spacing.sm,
   },
   formGroup: {
     gap: spacing.xs,
   },
   input: {
-    backgroundColor: colors.dark.surface,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.dark.borderLight,
+    borderColor: colors.borderLight,
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 4,
-    color: colors.dark.textPrimary,
+    color: colors.textPrimary,
     fontSize: 16,
   },
   multilineInput: {
@@ -302,13 +306,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs + 2,
     borderRadius: radii.full,
-    backgroundColor: colors.dark.surface,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.dark.borderLight,
+    borderColor: colors.borderLight,
   },
   chipSelected: {
-    backgroundColor: colors.dark.surfaceElevated,
-    borderColor: colors.dark.primary,
+    backgroundColor: colors.surfaceElevated,
+    borderColor: colors.primary,
   },
   chipText: {
     fontWeight: '600',

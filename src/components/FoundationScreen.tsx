@@ -1,11 +1,15 @@
+import { useAppTheme } from '../features/theme';
 import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { ScreenContainer, Text, Button, Card } from './ui';
-import { spacing, colors } from '../constants/theme';
+import { spacing } from '../constants/theme';
 import { isIOS, isAndroid } from '../utils/platform';
 import { env } from '../config/env';
 
 export default function FoundationScreen() {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+
   const [pressedCount, setPressedCount] = useState(0);
 
   const platformName = isIOS
@@ -101,7 +105,7 @@ export default function FoundationScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   scrollContent: {
     paddingVertical: spacing.lg,
     gap: spacing.lg,
@@ -125,7 +129,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: spacing.xs,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.dark.border,
+    borderBottomColor: colors.border,
   },
   verifyCard: {
     gap: spacing.md,

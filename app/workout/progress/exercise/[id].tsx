@@ -1,3 +1,4 @@
+import { useAppTheme } from '../../../../src/features/theme';
 import React, { useState, useCallback, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { useRouter, useLocalSearchParams, useFocusEffect as routerFocusEffect } from 'expo-router';
@@ -9,11 +10,14 @@ import {
   formatWorkoutDate,
   formatVolume,
 } from '../../../../src/features/workout';
-import { colors, spacing, radii } from '../../../../src/constants/theme';
+import { spacing, radii } from '../../../../src/constants/theme';
 
 const useFocusEffect = routerFocusEffect || React.useEffect;
 
 export default function ExerciseProgressionScreen() {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+
   const router = useRouter();
   const { id, name } = useLocalSearchParams<{ id?: string; name?: string }>();
 
@@ -136,7 +140,7 @@ export default function ExerciseProgressionScreen() {
 
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={colors.dark.primary} />
+            <ActivityIndicator size="large" color={colors.primary} />
           </View>
         ) : entries.length === 0 ? (
           /* Empty State */
@@ -384,7 +388,7 @@ export default function ExerciseProgressionScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   scrollContent: {
     paddingBottom: spacing.xxl,
   },
@@ -533,7 +537,7 @@ const styles = StyleSheet.create({
   },
   setsTable: {
     borderTopWidth: 1,
-    borderTopColor: colors.dark.border,
+    borderTopColor: colors.border,
     padding: spacing.md,
     backgroundColor: 'rgba(0, 0, 0, 0.2)',
   },

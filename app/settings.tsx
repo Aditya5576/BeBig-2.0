@@ -1,3 +1,4 @@
+import { useAppTheme, useThemeStore } from '../src/features/theme';
 import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, TextInput, Image, Alert, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -16,7 +17,8 @@ import {
 } from '../src/features/onboarding';
 import { profileService, avatarService, UserProfile } from '../src/features/profile';
 import { guestStorage } from '../src/lib/storage';
-import { colors, spacing, radii } from '../src/constants/theme';
+import { spacing, radii } from '../src/constants/theme';
+import { env } from '../src/config/env';
 
 export const ATHLETIC_AVATAR_PRESETS = [
   {
@@ -175,6 +177,12 @@ function getInitials(name?: string | null, email?: string | null): string {
 }
 
 export default function SettingsScreen() {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+  
+  const mode = useThemeStore((state) => state.mode);
+  const setMode = useThemeStore((state) => state.setMode);
+
   const router = useRouter();
 
   const status = useAuthStore((state) => state.status);
@@ -487,14 +495,12 @@ export default function SettingsScreen() {
           });
         }
       } catch (upsertError: any) {
-        // If we just uploaded a new avatar but profile save failed, clean up the orphan
         if (newlyUploadedAvatarUrl && user?.id) {
           void avatarService.deleteAvatarByUrl(user.id, newlyUploadedAvatarUrl);
         }
         throw upsertError;
       }
 
-      // Update personal info state
       setDisplayName(trimmedDisplayName);
       setAge(parsedAge);
       setHeight(parsedHeight);
@@ -502,13 +508,11 @@ export default function SettingsScreen() {
       setAvatarUrl(trimmedAvatarUrl);
       setAvatarLoadError(false);
 
-      // Clean up previous avatar if replaced or cleared
       if (user?.id && previousAvatarUrl && previousAvatarUrl !== trimmedAvatarUrl) {
         void avatarService.deleteAvatarByUrl(user.id, previousAvatarUrl);
       }
       pendingAvatarFileRef.current = null;
 
-      // Update store so entire app has updated state
       if (updatedGoal) setStoreGoal(updatedGoal);
       if (updatedExperience) setStoreExperience(updatedExperience);
       if (updatedDaysPerWeek) setStoreDaysPerWeek(updatedDaysPerWeek);
@@ -594,26 +598,21 @@ export default function SettingsScreen() {
   const initials = getInitials(displayName, user?.email);
 
   return (
-    <ScreenContainer>
+    <ScreenContainer style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Top Header */}
-        <View style={styles.header}>
-          <View style={styles.headerTitleRow}>
-            <Text
-              variant="titleLarge"
-              color="primary"
-              testID="settings-screen-title"
-              style={styles.screenTitle}
-            >
-              Profile
-            </Text>
-            <Text variant="caption" color="secondary">
-              Manage your athletic identity, training profile, and preferences
-            </Text>
-          </View>
+        {/* Top Screen Header */}
+        <View style={styles.headerRow}>
+          <Text
+            variant="titleLarge"
+            color="primary"
+            testID="settings-screen-title"
+            style={styles.screenTitle}
+          >
+            Profile & Settings
+          </Text>
         </View>
 
-        {/* Success Banner */}
+        {/* Banners */}
         {successMessage && (
           <View testID="save-success-banner" style={styles.successBanner}>
             <Text variant="caption" color="accent" style={styles.successText}>
@@ -622,7 +621,6 @@ export default function SettingsScreen() {
           </View>
         )}
 
-        {/* Error Banner */}
         {errorMessage && (
           <View testID="profile-error-banner" style={styles.errorBanner}>
             <Text variant="caption" style={styles.errorText}>
@@ -631,7 +629,7 @@ export default function SettingsScreen() {
           </View>
         )}
 
-        {/* 1. Athlete Profile Header Card */}
+        {/* 1. Athlete Header Card */}
         <Card style={styles.profileHeaderCard} testID="settings-profile-header-card">
           <View style={styles.profileHeaderContent}>
             <View style={styles.avatarWrapper}>
@@ -650,7 +648,7 @@ export default function SettingsScreen() {
             </View>
 
             <View style={styles.profileHeaderText}>
-              <Text variant="titleMedium" color="primary" testID="profile-header-name">
+              <Text variant="titleMedium" color="primary" testID="profile-header-name" style={styles.profileNameText}>
                 {athleteHeaderName}
               </Text>
               {user?.email && (
@@ -658,7 +656,7 @@ export default function SettingsScreen() {
                   {user.email}
                 </Text>
               )}
-              <View style={styles.headerBadgeRow}>
+              <View style={styles.badgeRow}>
                 {user ? (
                   <View style={styles.cloudBadge}>
                     <Text variant="caption" color="accent" style={styles.badgeText}>
@@ -685,7 +683,7 @@ export default function SettingsScreen() {
                 accessibilityRole="button"
               >
                 <Text variant="label" color="accent">
-                  Edit Profile ›
+                  Edit ›
                 </Text>
               </Pressable>
             )}
@@ -694,16 +692,14 @@ export default function SettingsScreen() {
 
         {!isEditing ? (
           /* ========================================================
-             VIEW MODE: Display Personal Info & Training Profile
+             VIEW MODE: Clean, Compact Personal & Training Info
              ======================================================== */
           <>
-            {/* 2. Personal Information Card */}
+            {/* Personal Info */}
             <Card style={styles.sectionCard} testID="settings-personal-info-card">
-              <View style={styles.cardHeaderRow}>
-                <Text variant="label" color="muted">
-                  PERSONAL INFORMATION
-                </Text>
-              </View>
+              <Text variant="label" color="muted" style={styles.sectionHeading}>
+                PERSONAL DETAILS
+              </Text>
 
               <View style={styles.fieldRow}>
                 <Text variant="caption" color="muted">
@@ -742,104 +738,98 @@ export default function SettingsScreen() {
               </View>
             </Card>
 
-            {/* 3. Training Profile Card */}
+            {/* Training Profile */}
             <Card style={styles.sectionCard} testID="settings-profile-card">
-              <View style={styles.cardHeaderRow}>
-                <Text variant="label" color="muted">
-                  TRAINING PROFILE
+              <Text variant="label" color="muted" style={styles.sectionHeading}>
+                TRAINING PROFILE
+              </Text>
+
+              <View style={styles.fieldRow}>
+                <Text variant="caption" color="muted">
+                  Primary Goal
+                </Text>
+                <Text variant="bodyBold" color="primary" testID="profile-view-goal">
+                  {formatText(storeGoal)}
                 </Text>
               </View>
 
-              <View style={styles.profileViewContainer}>
-                <View style={styles.fieldRow}>
-                  <Text variant="caption" color="muted">
-                    Primary Goal
-                  </Text>
-                  <Text variant="bodyBold" color="primary" testID="profile-view-goal">
-                    {formatText(storeGoal)}
-                  </Text>
-                </View>
+              <View style={styles.fieldRow}>
+                <Text variant="caption" color="muted">
+                  Experience Level
+                </Text>
+                <Text variant="bodyBold" color="primary" testID="profile-view-experience">
+                  {formatText(storeExperience)}
+                </Text>
+              </View>
 
-                <View style={styles.fieldRow}>
-                  <Text variant="caption" color="muted">
-                    Experience Level
-                  </Text>
-                  <Text variant="bodyBold" color="primary" testID="profile-view-experience">
-                    {formatText(storeExperience)}
-                  </Text>
-                </View>
+              <View style={styles.fieldRow}>
+                <Text variant="caption" color="muted">
+                  Weekly Frequency
+                </Text>
+                <Text variant="bodyBold" color="primary" testID="profile-view-frequency">
+                  {storeDaysPerWeek ? `${storeDaysPerWeek} days / week` : 'Not set'}
+                </Text>
+              </View>
 
-                <View style={styles.fieldRow}>
-                  <Text variant="caption" color="muted">
-                    Weekly Frequency
-                  </Text>
-                  <Text variant="bodyBold" color="primary" testID="profile-view-frequency">
-                    {storeDaysPerWeek ? `${storeDaysPerWeek} days / week` : 'Not set'}
-                  </Text>
-                </View>
+              <View style={styles.fieldRow}>
+                <Text variant="caption" color="muted">
+                  Session Duration
+                </Text>
+                <Text variant="bodyBold" color="primary" testID="profile-view-duration">
+                  {formatText(storeDuration)}
+                </Text>
+              </View>
 
-                <View style={styles.fieldRow}>
-                  <Text variant="caption" color="muted">
-                    Session Duration
-                  </Text>
-                  <Text variant="bodyBold" color="primary" testID="profile-view-duration">
-                    {formatText(storeDuration)}
-                  </Text>
-                </View>
+              <View style={styles.fieldRow}>
+                <Text variant="caption" color="muted">
+                  Equipment Access
+                </Text>
+                <Text variant="bodyBold" color="primary" testID="profile-view-equipment">
+                  {formatEquipment(storeEquipment)}
+                </Text>
+              </View>
 
-                <View style={styles.fieldRow}>
-                  <Text variant="caption" color="muted">
-                    Equipment Access
-                  </Text>
-                  <Text variant="bodyBold" color="primary" testID="profile-view-equipment">
-                    {formatEquipment(storeEquipment)}
-                  </Text>
-                </View>
+              <View style={styles.fieldRow}>
+                <Text variant="caption" color="muted">
+                  Workout Style
+                </Text>
+                <Text variant="bodyBold" color="primary" testID="profile-view-style">
+                  {formatWorkoutStyle(storeStyle)}
+                </Text>
+              </View>
 
-                <View style={styles.fieldRow}>
-                  <Text variant="caption" color="muted">
-                    Workout Style
-                  </Text>
-                  <Text variant="bodyBold" color="primary" testID="profile-view-style">
-                    {formatWorkoutStyle(storeStyle)}
-                  </Text>
-                </View>
-
-                <View style={[styles.fieldRow, styles.noBorder]}>
-                  <Text variant="caption" color="muted">
-                    Preferred Days
-                  </Text>
-                  <View style={styles.daysBadgeRow} testID="profile-view-days">
-                    {storeDays && storeDays.length > 0 ? (
-                      storeDays.map((d) => (
-                        <View key={d} style={styles.dayBadge}>
-                          <Text variant="caption" color="accent" style={styles.dayBadgeText}>
-                            {d.slice(0, 3).toUpperCase()}
-                          </Text>
-                        </View>
-                      ))
-                    ) : (
-                      <View style={styles.dayBadge}>
-                        <Text variant="caption" color="secondary" style={styles.dayBadgeText}>
-                          Flexible
+              <View style={[styles.fieldRow, styles.noBorder]}>
+                <Text variant="caption" color="muted">
+                  Preferred Days
+                </Text>
+                <View style={styles.daysBadgeRow} testID="profile-view-days">
+                  {storeDays && storeDays.length > 0 ? (
+                    storeDays.map((d) => (
+                      <View key={d} style={styles.dayBadge}>
+                        <Text variant="caption" color="accent" style={styles.dayBadgeText}>
+                          {d.slice(0, 3).toUpperCase()}
                         </Text>
                       </View>
-                    )}
-                  </View>
+                    ))
+                  ) : (
+                    <View style={styles.dayBadge}>
+                      <Text variant="caption" color="secondary" style={styles.dayBadgeText}>
+                        Flexible
+                      </Text>
+                    </View>
+                  )}
                 </View>
               </View>
             </Card>
           </>
         ) : (
           /* ========================================================
-             EDIT MODE: Comprehensive Athletic Profile Editor
+             EDIT MODE: Athletic Profile Editor
              ======================================================== */
           <Card style={styles.sectionCard} testID="settings-profile-card">
-            <View style={styles.cardHeaderRow}>
-              <Text variant="label" color="muted">
-                EDIT ATHLETIC PROFILE
-              </Text>
-            </View>
+            <Text variant="label" color="muted" style={styles.sectionHeading}>
+              EDIT ATHLETIC PROFILE
+            </Text>
 
             <View style={styles.profileEditContainer}>
               {/* Personal Information Inputs */}
@@ -860,7 +850,7 @@ export default function SettingsScreen() {
                       setEditDisplayName(val);
                     }}
                     placeholder="e.g. Aditya Patil"
-                    placeholderTextColor={colors.dark.textMuted}
+                    placeholderTextColor={colors.textMuted}
                     style={styles.textInput}
                   />
                 </View>
@@ -868,7 +858,7 @@ export default function SettingsScreen() {
                 <View style={styles.formRow}>
                   <View style={[styles.inputGroup, styles.formCol]}>
                     <Text variant="caption" color="secondary">
-                      Age (years)
+                      Age (yrs)
                     </Text>
                     <TextInput
                       testID="input-age"
@@ -879,7 +869,7 @@ export default function SettingsScreen() {
                       }}
                       keyboardType="numeric"
                       placeholder="e.g. 25"
-                      placeholderTextColor={colors.dark.textMuted}
+                      placeholderTextColor={colors.textMuted}
                       style={styles.textInput}
                     />
                   </View>
@@ -897,7 +887,7 @@ export default function SettingsScreen() {
                       }}
                       keyboardType="numeric"
                       placeholder="e.g. 180"
-                      placeholderTextColor={colors.dark.textMuted}
+                      placeholderTextColor={colors.textMuted}
                       style={styles.textInput}
                     />
                   </View>
@@ -915,7 +905,7 @@ export default function SettingsScreen() {
                       }}
                       keyboardType="numeric"
                       placeholder="e.g. 78"
-                      placeholderTextColor={colors.dark.textMuted}
+                      placeholderTextColor={colors.textMuted}
                       style={styles.textInput}
                     />
                   </View>
@@ -946,7 +936,7 @@ export default function SettingsScreen() {
                         Avatar Preview
                       </Text>
                       <Text variant="caption" color="muted">
-                        Select an athletic preset, enter an image URL, or upload a photo.
+                        Select a preset, enter URL, or upload photo.
                       </Text>
                     </View>
                   </View>
@@ -994,11 +984,6 @@ export default function SettingsScreen() {
 
                   {/* Custom Avatar Grouping */}
                   <View style={styles.avatarCustomGroup}>
-                    <Text variant="caption" color="muted">
-                      Custom Avatar Photo or Image URL:
-                    </Text>
-
-                    {/* Web File Upload if supported */}
                     {Platform.OS === 'web' && typeof document !== 'undefined' && (
                       <View style={styles.uploadRow}>
                         <input
@@ -1032,7 +1017,6 @@ export default function SettingsScreen() {
                               };
                               reader.readAsDataURL(file);
                             }
-                            // Clear input value to allow re-selection of the same file
                             e.target.value = '';
                           }}
                         />
@@ -1048,7 +1032,6 @@ export default function SettingsScreen() {
                       </View>
                     )}
 
-                    {/* Avatar URL Text Input */}
                     <TextInput
                       testID="input-avatar-url"
                       value={editAvatarUrl}
@@ -1057,7 +1040,7 @@ export default function SettingsScreen() {
                         setEditAvatarUrl(val);
                       }}
                       placeholder="Or enter image URL (https://...)"
-                      placeholderTextColor={colors.dark.textMuted}
+                      placeholderTextColor={colors.textMuted}
                       style={styles.textInput}
                       autoCapitalize="none"
                     />
@@ -1189,7 +1172,7 @@ export default function SettingsScreen() {
                   title={saving ? 'Saving Changes...' : 'Save Changes'}
                   onPress={handleSaveProfile}
                   variant="primary"
-                  size="lg"
+                  size="md"
                   disabled={saving}
                   style={styles.saveButton}
                 />
@@ -1198,7 +1181,7 @@ export default function SettingsScreen() {
                   title="Cancel"
                   onPress={handleCancelEdit}
                   variant="outline"
-                  size="lg"
+                  size="md"
                   disabled={saving}
                   style={styles.cancelButton}
                 />
@@ -1207,13 +1190,31 @@ export default function SettingsScreen() {
           </Card>
         )}
 
-        {/* 4. Account Actions & Security Card */}
-        <Card style={styles.sectionCard} testID="settings-account-card">
-          <View style={styles.cardHeaderRow}>
-            <Text variant="label" color="muted">
-              ACCOUNT & SECURITY
-            </Text>
+        {/* Appearance / Theme Settings */}
+        <Card style={styles.sectionCard} testID="settings-appearance-card">
+          <Text variant="label" color="muted" style={styles.sectionHeading}>
+            APPEARANCE
+          </Text>
+
+          <View style={styles.themeGroup}>
+            <ChipGroup
+              options={[
+                { label: 'Dark', value: 'dark', testID: 'theme-dark' },
+                { label: 'Light', value: 'light', testID: 'theme-light' },
+                { label: 'System', value: 'system', testID: 'theme-system' },
+              ]}
+              selectedValue={mode}
+              onSelect={(val: any) => setMode(val)}
+              chipStyle={styles.themeChip}
+            />
           </View>
+        </Card>
+
+        {/* Account Actions & Security */}
+        <Card style={styles.sectionCard} testID="settings-account-card">
+          <Text variant="label" color="muted" style={styles.sectionHeading}>
+            ACCOUNT & SECURITY
+          </Text>
 
           {user && (
             <>
@@ -1255,7 +1256,7 @@ export default function SettingsScreen() {
             title={isGuest ? 'Exit Guest Mode' : 'Log Out'}
             onPress={handleSignOut}
             variant="outline"
-            size="md"
+            size="sm"
             style={styles.logoutButton}
           />
 
@@ -1265,21 +1266,15 @@ export default function SettingsScreen() {
               Account Deletion
             </Text>
             <Text variant="caption" color="muted" style={styles.deletionText}>
-              Account deletion requires a secure backend flow and was intentionally not implemented in this milestone.
+              Account deletion requires a secure backend flow and is handled via support.
             </Text>
           </View>
         </Card>
 
-        {/* 5. Development & Diagnostic Tools Card (Testing Only) */}
+        {/* Development & Diagnostic Tools */}
         <Card style={styles.devToolsCard} testID="settings-dev-tools-card">
-          <View style={styles.cardHeaderRow}>
-            <Text variant="caption" color="muted" style={styles.devToolsHeading}>
-              DEVELOPMENT & DIAGNOSTIC TOOLS (TESTING ONLY)
-            </Text>
-          </View>
-
-          <Text variant="caption" color="secondary" style={styles.devToolsDesc}>
-            These diagnostic actions are for engineering verification and do not affect normal athletic use.
+          <Text variant="caption" color="muted" style={styles.devToolsHeading}>
+            DEVELOPMENT & DIAGNOSTICS
           </Text>
 
           <View style={styles.devActionsRow}>
@@ -1293,7 +1288,7 @@ export default function SettingsScreen() {
             />
             <Button
               testID="dev-reset-onboarding-button"
-              title="Reset Onboarding (Dev Only)"
+              title="Reset Onboarding (Dev)"
               onPress={handleDevResetOnboarding}
               variant="ghost"
               size="sm"
@@ -1301,23 +1296,22 @@ export default function SettingsScreen() {
           </View>
         </Card>
 
-        {/* 6. App Information Card */}
+        {/* App Information */}
         <Card style={styles.sectionCard} testID="settings-app-info-card">
-          <Text variant="label" color="muted" style={styles.sectionLabel}>
+          <Text variant="label" color="muted" style={styles.sectionHeading}>
             APP INFORMATION
           </Text>
           <View style={styles.appInfoContent}>
-            <Text variant="titleMedium" color="primary">
-              BeBig 2.0
-            </Text>
-            <Text variant="caption" color="secondary">
-              Progressive Overload & Strength Architecture
-            </Text>
+            <View style={styles.appInfoRow}>
+              <Text variant="bodyBold" color="primary">
+                BeBig 2.0
+              </Text>
+              <Text variant="caption" color="muted" style={styles.versionText} testID="settings-version-text">
+                {env.displayVersion}
+              </Text>
+            </View>
             <Text variant="caption" color="muted" testID="developer-credit" style={styles.developerCredit}>
               Developed by Aditya Patil
-            </Text>
-            <Text variant="caption" color="muted" style={styles.versionText}>
-              Version 2.0.0 (Production PWA)
             </Text>
           </View>
         </Card>
@@ -1326,70 +1320,68 @@ export default function SettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
+  container: {
+    paddingVertical: spacing.md,
+    paddingBottom: spacing.xl * 3, // For navbar spacing
+  },
+  themeGroup: {
+    paddingTop: spacing.sm,
+  },
+  themeChip: {
+    flex: 1,
+  },
   scrollContent: {
     flexGrow: 1,
-    paddingVertical: spacing.md,
-    gap: spacing.md,
-    paddingBottom: spacing.xxl * 3,
+    paddingVertical: spacing.xs,
+    gap: spacing.xs + 4,
+    paddingBottom: spacing.xxl * 2,
   },
-  header: {
-    gap: spacing.xs,
-    marginBottom: spacing.xs,
-  },
-  navRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.xs,
-  },
-  backButton: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 0,
-  },
-  headerTitleRow: {
-    gap: spacing.xs,
+  headerRow: {
+    paddingVertical: 2,
   },
   screenTitle: {
     fontWeight: '800',
     letterSpacing: -0.5,
+    fontSize: 22,
   },
   successBanner: {
     backgroundColor: 'rgba(34, 197, 94, 0.12)',
     borderColor: 'rgba(34, 197, 94, 0.4)',
     borderWidth: 1,
     borderRadius: radii.md,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    paddingHorizontal: spacing.sm,
   },
   successText: {
     fontWeight: '700',
-    color: colors.dark.success,
+    color: colors.success,
   },
   errorBanner: {
     backgroundColor: 'rgba(239, 68, 68, 0.12)',
     borderColor: 'rgba(239, 68, 68, 0.4)',
     borderWidth: 1,
     borderRadius: radii.md,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    paddingHorizontal: spacing.sm,
   },
   errorText: {
     fontWeight: '700',
-    color: colors.dark.error,
+    color: colors.error,
   },
   profileHeaderCard: {
-    backgroundColor: colors.dark.surface,
-    borderColor: colors.dark.border,
-    padding: spacing.md,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    padding: spacing.sm,
   },
   profileHeaderContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   avatarWrapper: {
-    width: 64,
-    height: 64,
+    width: 48,
+    height: 48,
     borderRadius: radii.full,
     overflow: 'hidden',
     borderWidth: 2,
@@ -1402,46 +1394,51 @@ const styles = StyleSheet.create({
   avatarFallback: {
     width: '100%',
     height: '100%',
-    backgroundColor: colors.dark.surfaceElevated,
+    backgroundColor: colors.surfaceElevated,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarInitialsText: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: '800',
     color: '#E5A93C',
     letterSpacing: 1,
   },
   profileHeaderText: {
     flex: 1,
-    gap: spacing.xs,
+    gap: 2,
   },
-  headerBadgeRow: {
+  profileNameText: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  badgeRow: {
     flexDirection: 'row',
-    marginTop: spacing.xs,
+    marginTop: 2,
   },
   headerEditAction: {
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    paddingHorizontal: spacing.xs,
   },
   sectionCard: {
-    backgroundColor: colors.dark.surface,
-    borderColor: colors.dark.border,
-    padding: spacing.md,
-    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    padding: spacing.sm,
+    gap: 0,
   },
-  cardHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing.xs,
+  sectionHeading: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+    color: colors.textMuted,
   },
   cloudBadge: {
     backgroundColor: 'rgba(229, 169, 60, 0.12)',
     borderColor: 'rgba(229, 169, 60, 0.4)',
     borderWidth: 1,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
+    paddingHorizontal: spacing.xs + 2,
+    paddingVertical: 1,
     borderRadius: radii.full,
   },
   guestBadge: {
@@ -1449,12 +1446,14 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(156, 163, 175, 0.4)',
   },
   badgeText: {
+    fontSize: 10,
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   guestBadgeText: {
-    color: colors.dark.textSecondary,
+    color: colors.textSecondary,
+    fontSize: 10,
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -1463,18 +1462,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: spacing.sm,
+    paddingVertical: 6,
     borderBottomWidth: 1,
-    borderBottomColor: colors.dark.border,
+    borderBottomColor: colors.border,
   },
   noBorder: {
     borderBottomWidth: 0,
-    paddingBottom: 0,
+    paddingBottom: 2,
   },
   daysBadgeRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.xs,
+    gap: 4,
     alignItems: 'center',
   },
   dayBadge: {
@@ -1482,70 +1481,70 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(229, 169, 60, 0.3)',
     borderWidth: 1,
     borderRadius: radii.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
+    paddingHorizontal: spacing.xs + 2,
+    paddingVertical: 2,
   },
   dayBadgeText: {
+    fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.5,
   },
   formRow: {
     flexDirection: 'row',
-    gap: spacing.sm,
+    gap: spacing.xs,
   },
   formCol: {
     flex: 1,
   },
   inputGroup: {
-    gap: spacing.xs,
+    gap: 4,
   },
   textInput: {
-    backgroundColor: colors.dark.surfaceElevated,
-    borderColor: colors.dark.border,
+    backgroundColor: colors.surfaceElevated,
+    borderColor: colors.border,
     borderWidth: 1,
     borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    color: colors.dark.textPrimary,
-    fontSize: 16,
-  },
-  profileViewContainer: {
-    gap: 0,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    color: colors.textPrimary,
+    fontSize: 14,
   },
   profileEditContainer: {
-    gap: spacing.lg,
+    gap: spacing.sm,
+    marginTop: spacing.xs,
   },
   editSection: {
-    gap: spacing.sm,
+    gap: spacing.xs,
   },
   editSectionLabel: {
+    fontSize: 12,
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   multiSelectDayChip: {
     borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs + 2,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
   },
   avatarCustomGroup: {
-    backgroundColor: colors.dark.surfaceElevated,
-    borderColor: colors.dark.border,
+    backgroundColor: colors.surfaceElevated,
+    borderColor: colors.border,
     borderWidth: 1,
     borderRadius: radii.md,
-    padding: spacing.sm,
+    padding: spacing.xs,
     gap: spacing.xs,
-    marginTop: spacing.xs,
+    marginTop: 2,
   },
   optionsList: {
-    gap: spacing.sm,
+    gap: spacing.xs,
   },
   editActionRow: {
-    gap: spacing.sm,
-    marginTop: spacing.md,
-    paddingTop: spacing.md,
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+    paddingTop: spacing.xs,
     borderTopWidth: 1,
-    borderTopColor: colors.dark.border,
+    borderTopColor: colors.border,
   },
   saveButton: {
     width: '100%',
@@ -1553,68 +1552,74 @@ const styles = StyleSheet.create({
   cancelButton: {
     width: '100%',
   },
-  sectionLabel: {
-    marginBottom: spacing.xs,
-  },
   guestNoticeBox: {
-    backgroundColor: colors.dark.surfaceElevated,
+    backgroundColor: colors.surfaceElevated,
     borderRadius: radii.md,
-    padding: spacing.md,
-    gap: spacing.xs,
-    marginBottom: spacing.sm,
+    padding: spacing.sm,
+    gap: 2,
+    marginVertical: spacing.xs,
   },
   logoutButton: {
-    marginTop: spacing.sm,
+    marginTop: spacing.xs,
     borderColor: 'rgba(239, 68, 68, 0.4)',
   },
   deletionNoticeBox: {
-    marginTop: spacing.md,
-    padding: spacing.md,
-    backgroundColor: colors.dark.surfaceElevated,
+    marginTop: spacing.xs,
+    padding: spacing.xs + 2,
+    backgroundColor: colors.surfaceElevated,
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: colors.dark.border,
-    gap: spacing.xs,
+    borderColor: colors.border,
+    gap: 2,
   },
   deletionTitle: {
+    fontSize: 11,
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   deletionText: {
-    lineHeight: 18,
+    fontSize: 11,
+    lineHeight: 15,
   },
   appInfoContent: {
-    gap: spacing.xs,
+    gap: 2,
+    marginTop: 2,
+  },
+  appInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   developerCredit: {
-    marginTop: spacing.xs,
+    fontSize: 11,
   },
   versionText: {
+    fontSize: 11,
     opacity: 0.7,
   },
   avatarPreviewRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    backgroundColor: colors.dark.surfaceElevated,
-    padding: spacing.sm,
+    gap: spacing.sm,
+    backgroundColor: colors.surfaceElevated,
+    padding: spacing.xs,
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: colors.dark.border,
+    borderColor: colors.border,
   },
   previewAvatarWrapper: {
-    width: 48,
-    height: 48,
+    width: 40,
+    height: 40,
     borderRadius: radii.full,
     overflow: 'hidden',
-    backgroundColor: colors.dark.surfaceSubtle,
+    backgroundColor: colors.surfaceSubtle,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarPreviewImage: {
-    width: 48,
-    height: 48,
+    width: 40,
+    height: 40,
     borderRadius: radii.full,
   },
   previewTextCol: {
@@ -1622,61 +1627,58 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   presetLabel: {
-    marginTop: spacing.xs,
+    marginTop: 2,
   },
   presetsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.xs,
+    gap: 4,
   },
   presetChip: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 6,
+    paddingHorizontal: spacing.xs + 2,
+    paddingVertical: 4,
     borderRadius: radii.sm,
-    backgroundColor: colors.dark.surfaceElevated,
+    backgroundColor: colors.surfaceElevated,
     borderWidth: 1,
-    borderColor: colors.dark.border,
+    borderColor: colors.border,
   },
   presetChipActive: {
-    borderColor: colors.dark.primary,
+    borderColor: colors.primary,
     backgroundColor: 'rgba(56, 189, 248, 0.1)',
   },
   presetChipClear: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 6,
+    paddingHorizontal: spacing.xs + 2,
+    paddingVertical: 4,
     borderRadius: radii.sm,
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: colors.dark.borderLight,
+    borderColor: colors.borderLight,
   },
   uploadRow: {
     alignSelf: 'flex-start',
     marginVertical: 2,
   },
   uploadButton: {
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.sm,
   },
   devToolsCard: {
-    backgroundColor: colors.dark.surface,
-    borderColor: colors.dark.borderLight,
-    padding: spacing.md,
-    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderColor: colors.borderLight,
+    padding: spacing.sm,
+    gap: spacing.xs,
   },
   devToolsHeading: {
+    fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.8,
-    color: colors.dark.textMuted,
-  },
-  devToolsDesc: {
-    lineHeight: 18,
+    color: colors.textMuted,
   },
   devActionsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.sm,
-    marginTop: spacing.xs,
+    gap: spacing.xs,
   },
   devButton: {
-    borderColor: colors.dark.borderLight,
+    borderColor: colors.borderLight,
   },
 });

@@ -5,10 +5,11 @@
  * descriptive subtext, and accessible touch target.
  */
 
+import { useAppTheme } from '../../theme';
 import React from 'react';
 import { Pressable, StyleSheet, View, StyleProp, ViewStyle } from 'react-native';
 import { Text } from '../../../components/ui/Text';
-import { colors, spacing, radii } from '../../../constants/theme';
+import { spacing, radii } from '../../../constants/theme';
 
 export interface SelectableCardProps {
   title: string;
@@ -29,6 +30,9 @@ export function SelectableCard({
   style,
   testID,
 }: SelectableCardProps) {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+
   return (
     <Pressable
       testID={testID}
@@ -76,13 +80,13 @@ export function SelectableCard({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   card: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: colors.dark.surface,
-    borderColor: colors.dark.border,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
     borderWidth: 1.5,
     borderRadius: radii.lg,
     padding: spacing.md,
@@ -90,8 +94,8 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   cardSelected: {
-    borderColor: colors.dark.primary,
-    backgroundColor: colors.dark.surfaceSubtle,
+    borderColor: colors.primary,
+    backgroundColor: colors.surfaceSubtle,
   },
   cardPressed: {
     opacity: 0.85,
@@ -112,12 +116,12 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   badge: {
-    backgroundColor: colors.dark.surfaceElevated,
+    backgroundColor: colors.surfaceElevated,
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
     borderRadius: radii.full,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.dark.primary,
+    borderColor: colors.primary,
   },
   badgeText: {
     fontSize: 11,
@@ -129,17 +133,17 @@ const styles = StyleSheet.create({
     height: 24,
     borderRadius: radii.full,
     borderWidth: 2,
-    borderColor: colors.dark.textMuted,
+    borderColor: colors.textMuted,
     alignItems: 'center',
     justifyContent: 'center',
   },
   radioOuterSelected: {
-    borderColor: colors.dark.primary,
+    borderColor: colors.primary,
   },
   radioInner: {
     width: 12,
     height: 12,
     borderRadius: radii.full,
-    backgroundColor: colors.dark.primary,
+    backgroundColor: colors.primary,
   },
 });

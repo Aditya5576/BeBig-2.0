@@ -1,3 +1,4 @@
+import { useAppTheme } from '../../theme';
 import React, { useState, useEffect } from 'react';
 import {
   Modal,
@@ -11,7 +12,7 @@ import {
 } from 'react-native';
 import { ScreenContainer, Text, Button, Card } from '../../../components/ui';
 import { exerciseRepository, exerciseCacheStorage, Exercise, STANDARD_CATEGORIES } from '../../exercises';
-import { colors, spacing, radii } from '../../../constants/theme';
+import { spacing, radii } from '../../../constants/theme';
 
 export interface ExercisePickerModalProps {
   visible: boolean;
@@ -26,6 +27,9 @@ export function ExercisePickerModal({
   onSelectExercise,
   selectedExerciseIds = [],
 }: ExercisePickerModalProps) {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -162,7 +166,7 @@ export function ExercisePickerModal({
             testID="picker-search-input"
             style={styles.searchInput}
             placeholder="Search exercise library..."
-            placeholderTextColor={colors.dark.textMuted}
+            placeholderTextColor={colors.textMuted}
             value={searchQuery}
             onChangeText={setSearchQuery}
             autoCapitalize="none"
@@ -213,7 +217,7 @@ export function ExercisePickerModal({
         {/* Content */}
         {loading ? (
           <View style={styles.centerContainer}>
-            <ActivityIndicator size="large" color={colors.dark.primary} />
+            <ActivityIndicator size="large" color={colors.primary} />
           </View>
         ) : exercises.length === 0 ? (
           <View style={styles.centerContainer}>
@@ -237,14 +241,14 @@ export function ExercisePickerModal({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     paddingTop: spacing.xs,
   },
   header: {
     gap: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: colors.dark.borderLight,
+    borderBottomColor: colors.borderLight,
     paddingBottom: spacing.sm,
   },
   headerTitleRow: {
@@ -262,13 +266,13 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   searchInput: {
-    backgroundColor: colors.dark.surface,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.dark.borderLight,
+    borderColor: colors.borderLight,
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
-    color: colors.dark.textPrimary,
+    color: colors.textPrimary,
     fontSize: 16,
   },
   categoryScroll: {
@@ -278,13 +282,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs + 2,
     borderRadius: radii.full,
-    backgroundColor: colors.dark.surface,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.dark.borderLight,
+    borderColor: colors.borderLight,
   },
   categoryChipActive: {
-    backgroundColor: colors.dark.surfaceElevated,
-    borderColor: colors.dark.primary,
+    backgroundColor: colors.surfaceElevated,
+    borderColor: colors.primary,
   },
   chipText: {
     fontWeight: '600',
@@ -301,8 +305,8 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   exerciseCard: {
-    backgroundColor: colors.dark.surface,
-    borderColor: colors.dark.borderLight,
+    backgroundColor: colors.surface,
+    borderColor: colors.borderLight,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -319,7 +323,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   addedBadge: {
-    backgroundColor: colors.dark.surfaceElevated,
+    backgroundColor: colors.surfaceElevated,
     paddingHorizontal: spacing.sm,
     paddingVertical: 4,
     borderRadius: radii.sm,
@@ -329,7 +333,7 @@ const styles = StyleSheet.create({
   },
   customBadge: {
     backgroundColor: '#1E2C1A',
-    borderColor: colors.dark.success,
+    borderColor: colors.success,
     borderWidth: 1,
     paddingHorizontal: spacing.sm,
     paddingVertical: 4,
@@ -339,8 +343,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   selectBadge: {
-    backgroundColor: colors.dark.surfaceElevated,
-    borderColor: colors.dark.primary,
+    backgroundColor: colors.surfaceElevated,
+    borderColor: colors.primary,
     borderWidth: 1,
     paddingHorizontal: spacing.sm,
     paddingVertical: 4,

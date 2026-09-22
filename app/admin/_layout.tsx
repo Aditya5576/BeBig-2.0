@@ -1,3 +1,4 @@
+import { useAppTheme } from '../../src/features/theme';
 import React from 'react';
 import {
   View,
@@ -12,9 +13,12 @@ import { Slot, useRouter, usePathname, Redirect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAdminAuth } from '../../src/hooks/useAdminAuth';
 import { useAuthStore } from '../../src/features/auth';
-import { colors, spacing, radii, typography } from '../../src/constants/theme';
+import { spacing, radii, typography } from '../../src/constants/theme';
 
 export default function AdminLayout() {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+
   const router = useRouter();
   const pathname = usePathname();
 
@@ -25,7 +29,7 @@ export default function AdminLayout() {
   if (status === 'initializing' || isLoading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color={colors.dark.primary} />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -196,38 +200,38 @@ export default function AdminLayout() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.dark.background,
+    backgroundColor: colors.background,
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: spacing.lg,
-    backgroundColor: colors.dark.background,
+    backgroundColor: colors.background,
   },
   errorTitle: {
     ...typography.titleLarge,
-    color: colors.dark.error,
+    color: colors.error,
     marginBottom: spacing.xs,
   },
   errorSubtext: {
     ...typography.body,
-    color: colors.dark.textSecondary,
+    color: colors.textSecondary,
     marginBottom: spacing.lg,
     textAlign: 'center',
   },
   homeButton: {
-    backgroundColor: colors.dark.primary,
+    backgroundColor: colors.primary,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm + 2,
     borderRadius: radii.sm,
   },
   homeButtonText: {
     ...typography.bodyBold,
-    color: colors.dark.primaryText,
+    color: colors.primaryText,
   },
   header: {
     flexDirection: 'row',
@@ -235,9 +239,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
-    backgroundColor: colors.dark.surface,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: colors.dark.border,
+    borderBottomColor: colors.border,
     minHeight: 52,
     width: '100%',
   },
@@ -248,12 +252,12 @@ const styles = StyleSheet.create({
   },
   brandTitle: {
     ...typography.titleMedium,
-    color: colors.dark.textPrimary,
+    color: colors.textPrimary,
   },
   roleBadge: {
-    backgroundColor: colors.dark.surfaceSubtle,
+    backgroundColor: colors.surfaceSubtle,
     borderWidth: 1,
-    borderColor: colors.dark.primary,
+    borderColor: colors.primary,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: radii.xs,
@@ -262,25 +266,25 @@ const styles = StyleSheet.create({
     ...typography.caption,
     fontSize: 10,
     fontWeight: '700',
-    color: colors.dark.primary,
+    color: colors.primary,
   },
   exitButton: {
     paddingHorizontal: spacing.sm + 4,
     paddingVertical: spacing.xs + 2,
-    backgroundColor: colors.dark.surfaceSubtle,
+    backgroundColor: colors.surfaceSubtle,
     borderRadius: radii.xs,
     borderWidth: 1,
-    borderColor: colors.dark.borderLight,
+    borderColor: colors.borderLight,
   },
   exitButtonText: {
     ...typography.caption,
     fontWeight: '600',
-    color: colors.dark.textSecondary,
+    color: colors.textSecondary,
   },
   mobileNavContainer: {
-    backgroundColor: colors.dark.surface,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: colors.dark.border,
+    borderBottomColor: colors.border,
     paddingVertical: spacing.xs + 2,
     width: '100%',
   },
@@ -292,24 +296,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs + 2,
     borderRadius: radii.full,
-    backgroundColor: colors.dark.background,
+    backgroundColor: colors.background,
     borderWidth: 1,
-    borderColor: colors.dark.border,
+    borderColor: colors.border,
     minHeight: 36,
     justifyContent: 'center',
     alignItems: 'center',
   },
   mobileNavItemActive: {
-    backgroundColor: colors.dark.surfaceSubtle,
-    borderColor: colors.dark.primary,
+    backgroundColor: colors.surfaceSubtle,
+    borderColor: colors.primary,
   },
   mobileNavText: {
     ...typography.label,
     fontSize: 13,
-    color: colors.dark.textMuted,
+    color: colors.textMuted,
   },
   mobileNavTextActive: {
-    color: colors.dark.primary,
+    color: colors.primary,
     fontWeight: '700',
   },
   workspace: {
@@ -319,33 +323,33 @@ const styles = StyleSheet.create({
   },
   sidebar: {
     width: 220,
-    backgroundColor: colors.dark.surface,
+    backgroundColor: colors.surface,
     borderRightWidth: 1,
-    borderRightColor: colors.dark.border,
+    borderRightColor: colors.border,
   },
   sidebarItem: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md - 2,
     borderBottomWidth: 1,
-    borderBottomColor: colors.dark.border,
+    borderBottomColor: colors.border,
   },
   sidebarItemActive: {
-    backgroundColor: colors.dark.surfaceSubtle,
+    backgroundColor: colors.surfaceSubtle,
     borderLeftWidth: 3,
-    borderLeftColor: colors.dark.primary,
+    borderLeftColor: colors.primary,
   },
   sidebarText: {
     ...typography.body,
-    color: colors.dark.textSecondary,
+    color: colors.textSecondary,
   },
   sidebarTextActive: {
     ...typography.bodyBold,
-    color: colors.dark.primary,
+    color: colors.primary,
   },
   mainContent: {
     flex: 1,
     padding: spacing.lg,
-    backgroundColor: colors.dark.background,
+    backgroundColor: colors.background,
     width: '100%',
     maxWidth: '100%',
   },

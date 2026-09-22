@@ -1,3 +1,4 @@
+import { useAppTheme } from '../../../src/features/theme';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
@@ -10,7 +11,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { colors, spacing, radii, typography } from '../../../src/constants/theme';
+import { spacing, radii, typography } from '../../../src/constants/theme';
 import {
   getAdminUsers,
   AdminUserListItem,
@@ -35,6 +36,9 @@ const ONBOARDING_OPTIONS = [
 ];
 
 export default function UsersScreen() {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+
   const router = useRouter();
 
   // Search state
@@ -193,7 +197,7 @@ export default function UsersScreen() {
         <TextInput
           style={styles.searchInput}
           placeholder="Search by email, name, or ID..."
-          placeholderTextColor={colors.dark.textMuted}
+          placeholderTextColor={colors.textMuted}
           value={searchInput}
           onChangeText={setSearchInput}
           autoCapitalize="none"
@@ -263,7 +267,7 @@ export default function UsersScreen() {
       {/* Main List Area */}
       {isLoading ? (
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={colors.dark.primary} />
+          <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Loading accounts...</Text>
         </View>
       ) : error ? (
@@ -332,35 +336,35 @@ export default function UsersScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.dark.background,
+    backgroundColor: colors.background,
   },
   title: {
     ...typography.titleLarge,
-    color: colors.dark.textPrimary,
+    color: colors.textPrimary,
     marginBottom: spacing.xs,
   },
   subtitle: {
     ...typography.body,
-    color: colors.dark.textSecondary,
+    color: colors.textSecondary,
     marginBottom: spacing.md,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.dark.surface,
+    backgroundColor: colors.surface,
     borderRadius: radii.sm,
     borderWidth: 1,
-    borderColor: colors.dark.border,
+    borderColor: colors.border,
     paddingHorizontal: spacing.md,
     marginBottom: spacing.sm,
     minHeight: 44,
   },
   searchInput: {
     flex: 1,
-    color: colors.dark.textPrimary,
+    color: colors.textPrimary,
     height: 44,
     fontSize: 14,
   },
@@ -370,7 +374,7 @@ const styles = StyleSheet.create({
   },
   clearButtonText: {
     ...typography.caption,
-    color: colors.dark.textSecondary,
+    color: colors.textSecondary,
     fontWeight: '600',
   },
   filtersSection: {
@@ -387,33 +391,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs + 2,
     borderRadius: radii.full,
-    backgroundColor: colors.dark.surface,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.dark.border,
+    borderColor: colors.border,
     marginRight: spacing.xs + 2,
     minHeight: 36,
     justifyContent: 'center',
     alignItems: 'center',
   },
   chipActive: {
-    backgroundColor: colors.dark.surfaceSubtle,
-    borderColor: colors.dark.primary,
+    backgroundColor: colors.surfaceSubtle,
+    borderColor: colors.primary,
   },
   chipActiveRole: {
     backgroundColor: '#1E293B',
-    borderColor: colors.dark.primary,
+    borderColor: colors.primary,
   },
   chipText: {
     ...typography.caption,
-    color: colors.dark.textMuted,
+    color: colors.textMuted,
     fontWeight: '500',
   },
   chipTextActive: {
-    color: colors.dark.primary,
+    color: colors.primary,
     fontWeight: '600',
   },
   chipTextActiveRole: {
-    color: colors.dark.primary,
+    color: colors.primary,
     fontWeight: '600',
   },
   list: {
@@ -424,15 +428,15 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   card: {
-    backgroundColor: colors.dark.surface,
+    backgroundColor: colors.surface,
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: colors.dark.border,
+    borderColor: colors.border,
     padding: spacing.md,
   },
   cardPressed: {
-    backgroundColor: colors.dark.surfaceSubtle,
-    borderColor: colors.dark.borderLight,
+    backgroundColor: colors.surfaceSubtle,
+    borderColor: colors.borderLight,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -447,17 +451,17 @@ const styles = StyleSheet.create({
   },
   displayName: {
     ...typography.bodyBold,
-    color: colors.dark.textPrimary,
+    color: colors.textPrimary,
     marginBottom: 2,
   },
   emailText: {
     ...typography.body,
     fontSize: 13,
-    color: colors.dark.textSecondary,
+    color: colors.textSecondary,
   },
   roleBadge: {
-    backgroundColor: colors.dark.surfaceSubtle,
-    borderColor: colors.dark.primary,
+    backgroundColor: colors.surfaceSubtle,
+    borderColor: colors.primary,
     borderWidth: 1,
     paddingHorizontal: 8,
     paddingVertical: 3,
@@ -467,7 +471,7 @@ const styles = StyleSheet.create({
     ...typography.caption,
     fontSize: 10,
     fontWeight: '700',
-    color: colors.dark.primary,
+    color: colors.primary,
     textTransform: 'uppercase',
   },
   cardFooter: {
@@ -490,16 +494,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#064E3B',
   },
   statusIncomplete: {
-    backgroundColor: colors.dark.surfaceSubtle,
+    backgroundColor: colors.surfaceSubtle,
   },
   statusBadgeText: {
     ...typography.caption,
-    color: colors.dark.textPrimary,
+    color: colors.textPrimary,
     fontWeight: '500',
   },
   dateText: {
     ...typography.caption,
-    color: colors.dark.textMuted,
+    color: colors.textMuted,
   },
   idContainer: {
     flexDirection: 'row',
@@ -508,18 +512,18 @@ const styles = StyleSheet.create({
     marginTop: 2,
     paddingTop: spacing.xs + 2,
     borderTopWidth: 1,
-    borderTopColor: colors.dark.border,
+    borderTopColor: colors.border,
   },
   idLabel: {
     ...typography.caption,
     fontSize: 10,
-    color: colors.dark.textMuted,
+    color: colors.textMuted,
     fontWeight: '600',
   },
   idText: {
     ...typography.caption,
     fontSize: 11,
-    color: colors.dark.textSecondary,
+    color: colors.textSecondary,
     fontFamily: 'monospace',
     flex: 1,
   },
@@ -531,38 +535,38 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     ...typography.body,
-    color: colors.dark.textSecondary,
+    color: colors.textSecondary,
     marginTop: spacing.md,
   },
   errorTitle: {
     ...typography.titleLarge,
-    color: colors.dark.error,
+    color: colors.error,
     marginBottom: spacing.xs,
   },
   errorMessage: {
     ...typography.body,
-    color: colors.dark.textSecondary,
+    color: colors.textSecondary,
     textAlign: 'center',
     marginBottom: spacing.md,
   },
   retryButton: {
-    backgroundColor: colors.dark.primary,
+    backgroundColor: colors.primary,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     borderRadius: radii.xs,
   },
   retryButtonText: {
     ...typography.bodyBold,
-    color: colors.dark.primaryText,
+    color: colors.primaryText,
   },
   emptyTitle: {
     ...typography.titleLarge,
-    color: colors.dark.textPrimary,
+    color: colors.textPrimary,
     marginBottom: spacing.xs,
   },
   emptySubtitle: {
     ...typography.body,
-    color: colors.dark.textSecondary,
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   paginationFooter: {
@@ -571,15 +575,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: spacing.sm + 2,
     borderTopWidth: 1,
-    borderTopColor: colors.dark.border,
+    borderTopColor: colors.border,
   },
   pageButton: {
-    backgroundColor: colors.dark.surface,
+    backgroundColor: colors.surface,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: radii.xs,
     borderWidth: 1,
-    borderColor: colors.dark.border,
+    borderColor: colors.border,
     minHeight: 40,
     justifyContent: 'center',
     alignItems: 'center',
@@ -589,14 +593,14 @@ const styles = StyleSheet.create({
   },
   pageButtonText: {
     ...typography.label,
-    color: colors.dark.textPrimary,
+    color: colors.textPrimary,
   },
   pageButtonTextDisabled: {
-    color: colors.dark.textMuted,
+    color: colors.textMuted,
   },
   pageIndicator: {
     ...typography.body,
-    color: colors.dark.textSecondary,
+    color: colors.textSecondary,
     fontSize: 13,
   },
 });

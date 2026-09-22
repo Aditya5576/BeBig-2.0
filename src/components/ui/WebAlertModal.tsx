@@ -5,6 +5,7 @@
  * replacing the silent no-op Alert.alert in react-native-web.
  */
 
+import { useAppTheme } from '../../features/theme';
 import React from 'react';
 import {
   Modal,
@@ -14,10 +15,13 @@ import {
   Platform,
 } from 'react-native';
 import { Text } from './Text';
-import { colors, radii, spacing } from '../../constants/theme';
+import { radii, spacing } from '../../constants/theme';
 import { AlertButton, useWebAlertStore } from '../../lib/ui/webAlert';
 
 export function WebAlertModal() {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+
   const currentAlert = useWebAlertStore((state) => state.currentAlert);
   const hideAlert = useWebAlertStore((state) => state.hideAlert);
 
@@ -123,7 +127,7 @@ export function WebAlertModal() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   backdrop: {
     position: 'absolute',
     top: 0,
@@ -139,8 +143,8 @@ const styles = StyleSheet.create({
   dialogCard: {
     width: '100%',
     maxWidth: 380,
-    backgroundColor: colors.dark.surface,
-    borderColor: colors.dark.borderLight,
+    backgroundColor: colors.surface,
+    borderColor: colors.borderLight,
     borderWidth: 1.5,
     borderRadius: radii.lg,
     padding: spacing.lg,
@@ -158,7 +162,7 @@ const styles = StyleSheet.create({
   },
   message: {
     lineHeight: 22,
-    color: colors.dark.textSecondary,
+    color: colors.textSecondary,
   },
   buttonGroup: {
     flexDirection: 'row',
@@ -188,25 +192,25 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   primaryButton: {
-    backgroundColor: colors.dark.primary,
+    backgroundColor: colors.primary,
   },
   primaryButtonText: {
-    color: colors.dark.primaryText,
+    color: colors.primaryText,
   },
   cancelButton: {
-    backgroundColor: colors.dark.surfaceElevated,
+    backgroundColor: colors.surfaceElevated,
     borderWidth: 1,
-    borderColor: colors.dark.borderLight,
+    borderColor: colors.borderLight,
   },
   cancelButtonText: {
-    color: colors.dark.textSecondary,
+    color: colors.textSecondary,
   },
   destructiveButton: {
     backgroundColor: 'rgba(239, 68, 68, 0.15)',
     borderWidth: 1.5,
-    borderColor: colors.dark.error,
+    borderColor: colors.error,
   },
   destructiveButtonText: {
-    color: colors.dark.error,
+    color: colors.error,
   },
 });

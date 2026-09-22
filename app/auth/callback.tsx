@@ -1,3 +1,4 @@
+import { useAppTheme } from '../../src/features/theme';
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ActivityIndicator, Platform } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -6,9 +7,12 @@ import { ScreenContainer, Text, Button, Card } from '../../src/components/ui';
 import { authService, useAuthStore, resolveAuthenticatedUserRoute } from '../../src/features/auth';
 import { profileService } from '../../src/features/profile';
 import { useOnboardingStore } from '../../src/features/onboarding';
-import { colors, spacing } from '../../src/constants/theme';
+import { spacing } from '../../src/constants/theme';
 
 export default function AuthCallbackScreen() {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+
   const router = useRouter();
   const searchParams = useLocalSearchParams();
   const setSession = useAuthStore((state) => state.setSession);
@@ -130,7 +134,7 @@ export default function AuthCallbackScreen() {
             <ActivityIndicator
               testID="callback-loading-indicator"
               size="large"
-              color={colors.dark.primary}
+              color={colors.primary}
               style={styles.spinner}
             />
           </View>
@@ -160,7 +164,7 @@ export default function AuthCallbackScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     justifyContent: 'center',
     alignItems: 'center',
@@ -192,7 +196,7 @@ const styles = StyleSheet.create({
   },
   errorCard: {
     backgroundColor: '#2A1215',
-    borderColor: colors.dark.error,
+    borderColor: colors.error,
     gap: spacing.xs,
   },
   button: {

@@ -1,11 +1,15 @@
+import { useAppTheme } from '../../src/features/theme';
 import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, FlatList, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { ScreenContainer, Text, Button, Card } from '../../src/components/ui';
 import { templateRepository, WorkoutTemplate } from '../../src/features/templates';
-import { colors, spacing, radii } from '../../src/constants/theme';
+import { spacing, radii } from '../../src/constants/theme';
 
 export default function TemplatesListScreen() {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+
   const router = useRouter();
 
   const [templates, setTemplates] = useState<WorkoutTemplate[]>([]);
@@ -149,7 +153,7 @@ export default function TemplatesListScreen() {
       {/* Main Content */}
       {loading ? (
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={colors.dark.primary} testID="templates-loading" />
+          <ActivityIndicator size="large" color={colors.primary} testID="templates-loading" />
         </View>
       ) : templates.length === 0 ? (
         <View style={styles.centerContainer} testID="templates-empty-state">
@@ -182,12 +186,12 @@ export default function TemplatesListScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   header: {
     paddingVertical: spacing.sm,
     gap: spacing.xs,
     borderBottomWidth: 1,
-    borderBottomColor: colors.dark.borderLight,
+    borderBottomColor: colors.borderLight,
     paddingBottom: spacing.sm,
   },
   navRow: {
@@ -218,8 +222,8 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   templateCard: {
-    backgroundColor: colors.dark.surface,
-    borderColor: colors.dark.borderLight,
+    backgroundColor: colors.surface,
+    borderColor: colors.borderLight,
     gap: spacing.sm,
     marginBottom: spacing.xs,
   },
@@ -241,8 +245,8 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   countBadge: {
-    backgroundColor: colors.dark.surfaceElevated,
-    borderColor: colors.dark.border,
+    backgroundColor: colors.surfaceElevated,
+    borderColor: colors.border,
     borderWidth: 1,
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
@@ -264,7 +268,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: colors.dark.borderLight,
+    borderTopColor: colors.borderLight,
     paddingTop: spacing.sm,
     marginTop: spacing.xs,
   },

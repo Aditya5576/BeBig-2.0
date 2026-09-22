@@ -1,3 +1,4 @@
+import { useAppTheme } from '../../src/features/theme';
 import React from 'react';
 import {
   View,
@@ -6,14 +7,17 @@ import {
   ScrollView,
   Platform,
 } from 'react-native';
-import { colors, spacing, radii, typography } from '../../src/constants/theme';
+import { spacing, radii, typography } from '../../src/constants/theme';
 
 export default function AdminDashboard() {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+
   const stats = [
     { label: 'Total Users', value: '1,248' },
     { label: 'Active Workouts', value: '42' },
     { label: 'Recent Errors', value: '3' },
-    { label: 'Cloud Status', value: 'Healthy', color: colors.dark.success },
+    { label: 'Cloud Status', value: 'Healthy', color: colors.success },
     { label: 'App Version', value: '2.0.4-prod' },
   ];
 
@@ -73,7 +77,7 @@ export default function AdminDashboard() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
     width: '100%',
@@ -84,13 +88,13 @@ const styles = StyleSheet.create({
   },
   title: {
     ...typography.titleLarge,
-    color: colors.dark.textPrimary,
+    color: colors.textPrimary,
     marginBottom: spacing.xs,
     width: '100%',
   },
   subtitle: {
     ...typography.body,
-    color: colors.dark.textSecondary,
+    color: colors.textSecondary,
     marginBottom: spacing.lg,
     width: '100%',
   },
@@ -102,18 +106,18 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   card: {
-    backgroundColor: colors.dark.surface,
+    backgroundColor: colors.surface,
     padding: spacing.md,
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: colors.dark.border,
+    borderColor: colors.border,
     width: '100%',
   },
   cardLabel: {
     ...typography.caption,
     fontSize: 11,
     fontWeight: '600',
-    color: colors.dark.textSecondary,
+    color: colors.textSecondary,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: spacing.xs,
@@ -121,28 +125,28 @@ const styles = StyleSheet.create({
   cardValue: {
     ...typography.numericHero,
     fontSize: 30,
-    color: colors.dark.textPrimary,
+    color: colors.textPrimary,
   },
   noticeBox: {
-    backgroundColor: colors.dark.surfaceSubtle,
+    backgroundColor: colors.surfaceSubtle,
     padding: spacing.md,
     borderRadius: radii.sm,
     borderLeftWidth: 4,
-    borderLeftColor: colors.dark.primary,
+    borderLeftColor: colors.primary,
     borderWidth: 1,
-    borderColor: colors.dark.border,
+    borderColor: colors.border,
     width: '100%',
   },
   noticeTitle: {
     ...typography.label,
-    color: colors.dark.textPrimary,
+    color: colors.textPrimary,
     marginBottom: spacing.xs,
   },
   noticeText: {
     ...typography.caption,
     fontSize: 13,
     lineHeight: 18,
-    color: colors.dark.textSecondary,
+    color: colors.textSecondary,
   },
 });
 

@@ -1,3 +1,4 @@
+import { useAppTheme } from '../../theme';
 /**
  * BeBig 2.0 — Selectable Chip Group
  *
@@ -7,7 +8,7 @@
 import React from 'react';
 import { View, StyleSheet, Pressable, StyleProp, ViewStyle } from 'react-native';
 import { Text } from '../../../components/ui/Text';
-import { colors, spacing, radii } from '../../../constants/theme';
+import { spacing, radii } from '../../../constants/theme';
 
 export interface ChipOption<T> {
   label: string;
@@ -35,6 +36,9 @@ export function ChipGroup<T extends string | number>({
   style,
   chipStyle,
 }: ChipGroupProps<T>) {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+  
   const isSelected = (val: T) => {
     if (multiSelect) {
       return selectedValues.includes(val);
@@ -80,7 +84,7 @@ export function ChipGroup<T extends string | number>({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -89,8 +93,8 @@ const styles = StyleSheet.create({
   chip: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.dark.surface,
-    borderColor: colors.dark.border,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
     borderWidth: 1.5,
     borderRadius: radii.full,
     paddingHorizontal: spacing.md,
@@ -99,8 +103,8 @@ const styles = StyleSheet.create({
     minWidth: 44,
   },
   chipSelected: {
-    borderColor: colors.dark.primary,
-    backgroundColor: colors.dark.surfaceSubtle,
+    borderColor: colors.primary,
+    backgroundColor: colors.surfaceSubtle,
   },
   chipPressed: {
     opacity: 0.8,

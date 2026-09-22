@@ -349,6 +349,33 @@ export class WorkoutRepository {
   }
 
   /**
+   * Extends the active rest countdown timer by additional seconds.
+   * Does nothing if no active timer exists or if the timer has already expired.
+   */
+  extendRestTimer(workout: WorkoutSession, additionalSeconds: number): WorkoutSession {
+    if (!workout.activeRestTimer) {
+      return workout;
+    }
+
+    const now = Date.now();
+    if (workout.activeRestTimer.targetEndTime <= now) {
+      return workout;
+    }
+
+    const targetEndTime = workout.activeRestTimer.targetEndTime + additionalSeconds * 1000;
+    const durationSeconds = workout.activeRestTimer.durationSeconds + additionalSeconds;
+
+    return {
+      ...workout,
+      activeRestTimer: {
+        ...workout.activeRestTimer,
+        targetEndTime,
+        durationSeconds,
+      },
+    };
+  }
+
+  /**
    * Completes the active workout session.
    * Requires at least one completed set. Calculates duration and total tonnage volume.
    * Clears active draft and adds to completed workouts history.

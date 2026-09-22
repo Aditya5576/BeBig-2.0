@@ -4,6 +4,7 @@
  * Clean typography primitive enforcing BeBig typography scales and colors.
  */
 
+import { useAppTheme } from '../../features/theme';
 import React from 'react';
 import {
   Text as RNText,
@@ -12,7 +13,7 @@ import {
   StyleProp,
   TextStyle,
 } from 'react-native';
-import { typography, colors, TypographyKey } from '../../constants/theme';
+import { typography, TypographyKey } from '../../constants/theme';
 
 export type TextVariant = TypographyKey;
 export type TextColor = 'primary' | 'secondary' | 'muted' | 'inverse' | 'accent';
@@ -31,22 +32,25 @@ export function Text({
   children,
   ...props
 }: TextProps) {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+
   const fontStyle = typography[variant];
 
   const colorStyle: TextStyle = (() => {
     switch (color) {
       case 'primary':
-        return { color: colors.dark.textPrimary };
+        return { color: colors.textPrimary };
       case 'secondary':
-        return { color: colors.dark.textSecondary };
+        return { color: colors.textSecondary };
       case 'muted':
-        return { color: colors.dark.textMuted };
+        return { color: colors.textMuted };
       case 'inverse':
-        return { color: colors.dark.primaryText };
+        return { color: colors.primaryText };
       case 'accent':
-        return { color: colors.dark.primary };
+        return { color: colors.primary };
       default:
-        return { color: colors.dark.textPrimary };
+        return { color: colors.textPrimary };
     }
   })();
 
@@ -57,7 +61,7 @@ export function Text({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   base: {
     includeFontPadding: false,
     textAlignVertical: 'center',

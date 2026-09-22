@@ -1,9 +1,13 @@
+import { useAppTheme } from '../../src/features/theme';
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { colors } from '../../src/constants/theme';
+
 
 export default function AdminPlaceholder() {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+
   const { slug } = useLocalSearchParams();
   const path = Array.isArray(slug) ? slug.join('/') : slug;
 
@@ -15,7 +19,7 @@ export default function AdminPlaceholder() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: 'center',

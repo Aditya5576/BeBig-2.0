@@ -1,3 +1,4 @@
+import { useAppTheme } from '../../src/features/theme';
 import React, { useState } from 'react';
 import {
   View,
@@ -16,11 +17,14 @@ import {
   TemplateExercise,
 } from '../../src/features/templates';
 import { Exercise } from '../../src/features/exercises';
-import { colors, spacing, radii } from '../../src/constants/theme';
+import { spacing, radii } from '../../src/constants/theme';
 
 type FormExercise = Omit<TemplateExercise, 'order'>;
 
 export default function CreateTemplateScreen() {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+
   const router = useRouter();
 
   const [name, setName] = useState('');
@@ -166,7 +170,7 @@ export default function CreateTemplateScreen() {
               testID="template-name-input"
               style={styles.input}
               placeholder="e.g. Upper Body Hypertrophy A"
-              placeholderTextColor={colors.dark.textMuted}
+              placeholderTextColor={colors.textMuted}
               value={name}
               onChangeText={setName}
               autoFocus
@@ -309,7 +313,7 @@ export default function CreateTemplateScreen() {
                         testID={`exercise-reps-${item.exerciseId}`}
                         style={styles.gridInput}
                         placeholder="e.g. 8-10"
-                        placeholderTextColor={colors.dark.textMuted}
+                        placeholderTextColor={colors.textMuted}
                         value={item.targetReps}
                         onChangeText={(val) => handleUpdateExercise(index, 'targetReps', val)}
                       />
@@ -344,7 +348,7 @@ export default function CreateTemplateScreen() {
                         style={styles.gridInput}
                         keyboardType="decimal-pad"
                         placeholder="Optional"
-                        placeholderTextColor={colors.dark.textMuted}
+                        placeholderTextColor={colors.textMuted}
                         value={item.targetWeight !== undefined ? String(item.targetWeight) : ''}
                         onChangeText={(val) => {
                           if (val.trim() === '') {
@@ -391,7 +395,7 @@ export default function CreateTemplateScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   keyboardAvoiding: {
     flex: 1,
   },
@@ -413,20 +417,20 @@ const styles = StyleSheet.create({
   },
   errorCard: {
     backgroundColor: '#2A1215',
-    borderColor: colors.dark.error,
+    borderColor: colors.error,
     padding: spacing.sm,
   },
   formGroup: {
     gap: spacing.xs,
   },
   input: {
-    backgroundColor: colors.dark.surface,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.dark.borderLight,
+    borderColor: colors.borderLight,
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 4,
-    color: colors.dark.textPrimary,
+    color: colors.textPrimary,
     fontSize: 16,
   },
   sectionHeader: {
@@ -437,8 +441,8 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   emptyExercisesCard: {
-    backgroundColor: colors.dark.surface,
-    borderColor: colors.dark.borderLight,
+    backgroundColor: colors.surface,
+    borderColor: colors.borderLight,
     padding: spacing.lg,
     alignItems: 'center',
     justifyContent: 'center',
@@ -448,8 +452,8 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   exerciseCard: {
-    backgroundColor: colors.dark.surface,
-    borderColor: colors.dark.borderLight,
+    backgroundColor: colors.surface,
+    borderColor: colors.borderLight,
     gap: spacing.md,
     padding: spacing.md,
   },
@@ -458,7 +462,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     borderBottomWidth: 1,
-    borderBottomColor: colors.dark.borderLight,
+    borderBottomColor: colors.borderLight,
     paddingBottom: spacing.sm,
   },
   exerciseTitleGroup: {
@@ -483,12 +487,12 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   arrowButton: {
-    backgroundColor: colors.dark.surfaceElevated,
+    backgroundColor: colors.surfaceElevated,
     minWidth: 36,
     minHeight: 32,
     borderRadius: radii.xs,
     borderWidth: 1,
-    borderColor: colors.dark.border,
+    borderColor: colors.border,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -526,13 +530,13 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   gridInput: {
-    backgroundColor: colors.dark.surfaceElevated,
+    backgroundColor: colors.surfaceElevated,
     borderWidth: 1,
-    borderColor: colors.dark.border,
+    borderColor: colors.border,
     borderRadius: radii.sm,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,
-    color: colors.dark.textPrimary,
+    color: colors.textPrimary,
     fontSize: 16,
     minHeight: 44,
   },

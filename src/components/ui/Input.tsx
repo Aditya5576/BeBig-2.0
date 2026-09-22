@@ -5,6 +5,7 @@
  * and high-contrast typography designed for gym lighting.
  */
 
+import { useAppTheme } from '../../features/theme';
 import React, { useState } from 'react';
 import {
   View,
@@ -16,7 +17,7 @@ import {
   StyleProp,
 } from 'react-native';
 import { Text } from './Text';
-import { colors, spacing, radii } from '../../constants/theme';
+import { spacing, radii } from '../../constants/theme';
 
 export interface InputProps extends TextInputProps {
   label?: string;
@@ -43,6 +44,9 @@ export function Input({
   testID,
   ...rest
 }: InputProps) {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+
   const [isFocused, setIsFocused] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -68,7 +72,7 @@ export function Input({
         <TextInput
           testID={testID}
           style={[styles.input, leftIcon ? styles.inputWithLeftIcon : null, style]}
-          placeholderTextColor={colors.dark.textMuted}
+          placeholderTextColor={colors.textMuted}
           secureTextEntry={isSecure}
           onFocus={(e) => {
             setIsFocused(true);
@@ -112,7 +116,7 @@ export function Input({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     gap: spacing.xs,
     width: '100%',
@@ -126,28 +130,28 @@ const styles = StyleSheet.create({
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.dark.surface,
+    backgroundColor: colors.surface,
     borderWidth: 1.5,
-    borderColor: colors.dark.borderLight,
+    borderColor: colors.borderLight,
     borderRadius: radii.md,
     minHeight: 52, // Meets Apple 44pt touch minimum with generous padding
     paddingHorizontal: spacing.md,
   },
   inputWrapperFocused: {
-    borderColor: colors.dark.primary,
-    backgroundColor: colors.dark.surfaceElevated,
-    shadowColor: colors.dark.primary,
+    borderColor: colors.primary,
+    backgroundColor: colors.surfaceElevated,
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.25,
     shadowRadius: 8,
     elevation: 4,
   },
   inputWrapperError: {
-    borderColor: colors.dark.error,
+    borderColor: colors.error,
   },
   input: {
     flex: 1,
-    color: colors.dark.textPrimary,
+    color: colors.textPrimary,
     fontSize: 16,
     paddingVertical: spacing.sm + 4,
   },
@@ -173,7 +177,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
   },
   errorText: {
-    color: colors.dark.error,
+    color: colors.error,
     marginTop: 2,
   },
   helperText: {

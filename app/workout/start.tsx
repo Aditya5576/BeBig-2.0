@@ -1,12 +1,16 @@
+import { useAppTheme } from '../../src/features/theme';
 import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert, TextInput } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { ScreenContainer, Text, Button, Card } from '../../src/components/ui';
 import { templateRepository, WorkoutTemplate } from '../../src/features/templates';
 import { workoutRepository, WorkoutSession } from '../../src/features/workout';
-import { colors, spacing, radii } from '../../src/constants/theme';
+import { spacing, radii } from '../../src/constants/theme';
 
 export default function StartWorkoutScreen() {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+
   const router = useRouter();
 
   const [templates, setTemplates] = useState<WorkoutTemplate[]>([]);
@@ -175,7 +179,7 @@ export default function StartWorkoutScreen() {
 
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={colors.dark.primary} />
+            <ActivityIndicator size="large" color={colors.primary} />
           </View>
         ) : (
           <>
@@ -302,7 +306,7 @@ export default function StartWorkoutScreen() {
                           onChangeText={setEditTemplateName}
                           autoFocus
                           placeholder="Template Name"
-                          placeholderTextColor={colors.dark.textMuted}
+                          placeholderTextColor={colors.textMuted}
                         />
                         <View style={styles.editActions}>
                           <Button
@@ -367,7 +371,7 @@ export default function StartWorkoutScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingVertical: spacing.md,
@@ -393,8 +397,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   activeWorkoutCard: {
-    backgroundColor: colors.dark.surfaceElevated,
-    borderColor: colors.dark.primary,
+    backgroundColor: colors.surfaceElevated,
+    borderColor: colors.primary,
     borderWidth: 1.5,
     gap: spacing.sm,
     padding: spacing.md,
@@ -403,12 +407,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   activeBadge: {
-    backgroundColor: colors.dark.surface,
+    backgroundColor: colors.surface,
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
     borderRadius: radii.xs,
     borderWidth: 1,
-    borderColor: colors.dark.primary,
+    borderColor: colors.primary,
   },
   activeBadgeText: {
     fontSize: 10,
@@ -431,7 +435,7 @@ const styles = StyleSheet.create({
   activeDiscardButton: {
     flex: 1,
     minHeight: 44,
-    borderColor: colors.dark.error,
+    borderColor: colors.error,
   },
   quickStartCard: {
     gap: spacing.md,
@@ -446,19 +450,19 @@ const styles = StyleSheet.create({
   recommendedCard: {
     gap: spacing.md,
     padding: spacing.md,
-    borderColor: colors.dark.borderLight,
+    borderColor: colors.borderLight,
   },
   recommendedHeader: {
     gap: spacing.xs,
   },
   recommendedBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: colors.dark.surfaceElevated,
+    backgroundColor: colors.surfaceElevated,
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
     borderRadius: radii.xs,
     borderWidth: 1,
-    borderColor: colors.dark.primary,
+    borderColor: colors.primary,
   },
   recommendedBadgeText: {
     fontSize: 10,
@@ -517,14 +521,14 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   editInput: {
-    backgroundColor: colors.dark.surface,
-    color: colors.dark.primary,
+    backgroundColor: colors.surface,
+    color: colors.primary,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: radii.sm,
     fontSize: 16,
     borderWidth: 1,
-    borderColor: colors.dark.borderLight,
+    borderColor: colors.borderLight,
   },
   editActions: {
     flexDirection: 'row',

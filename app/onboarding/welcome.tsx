@@ -1,13 +1,17 @@
+import { useAppTheme } from '../../src/features/theme';
 import React from 'react';
 import { View, StyleSheet, ScrollView, Image, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ScreenContainer, Text, Button, Card } from '../../src/components/ui';
 import { useOnboardingStore } from '../../src/features/onboarding';
-import { spacing, colors, radii } from '../../src/constants/theme';
+import { spacing, radii } from '../../src/constants/theme';
 
 import { useAuthStore } from '../../src/features/auth';
 
 export default function WelcomeScreen() {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+
   const router = useRouter();
   const [navigating, setNavigating] = React.useState(false);
 
@@ -172,7 +176,7 @@ export default function WelcomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'space-between',
@@ -188,8 +192,8 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
   },
   badge: {
-    backgroundColor: colors.dark.surfaceElevated,
-    borderColor: colors.dark.primary,
+    backgroundColor: colors.surfaceElevated,
+    borderColor: colors.primary,
     borderWidth: 1,
     borderRadius: radii.full,
     paddingHorizontal: spacing.md,
@@ -202,7 +206,7 @@ const styles = StyleSheet.create({
   },
   heroGlowWrapper: {
     marginVertical: spacing.xs,
-    shadowColor: colors.dark.primary,
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.35,
     shadowRadius: 16,
@@ -214,8 +218,8 @@ const styles = StyleSheet.create({
     borderRadius: radii.xl,
     overflow: 'hidden',
     borderWidth: 2,
-    borderColor: colors.dark.borderLight,
-    backgroundColor: colors.dark.surfaceElevated,
+    borderColor: colors.borderLight,
+    backgroundColor: colors.surfaceElevated,
   },
   heroImage: {
     width: '100%',
@@ -237,7 +241,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
     fontSize: 14,
-    color: colors.dark.textSecondary,
+    color: colors.textSecondary,
   },
   featureList: {
     gap: spacing.sm,
@@ -246,18 +250,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    backgroundColor: colors.dark.surface,
+    backgroundColor: colors.surface,
     paddingVertical: spacing.sm + 4,
     paddingHorizontal: spacing.md,
     borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: colors.dark.border,
+    borderColor: colors.border,
   },
   featureIconContainer: {
     width: 40,
     height: 40,
     borderRadius: radii.md,
-    backgroundColor: colors.dark.surfaceSubtle,
+    backgroundColor: colors.surfaceSubtle,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -277,7 +281,7 @@ const styles = StyleSheet.create({
     width: '100%',
     minHeight: 52,
     borderRadius: radii.lg,
-    shadowColor: colors.dark.primary,
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 6,
