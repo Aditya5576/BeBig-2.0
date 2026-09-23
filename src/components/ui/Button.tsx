@@ -65,7 +65,7 @@ export function Button({
     }
   })();
 
-  const textVariant = size === 'sm' ? 'label' : 'bodyBold';
+  const textVariant = size === 'sm' ? 'buttonSmall' : 'button';
   const textColor =
     variant === 'primary' ? 'inverse' : variant === 'outline' ? 'accent' : 'primary';
 

@@ -27,7 +27,7 @@ export const radii = {
   full: 9999,
 } as const;
 
-import { Platform } from 'react-native';
+import { Platform, TextStyle } from 'react-native';
 
 export const fontFamilies = {
   sans: Platform.select({
@@ -46,22 +46,43 @@ export const fontFamilies = {
 
 export const typography = {
   display: {
-    fontSize: 32,
-    lineHeight: 38,
+    fontSize: 34,
+    lineHeight: 40,
+    fontWeight: '800' as const,
+    fontFamily: fontFamilies.sans,
+    letterSpacing: -0.6,
+  },
+  headingLarge: {
+    fontSize: 26,
+    lineHeight: 32,
     fontWeight: '700' as const,
     fontFamily: fontFamilies.sans,
-    letterSpacing: -0.5,
+    letterSpacing: -0.4,
+  },
+  headingMedium: {
+    fontSize: 20,
+    lineHeight: 26,
+    fontWeight: '700' as const,
+    fontFamily: fontFamilies.sans,
+    letterSpacing: -0.2,
+  },
+  headingSmall: {
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: '600' as const,
+    fontFamily: fontFamilies.sans,
+    letterSpacing: -0.1,
   },
   titleLarge: {
-    fontSize: 24,
-    lineHeight: 30,
+    fontSize: 26,
+    lineHeight: 32,
     fontWeight: '700' as const,
     fontFamily: fontFamilies.sans,
-    letterSpacing: -0.3,
+    letterSpacing: -0.4,
   },
   titleMedium: {
-    fontSize: 18,
-    lineHeight: 24,
+    fontSize: 20,
+    lineHeight: 26,
     fontWeight: '600' as const,
     fontFamily: fontFamilies.sans,
     letterSpacing: -0.2,
@@ -80,12 +101,19 @@ export const typography = {
     fontFamily: fontFamilies.sans,
     letterSpacing: 0,
   },
-  label: {
+  bodySmall: {
     fontSize: 13,
     lineHeight: 18,
-    fontWeight: '600' as const,
+    fontWeight: '400' as const,
     fontFamily: fontFamilies.sans,
-    letterSpacing: 0.2,
+    letterSpacing: 0,
+  },
+  label: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700' as const,
+    fontFamily: fontFamilies.sans,
+    letterSpacing: 0.8,
   },
   caption: {
     fontSize: 12,
@@ -94,19 +122,35 @@ export const typography = {
     fontFamily: fontFamilies.sans,
     letterSpacing: 0.1,
   },
+  button: {
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '600' as const,
+    fontFamily: fontFamilies.sans,
+    letterSpacing: 0,
+  },
+  buttonSmall: {
+    fontSize: 13,
+    lineHeight: 16,
+    fontWeight: '600' as const,
+    fontFamily: fontFamilies.sans,
+    letterSpacing: 0,
+  },
   numeric: {
     fontSize: 22,
     lineHeight: 28,
     fontWeight: '700' as const,
     fontFamily: fontFamilies.numeric,
     letterSpacing: -0.2,
+    fontVariant: ['tabular-nums'] as TextStyle['fontVariant'],
   },
   numericHero: {
     fontSize: 36,
     lineHeight: 42,
     fontWeight: '800' as const,
     fontFamily: fontFamilies.numeric,
-    letterSpacing: -0.5,
+    letterSpacing: -0.6,
+    fontVariant: ['tabular-nums'] as TextStyle['fontVariant'],
   },
 } as const;
 

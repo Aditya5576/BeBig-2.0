@@ -6,21 +6,87 @@
 
 import React, { useEffect, useRef } from 'react';
 import { StyleSheet, ViewStyle, StyleProp, Animated, Platform } from 'react-native';
-import { SafeAreaView, Edge } from 'react-native-safe-area-context';
+import { SafeAreaView, Edge, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { spacing } from '../../constants/theme';
 import { useAppTheme } from '../../features/theme';
 
 export interface ScreenContainerProps {
-  children: React.ReactNode;
+  children?: React.ReactNode;
   style?: StyleProp<ViewStyle>;
   edges?: Edge[];
   disableAnimation?: boolean;
 }
 
+import { useSegments } from 'expo-router';
+
+export function useBottomContentInset() {
+  let insets = { top: 0, bottom: 0, left: 0, right: 0 };
+  try {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    insets = useSafeAreaInsets();
+  } catch {
+    // Fallback if rendered outside SafeAreaProvider
+  }
+  
+  let isHidden = false;
+  try {
+    const segments = useSegments() as string[];
+    const firstSegment = segments.length > 0 ? segments[0] : undefined;
+    const secondSegment = segments.length > 1 ? segments[1] : undefined;
+    
+    isHidden = 
+      firstSegment === 'onboarding' ||
+      firstSegment === 'auth' ||
+      firstSegment === 'index' ||
+      firstSegment === 'admin' ||
+      !firstSegment ||
+      (firstSegment === 'workout' && secondSegment === 'active');
+  } catch (e) {
+    // Fallback if useSegments fails (e.g. outside of routing context)
+  }
+  
+  if (isHidden) {
+    return insets.bottom;
+  }
+
+  // BottomNavBar Base (64) + Safe Area + Workout Button overlap clearance (18) + Visual spacing (16)
+  return 64 + Math.max(insets.bottom, 12) + 34; 
+}
+
+import { ScrollView, FlatList, ScrollViewProps, FlatListProps } from 'react-native';
+
+export function ScreenScrollView({ style, contentContainerStyle, ...props }: ScrollViewProps) {
+  const bottomInset = useBottomContentInset();
+  return (
+    <ScrollView
+      style={[{ flex: 1 }, style]}
+      contentContainerStyle={[
+        contentContainerStyle,
+        { paddingBottom: bottomInset }
+      ]}
+      {...props}
+    />
+  );
+}
+
+export function ScreenFlatList<T>(props: FlatListProps<T>) {
+  const bottomInset = useBottomContentInset();
+  const { style, contentContainerStyle, ...rest } = props;
+  return (
+    <FlatList
+      style={[{ flex: 1 }, style]}
+      contentContainerStyle={[
+        contentContainerStyle,
+        { paddingBottom: bottomInset }
+      ]}
+      {...rest}
+    />
+  );
+}
 export function ScreenContainer({
   children,
   style,
-  edges = ['top', 'bottom', 'left', 'right'],
+  edges = ['top', 'left', 'right'],
   disableAnimation = false,
 }: ScreenContainerProps) {
   const isTest = process.env.NODE_ENV === 'test';

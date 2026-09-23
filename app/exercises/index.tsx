@@ -10,7 +10,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ScreenContainer, Text, Button, Card } from '../../src/components/ui';
+import { ScreenContainer, ScreenScrollView, ScreenFlatList, Text, Button, Card } from '../../src/components/ui';
 import { exerciseRepository, Exercise, STANDARD_CATEGORIES } from '../../src/features/exercises';
 import { spacing, radii } from '../../src/constants/theme';
 
@@ -317,7 +317,7 @@ export default function ExerciseListScreen() {
           />
         </View>
       ) : (
-        <FlatList
+        <ScreenFlatList
           testID="exercise-list"
           data={exercises}
           keyExtractor={(item) => item.id}

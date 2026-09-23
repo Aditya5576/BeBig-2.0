@@ -2,7 +2,7 @@ import { useAppTheme } from '../../src/features/theme';
 import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert, TextInput } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { ScreenContainer, Text, Button, Card } from '../../src/components/ui';
+import { ScreenContainer, ScreenScrollView, Text, Button, Card } from '../../src/components/ui';
 import { templateRepository, WorkoutTemplate } from '../../src/features/templates';
 import { workoutRepository, WorkoutSession } from '../../src/features/workout';
 import { spacing, radii } from '../../src/constants/theme';
@@ -153,7 +153,7 @@ export default function StartWorkoutScreen() {
 
   return (
     <ScreenContainer>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScreenScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Navigation / Header */}
         <View style={styles.header}>
           <Pressable
@@ -366,7 +366,7 @@ export default function StartWorkoutScreen() {
             </View>
           </>
         )}
-      </ScrollView>
+      </ScreenScrollView>
     </ScreenContainer>
   );
 }

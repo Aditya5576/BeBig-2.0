@@ -2,7 +2,7 @@ import { useAppTheme, useThemeStore } from '../src/features/theme';
 import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, TextInput, Image, Alert, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ScreenContainer, Text, Button, Card } from '../src/components/ui';
+import { ScreenContainer, ScreenScrollView, Text, Button, Card } from '../src/components/ui';
 import { useAuthStore } from '../src/features/auth';
 import {
   useOnboardingStore,
@@ -599,7 +599,7 @@ export default function SettingsScreen() {
 
   return (
     <ScreenContainer style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScreenScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Top Screen Header */}
         <View style={styles.headerRow}>
           <Text
@@ -1315,7 +1315,7 @@ export default function SettingsScreen() {
             </Text>
           </View>
         </Card>
-      </ScrollView>
+      </ScreenScrollView>
     </ScreenContainer>
   );
 }
@@ -1323,7 +1323,6 @@ export default function SettingsScreen() {
 const createStyles = (colors: any) => StyleSheet.create({
   container: {
     paddingVertical: spacing.md,
-    paddingBottom: spacing.xl * 3, // For navbar spacing
   },
   themeGroup: {
     paddingTop: spacing.sm,
@@ -1335,7 +1334,6 @@ const createStyles = (colors: any) => StyleSheet.create({
     flexGrow: 1,
     paddingVertical: spacing.xs,
     gap: spacing.xs + 4,
-    paddingBottom: spacing.xxl * 2,
   },
   headerRow: {
     paddingVertical: 2,

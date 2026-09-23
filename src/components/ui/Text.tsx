@@ -21,6 +21,7 @@ export type TextColor = 'primary' | 'secondary' | 'muted' | 'inverse' | 'accent'
 export interface TextProps extends RNTextProps {
   variant?: TextVariant;
   color?: TextColor;
+  tabularNums?: boolean;
   style?: StyleProp<TextStyle>;
   children?: React.ReactNode;
 }
@@ -28,6 +29,7 @@ export interface TextProps extends RNTextProps {
 export function Text({
   variant = 'body',
   color = 'primary',
+  tabularNums,
   style,
   children,
   ...props
@@ -54,8 +56,10 @@ export function Text({
     }
   })();
 
+  const tabularStyle: TextStyle | null = tabularNums ? { fontVariant: ['tabular-nums'] } : null;
+
   return (
-    <RNText style={[styles.base, fontStyle, colorStyle, style]} {...props}>
+    <RNText style={[styles.base, fontStyle, colorStyle, tabularStyle, style]} {...props}>
       {children}
     </RNText>
   );

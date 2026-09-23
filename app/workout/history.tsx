@@ -2,7 +2,7 @@ import { useAppTheme } from '../../src/features/theme';
 import React, { useState, useCallback, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert, TextInput } from 'react-native';
 import { useRouter, useFocusEffect as routerFocusEffect } from 'expo-router';
-import { ScreenContainer, Text, Button, Card } from '../../src/components/ui';
+import { ScreenContainer, ScreenScrollView, Text, Button, Card } from '../../src/components/ui';
 import {
   workoutRepository,
   WorkoutSession,
@@ -136,7 +136,7 @@ export default function WorkoutHistoryScreen() {
 
   return (
     <ScreenContainer>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScreenScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
           <Pressable
@@ -370,7 +370,7 @@ export default function WorkoutHistoryScreen() {
             ))}
           </View>
         )}
-      </ScrollView>
+      </ScreenScrollView>
     </ScreenContainer>
   );
 }

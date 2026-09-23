@@ -2,7 +2,7 @@ import { useAppTheme } from '../../src/features/theme';
 import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, FlatList, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { ScreenContainer, Text, Button, Card } from '../../src/components/ui';
+import { ScreenContainer, ScreenFlatList, Text, Button, Card } from '../../src/components/ui';
 import { templateRepository, WorkoutTemplate } from '../../src/features/templates';
 import { spacing, radii } from '../../src/constants/theme';
 
@@ -173,7 +173,7 @@ export default function TemplatesListScreen() {
           />
         </View>
       ) : (
-        <FlatList
+        <ScreenFlatList
           testID="templates-list"
           data={templates}
           keyExtractor={(item) => item.id}

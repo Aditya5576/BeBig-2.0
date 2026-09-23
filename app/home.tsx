@@ -2,7 +2,7 @@ import { useAppTheme } from '../src/features/theme';
 import React, { useState, useCallback, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, Alert, Image } from 'react-native';
 import { useRouter, useFocusEffect as routerFocusEffect } from 'expo-router';
-import { ScreenContainer, Text, Button, Card } from '../src/components/ui';
+import { ScreenContainer, ScreenScrollView, Text, Button, Card } from '../src/components/ui';
 import { useOnboardingStore } from '../src/features/onboarding';
 import { useAuthStore } from '../src/features/auth';
 import {
@@ -245,7 +245,7 @@ export default function HomeScreen() {
 
   return (
     <ScreenContainer>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScreenScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* 1. Header Row */}
         <View style={styles.header}>
           <View style={styles.headerTopRow}>
@@ -676,7 +676,7 @@ export default function HomeScreen() {
             </Text>
           </View>
         </View>
-      </ScrollView>
+      </ScreenScrollView>
     </ScreenContainer>
   );
 }
