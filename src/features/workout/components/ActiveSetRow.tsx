@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, TextInput, Pressable } from 'react-native';
 import { useAppTheme } from '../../theme';
 import { Text } from '../../../components/ui';
@@ -18,7 +18,11 @@ export interface ActiveSetRowProps {
     field: keyof WorkoutSet,
     value: string,
   ) => void;
-  onToggleCompleteSet: (exercise: WorkoutExercise, set: WorkoutSet) => void;
+  onToggleCompleteSet: (
+    exercise: WorkoutExercise,
+    set: WorkoutSet,
+    pendingUpdates?: Partial<WorkoutSet>,
+  ) => void;
 }
 
 export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
@@ -33,6 +37,58 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
 }) => {
   const { colors } = useAppTheme();
   const styles = createStyles(colors);
+
+  const [localWeight, setLocalWeight] = useState(
+    set.weight !== undefined && set.weight !== null ? String(set.weight) : ''
+  );
+  const [localReps, setLocalReps] = useState(
+    set.reps !== undefined && set.reps !== null ? String(set.reps) : ''
+  );
+  const [localRir, setLocalRir] = useState(
+    set.rir !== undefined && set.rir !== null ? String(set.rir) : '2'
+  );
+  const [localNotes, setLocalNotes] = useState(set.notes || '');
+
+  // Sync local state when incoming props change (e.g., duplicate set, resume workout)
+  useEffect(() => {
+    setLocalWeight(set.weight !== undefined && set.weight !== null ? String(set.weight) : '');
+    setLocalReps(set.reps !== undefined && set.reps !== null ? String(set.reps) : '');
+    setLocalRir(set.rir !== undefined && set.rir !== null ? String(set.rir) : '2');
+    setLocalNotes(set.notes || '');
+  }, [set.weight, set.reps, set.rir, set.notes]);
+
+  const commitWeight = useCallback(() => {
+    onUpdateSetField(exercise.exerciseId, set.id, 'weight', localWeight);
+  }, [exercise.exerciseId, set.id, localWeight, onUpdateSetField]);
+
+  const commitReps = useCallback(() => {
+    onUpdateSetField(exercise.exerciseId, set.id, 'reps', localReps);
+  }, [exercise.exerciseId, set.id, localReps, onUpdateSetField]);
+
+  const commitRir = useCallback(() => {
+    onUpdateSetField(exercise.exerciseId, set.id, 'rir', localRir);
+  }, [exercise.exerciseId, set.id, localRir, onUpdateSetField]);
+
+  const commitNotes = useCallback(() => {
+    onUpdateSetField(exercise.exerciseId, set.id, 'notes', localNotes);
+  }, [exercise.exerciseId, set.id, localNotes, onUpdateSetField]);
+
+  const handleToggleComplete = useCallback(() => {
+    let pendingUpdates: Partial<WorkoutSet> = {};
+
+    const numWeight = parseFloat(localWeight);
+    if (!isNaN(numWeight)) pendingUpdates.weight = Math.max(0, numWeight);
+
+    const numReps = parseInt(localReps, 10);
+    if (!isNaN(numReps)) pendingUpdates.reps = Math.max(0, numReps);
+
+    const numRir = parseFloat(localRir);
+    if (!isNaN(numRir)) pendingUpdates.rir = Math.min(10, Math.max(0, numRir));
+
+    pendingUpdates.notes = localNotes;
+
+    onToggleCompleteSet(exercise, set, pendingUpdates);
+  }, [exercise, set, localWeight, localReps, localRir, localNotes, onToggleCompleteSet]);
 
   return (
     <View
@@ -88,13 +144,13 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
           </Text>
           <TextInput
             testID={`set-weight-${exercise.exerciseId}-${set.setNumber}`}
-            defaultValue={set.weight ? String(set.weight) : ''}
+            value={localWeight}
             placeholder="0"
             placeholderTextColor={colors.textMuted}
             keyboardType="decimal-pad"
-            onChangeText={(val) =>
-              onUpdateSetField(exercise.exerciseId, set.id, 'weight', val)
-            }
+            onChangeText={setLocalWeight}
+            onBlur={commitWeight}
+            onSubmitEditing={commitWeight}
             style={[
               styles.metricInput,
               set.completed ? styles.metricInputCompleted : null,
@@ -109,13 +165,13 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
           </Text>
           <TextInput
             testID={`set-reps-${exercise.exerciseId}-${set.setNumber}`}
-            defaultValue={set.reps ? String(set.reps) : ''}
+            value={localReps}
             placeholder="10"
             placeholderTextColor={colors.textMuted}
             keyboardType="number-pad"
-            onChangeText={(val) =>
-              onUpdateSetField(exercise.exerciseId, set.id, 'reps', val)
-            }
+            onChangeText={setLocalReps}
+            onBlur={commitReps}
+            onSubmitEditing={commitReps}
             style={[
               styles.metricInput,
               set.completed ? styles.metricInputCompleted : null,
@@ -130,13 +186,13 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
           </Text>
           <TextInput
             testID={`set-rir-${exercise.exerciseId}-${set.setNumber}`}
-            defaultValue={set.rir !== undefined ? String(set.rir) : '2'}
+            value={localRir}
             placeholder="2"
             placeholderTextColor={colors.textMuted}
             keyboardType="decimal-pad"
-            onChangeText={(val) =>
-              onUpdateSetField(exercise.exerciseId, set.id, 'rir', val)
-            }
+            onChangeText={setLocalRir}
+            onBlur={commitRir}
+            onSubmitEditing={commitRir}
             style={[
               styles.metricInput,
               set.completed ? styles.metricInputCompleted : null,
@@ -153,12 +209,12 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
           </Text>
           <TextInput
             testID={`set-notes-${exercise.exerciseId}-${set.setNumber}`}
-            defaultValue={set.notes || ''}
+            value={localNotes}
             placeholder="Form cues, tempo, notes..."
             placeholderTextColor={colors.textMuted}
-            onChangeText={(val) =>
-              onUpdateSetField(exercise.exerciseId, set.id, 'notes', val)
-            }
+            onChangeText={setLocalNotes}
+            onBlur={commitNotes}
+            onSubmitEditing={commitNotes}
             style={styles.notesInput}
             autoFocus={!set.notes && Boolean(isNotesExpanded)}
           />
@@ -178,7 +234,7 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
       {/* Prominent Full-Width Complete Set Button */}
       <Pressable
         testID={`complete-set-${exercise.exerciseId}-${set.setNumber}`}
-        onPress={() => onToggleCompleteSet(exercise, set)}
+        onPress={handleToggleComplete}
         style={[
           styles.completeSetButton,
           set.completed

@@ -24,7 +24,11 @@ export interface ActiveExerciseCardProps {
     field: keyof WorkoutSet,
     value: string,
   ) => void;
-  onToggleCompleteSet: (exercise: WorkoutExercise, set: WorkoutSet) => void;
+  onToggleCompleteSet: (
+    exercise: WorkoutExercise,
+    set: WorkoutSet,
+    pendingUpdates?: Partial<WorkoutSet>,
+  ) => void;
 }
 
 const formatShortDate = (dateStr?: string) => {

@@ -327,29 +327,36 @@ export default function ActiveWorkoutScreen() {
   };
 
   // Toggle complete set
-  const handleToggleCompleteSet = async (exercise: WorkoutExercise, set: WorkoutSet) => {
+  const handleToggleCompleteSet = async (
+    exercise: WorkoutExercise,
+    set: WorkoutSet,
+    pendingUpdates?: Partial<WorkoutSet>,
+  ) => {
     if (!session) return;
 
-    if (!set.completed) {
+    const effectiveSet = { ...set, ...pendingUpdates };
+
+    if (!effectiveSet.completed) {
       // Validate before completing
-      if (set.reps <= 0 || !Number.isInteger(set.reps)) {
+      if (effectiveSet.reps <= 0 || !Number.isInteger(effectiveSet.reps)) {
         Alert.alert(
           'Invalid Reps',
           'Reps must be a positive integer (at least 1) to complete a set.',
         );
         return;
       }
-      if (set.weight < 0 || isNaN(set.weight)) {
+      if (effectiveSet.weight < 0 || isNaN(effectiveSet.weight)) {
         Alert.alert('Invalid Weight', 'Weight cannot be negative.');
         return;
       }
-      if (set.rir !== undefined && (set.rir < 0 || set.rir > 10 || isNaN(set.rir))) {
+      if (effectiveSet.rir !== undefined && (effectiveSet.rir < 0 || effectiveSet.rir > 10 || isNaN(effectiveSet.rir))) {
         Alert.alert('Invalid RIR', 'RIR must be between 0 and 10.');
         return;
       }
 
       // Complete set and trigger rest timer
       let updated = workoutRepository.updateSet(session, exercise.exerciseId, set.id, {
+        ...pendingUpdates,
         completed: true,
         completedAt: new Date().toISOString(),
       });
