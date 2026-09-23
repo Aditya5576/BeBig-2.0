@@ -24,9 +24,18 @@ import { ExercisePickerModal } from '../../src/features/templates/components/Exe
 import { Exercise } from '../../src/features/exercises';
 import { spacing, radii } from '../../src/constants/theme';
 
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
 export default function ActiveWorkoutScreen() {
   const { colors } = useAppTheme();
-  const styles = createStyles(colors);
+  let insets = { bottom: 0 };
+  try {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    insets = useSafeAreaInsets();
+  } catch {
+    insets = { bottom: 0 };
+  }
+  const styles = createStyles(colors, insets as any);
 
   const router = useRouter();
 
@@ -539,84 +548,7 @@ export default function ActiveWorkoutScreen() {
             </View>
           </View>
 
-          {/* Active Rest Countdown Timer Banner */}
-          {restRemaining !== null && restRemaining > 0 && !isRestFinished && (
-            <Card style={styles.restBannerCard} testID="rest-timer-banner">
-              <View style={styles.restBannerContent}>
-                <View style={styles.restInfo}>
-                  <Text variant="caption" color="accent" style={styles.restLabel}>
-                    REST INTERVAL
-                  </Text>
-                  <Text variant="titleLarge" color="primary" style={styles.restCountdownText}>
-                    REST {formatTime(restRemaining)}
-                  </Text>
-                  {session.activeRestTimer?.exerciseName ? (
-                    <Text variant="caption" color="secondary" numberOfLines={1}>
-                      After Set {session.activeRestTimer.setNumber} •{' '}
-                      {session.activeRestTimer.exerciseName}
-                    </Text>
-                  ) : null}
-                </View>
-                <View style={styles.restControlsGroup}>
-                  <View style={styles.extendButtonsRow}>
-                    <Button
-                      testID="extend-rest-10-button"
-                      title="+10s"
-                      onPress={() => handleExtendRest(10)}
-                      variant="outline"
-                      size="sm"
-                      style={styles.extendRestButton}
-                    />
-                    <Button
-                      testID="extend-rest-20-button"
-                      title="+20s"
-                      onPress={() => handleExtendRest(20)}
-                      variant="outline"
-                      size="sm"
-                      style={styles.extendRestButton}
-                    />
-                  </View>
-                  <Button
-                    testID="skip-rest-timer-button"
-                    title="Skip Rest"
-                    onPress={handleSkipRest}
-                    variant="secondary"
-                    size="sm"
-                    style={styles.skipRestButton}
-                  />
-                </View>
-              </View>
-            </Card>
-          )}
 
-          {/* Completed Rest Interval Banner */}
-          {isRestFinished && (
-            <Card style={styles.restCompleteCard} testID="rest-complete-banner">
-              <View style={styles.restBannerContent}>
-                <View style={styles.restInfo}>
-                  <Text variant="caption" style={styles.restCompleteLabel}>
-                    REST COMPLETE
-                  </Text>
-                  <Text variant="titleMedium" color="primary" style={styles.restCompleteTitle}>
-                    Ready for your next set!
-                  </Text>
-                  {session.activeRestTimer?.exerciseName ? (
-                    <Text variant="caption" color="secondary" numberOfLines={1}>
-                      Target rest finished for {session.activeRestTimer.exerciseName}
-                    </Text>
-                  ) : null}
-                </View>
-                <Button
-                  testID="dismiss-rest-timer-button"
-                  title="Dismiss"
-                  onPress={handleDismissRestComplete}
-                  variant="primary"
-                  size="sm"
-                  style={styles.dismissRestButton}
-                />
-              </View>
-            </Card>
-          )}
 
           {/* Exercises List */}
           {session.exercises.length === 0 ? (
@@ -673,6 +605,89 @@ export default function ActiveWorkoutScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
 
+      {/* Persistent Bottom Rest Countdown Banner */}
+      {restRemaining !== null && restRemaining > 0 && !isRestFinished && (
+        <View style={styles.persistentRestOverlay}>
+          <Card style={styles.restBannerCard} testID="rest-timer-banner">
+            <View style={styles.restBannerContent}>
+              <View style={styles.restInfo}>
+                <Text variant="caption" color="accent" style={styles.restLabel}>
+                  REST INTERVAL
+                </Text>
+                <Text variant="titleLarge" color="primary" style={styles.restCountdownText}>
+                  REST {formatTime(restRemaining)}
+                </Text>
+                {session.activeRestTimer?.exerciseName ? (
+                  <Text variant="caption" color="secondary" numberOfLines={1}>
+                    After Set {session.activeRestTimer.setNumber} •{' '}
+                    {session.activeRestTimer.exerciseName}
+                  </Text>
+                ) : null}
+              </View>
+              <View style={styles.restControlsGroup}>
+                <View style={styles.extendButtonsRow}>
+                  <Button
+                    testID="extend-rest-10-button"
+                    title="+10s"
+                    onPress={() => handleExtendRest(10)}
+                    variant="outline"
+                    size="sm"
+                    style={styles.extendRestButton}
+                  />
+                  <Button
+                    testID="extend-rest-20-button"
+                    title="+20s"
+                    onPress={() => handleExtendRest(20)}
+                    variant="outline"
+                    size="sm"
+                    style={styles.extendRestButton}
+                  />
+                </View>
+                <Button
+                  testID="skip-rest-timer-button"
+                  title="Skip Rest"
+                  onPress={handleSkipRest}
+                  variant="secondary"
+                  size="sm"
+                  style={styles.skipRestButton}
+                />
+              </View>
+            </View>
+          </Card>
+        </View>
+      )}
+
+      {/* Persistent Bottom Completed Rest Banner */}
+      {isRestFinished && (
+        <View style={styles.persistentRestOverlay}>
+          <Card style={styles.restCompleteCard} testID="rest-complete-banner">
+            <View style={styles.restBannerContent}>
+              <View style={styles.restInfo}>
+                <Text variant="caption" style={styles.restCompleteLabel}>
+                  REST COMPLETE
+                </Text>
+                <Text variant="titleMedium" color="primary" style={styles.restCompleteTitle}>
+                  Ready for your next set!
+                </Text>
+                {session.activeRestTimer?.exerciseName ? (
+                  <Text variant="caption" color="secondary" numberOfLines={1}>
+                    Target rest finished for {session.activeRestTimer.exerciseName}
+                  </Text>
+                ) : null}
+              </View>
+              <Button
+                testID="dismiss-rest-timer-button"
+                title="Dismiss"
+                onPress={handleDismissRestComplete}
+                variant="primary"
+                size="sm"
+                style={styles.dismissRestButton}
+              />
+            </View>
+          </Card>
+        </View>
+      )}
+
       {/* Exercise Picker Modal */}
       <ExercisePickerModal
         visible={isPickerVisible}
@@ -684,9 +699,27 @@ export default function ActiveWorkoutScreen() {
   );
 }
 
-const createStyles = (colors: any) => StyleSheet.create({
+const createStyles = (colors: any, insets: { bottom: number }) => StyleSheet.create({
   keyboardContainer: {
     flex: 1,
+  },
+  persistentRestOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.xs,
+    paddingBottom: Math.max(insets.bottom, 12),
+    backgroundColor: colors.background,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderLight,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 10,
+    zIndex: 100,
   },
   centerContainer: {
     flex: 1,
@@ -698,6 +731,9 @@ const createStyles = (colors: any) => StyleSheet.create({
     paddingVertical: spacing.md,
     paddingBottom: 160,
     gap: spacing.md,
+  },
+  scrollContentRestActive: {
+    paddingBottom: 240 + Math.max(insets.bottom, 12),
   },
   topBar: {
     flexDirection: 'row',
