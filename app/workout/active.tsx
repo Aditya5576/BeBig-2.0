@@ -511,6 +511,18 @@ export default function ActiveWorkoutScreen() {
         >
           {/* Top Bar / Header */}
           <View style={styles.topBar}>
+            <Pressable
+              testID="minimize-workout-button"
+              onPress={() => router.push('/home' as any)}
+              style={styles.minimizeButton}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              accessibilityLabel="Minimize workout"
+            >
+              <Text variant="titleMedium" color="primary">
+                ▼
+              </Text>
+            </Pressable>
+
             <View style={styles.headerTitleArea}>
               <Text
                 variant="titleMedium"
@@ -520,27 +532,14 @@ export default function ActiveWorkoutScreen() {
               >
                 {session.name}
               </Text>
+              <View style={styles.timerBadge}>
+                <Text variant="caption" color="accent" style={styles.timerText}>
+                  ⏱ {formatTime(elapsedSeconds)}
+                </Text>
+              </View>
             </View>
 
-            <View style={styles.topActions}>
-              <Button
-                testID="discard-workout-button"
-                title="Discard"
-                onPress={handleDiscard}
-                variant="outline"
-                size="sm"
-                style={styles.discardButton}
-              />
-              <Button
-                testID="finish-workout-button"
-                title="Finish"
-                onPress={handleFinish}
-                variant="primary"
-                size="sm"
-                loading={finishing}
-                style={styles.finishButton}
-              />
-            </View>
+            <View style={styles.headerRightSpacer} />
           </View>
 
 
@@ -588,13 +587,22 @@ export default function ActiveWorkoutScreen() {
             />
 
             <Button
-              testID="finish-workout-bottom-button"
+              testID="finish-workout-button"
               title={`Finish Workout (${completedSetsCount} sets)`}
               onPress={handleFinish}
               variant="primary"
               size="lg"
               loading={finishing}
               style={styles.finishBottomButton}
+            />
+
+            <Button
+              testID="discard-workout-button"
+              title="Discard Workout"
+              onPress={handleDiscard}
+              variant="outline"
+              size="sm"
+              style={styles.discardBottomButton}
             />
           </View>
         </ScrollView>
@@ -742,32 +750,30 @@ const createStyles = (colors: any, insets: { bottom: number }) => StyleSheet.cre
   headerTitleArea: {
     flex: 1,
     gap: 4,
+    alignItems: 'center',
   },
   workoutTitle: {
     fontSize: 18,
     fontWeight: '700',
+    textAlign: 'center',
   },
   timerBadge: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
   },
   timerText: {
     fontWeight: '700',
   },
-  topActions: {
-    flexDirection: 'row',
-    gap: spacing.xs,
-    alignItems: 'center',
+  minimizeButton: {
+    padding: spacing.xs,
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+    width: 44,
   },
-  discardButton: {
-    minHeight: 44,
-    paddingHorizontal: spacing.sm,
-    borderColor: colors.error,
-  },
-  finishButton: {
-    minHeight: 44,
-    paddingHorizontal: spacing.md,
+  headerRightSpacer: {
+    width: 44,
   },
   restBannerCard: {
     backgroundColor: colors.surfaceElevated,
@@ -1109,5 +1115,9 @@ const createStyles = (colors: any, insets: { bottom: number }) => StyleSheet.cre
   },
   finishBottomButton: {
     minHeight: 48,
+  },
+  discardBottomButton: {
+    minHeight: 44,
+    borderColor: colors.error,
   },
 });
