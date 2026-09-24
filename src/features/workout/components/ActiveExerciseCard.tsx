@@ -84,7 +84,7 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(({
             onPress={() => onMoveUp(exIndex)}
             disabled={exIndex === 0}
             style={[styles.arrowButton, exIndex === 0 && styles.buttonDisabled]}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
           >
             <Text
               variant="caption"
@@ -103,7 +103,7 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(({
               styles.arrowButton,
               exIndex === totalExercisesCount - 1 && styles.buttonDisabled,
             ]}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
           >
             <Text
               variant="caption"
@@ -117,11 +117,12 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(({
           <Pressable
             testID={`remove-exercise-${exercise.exerciseId}`}
             onPress={() => onRemoveExercise(exercise)}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
             style={styles.removeExButton}
+            accessibilityLabel={`Remove ${exercise.exerciseName}`}
           >
             <Text variant="caption" style={styles.removeExText}>
-              ✕ Remove
+              ✕
             </Text>
           </Pressable>
         </View>
@@ -227,17 +228,18 @@ const createStyles = (colors: any) =>
       borderBottomWidth: 1,
       borderBottomColor: colors.borderLight,
       paddingBottom: spacing.sm,
+      gap: 6,
     },
     exerciseHeaderActions: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
+      gap: 4,
       flexShrink: 0,
     },
     arrowButton: {
       backgroundColor: colors.surfaceElevated,
-      minWidth: 36,
-      minHeight: 32,
+      minWidth: 28,
+      minHeight: 28,
       borderRadius: radii.xs,
       borderWidth: 1,
       borderColor: colors.border,
@@ -249,41 +251,49 @@ const createStyles = (colors: any) =>
     },
     controlIcon: {
       fontWeight: '700',
+      fontSize: 11,
     },
     exerciseTitleGroup: {
       flexDirection: 'row',
-      gap: spacing.sm,
+      gap: 6,
       flex: 1,
+      minWidth: 0,
       alignItems: 'flex-start',
     },
     indexBadge: {
       backgroundColor: colors.surfaceElevated,
-      paddingHorizontal: 8,
-      paddingVertical: 3,
+      paddingHorizontal: 5,
+      paddingVertical: 2,
       borderRadius: radii.xs,
       borderWidth: 1,
       borderColor: colors.primary,
       marginTop: 2,
+      flexShrink: 0,
     },
     indexBadgeText: {
       fontWeight: '800',
+      fontSize: 11,
     },
     exerciseNameContainer: {
       flex: 1,
+      minWidth: 0,
       gap: 2,
     },
     exerciseName: {
       fontWeight: '700',
     },
     removeExButton: {
-      minHeight: 44,
-      paddingHorizontal: spacing.xs,
+      backgroundColor: 'rgba(239, 68, 68, 0.1)',
+      minWidth: 28,
+      minHeight: 28,
+      borderRadius: radii.xs,
       justifyContent: 'center',
       alignItems: 'center',
     },
     removeExText: {
       color: colors.error,
-      fontWeight: '600',
+      fontWeight: '700',
+      fontSize: 12,
     },
     targetsBadge: {
       backgroundColor: colors.surfaceElevated,

@@ -502,7 +502,10 @@ export default function ActiveWorkoutScreen() {
         style={styles.keyboardContainer}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            ((restRemaining !== null && restRemaining > 0 && !isRestFinished) || isRestFinished) && styles.scrollContentRestActive
+          ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
@@ -517,14 +520,6 @@ export default function ActiveWorkoutScreen() {
               >
                 {session.name}
               </Text>
-              <View style={styles.timerBadge}>
-                <Text variant="caption" color="accent" style={styles.timerText}>
-                  ⏱ {formatTime(elapsedSeconds)}
-                </Text>
-                <Text variant="caption" color="muted">
-                  • {completedSetsCount} completed
-                </Text>
-              </View>
             </View>
 
             <View style={styles.topActions}>
