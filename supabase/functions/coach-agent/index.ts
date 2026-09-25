@@ -42,11 +42,32 @@ serve(async (req) => {
     // 2. Parse payload
     const rawClientPayload = await req.json();
 
-    // 3. Initialize dependencies passing securely authenticated Supabase client for RLS enforcement
+    // 3. SEC-1B: Atomic Rate Limit Check (Fail-closed)
+    const { data: quota, error: quotaError } = await supabaseClient.rpc('check_and_increment_ai_quota');
+    if (quotaError) {
+      console.error('[coach-agent] Quota error:', quotaError.message);
+      return new Response(JSON.stringify({ type: 'error', message: 'Failed to verify usage quota. Please try again later.' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 500, // Fail-closed on database error
+      });
+    }
+
+    if (!quota || !quota.allowed) {
+      return new Response(JSON.stringify({ 
+        type: 'error', 
+        message: 'Daily AI usage limit reached. Please try again tomorrow.',
+        reset: '00:00 UTC'
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 429,
+      });
+    }
+
+    // 4. Initialize dependencies passing securely authenticated Supabase client for RLS enforcement
     const dataProvider = new SupabaseCoachDataProvider(supabaseClient);
     const usageTracker = new InMemoryUsageTracker();
     
-    // 4. Initialize Providers & M4B Architecture
+    // 5. Initialize Providers & M4B Architecture
     const gemini = new GeminiAdapter({ apiKey: Deno.env.get('GEMINI_API_KEY'), priority: 1, maxTokens: 1024 });
     const groq = new GroqAdapter({ apiKey: Deno.env.get('GROQ_API_KEY'), priority: 2, maxTokens: 1024 });
     const cerebras = new CerebrasAdapter({ apiKey: Deno.env.get('CEREBRAS_API_KEY'), priority: 3, maxTokens: 1024 });
@@ -58,10 +79,10 @@ serve(async (req) => {
       dataProvider
     );
 
-    // 5. Handle request securely
+    // 6. Handle request securely
     const response = await gateway.handleInferenceRequest(rawClientPayload, verifiedUserId);
 
-    // 6. Return standard CoachResponse
+    // 7. Return standard CoachResponse
     return new Response(JSON.stringify(response), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
