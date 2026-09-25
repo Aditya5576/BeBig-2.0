@@ -23,6 +23,7 @@ import {
 import { ExercisePickerModal } from '../../src/features/templates/components/ExercisePickerModal';
 import { Exercise } from '../../src/features/exercises';
 import { spacing, radii } from '../../src/constants/theme';
+import { RestTimerOverlay } from '../../src/features/workout/components/RestTimerOverlay';
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -43,8 +44,6 @@ export default function ActiveWorkoutScreen() {
   const [loading, setLoading] = useState(true);
   const [isPickerVisible, setIsPickerVisible] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [restRemaining, setRestRemaining] = useState<number | null>(null);
-  const [isRestFinished, setIsRestFinished] = useState(false);
   const [finishing, setFinishing] = useState(false);
   const [lastPerformanceMap, setLastPerformanceMap] = useState<
     Record<string, { workoutDate?: string; sets: WorkoutSet[] }>
@@ -126,7 +125,7 @@ export default function ActiveWorkoutScreen() {
 
     async function initActiveWorkout() {
       try {
-        const active = await workoutRepository.getActiveWorkout();
+        let active = await workoutRepository.getActiveWorkout();
         if (!isMounted) return;
         if (!active) {
           Alert.alert('No Active Workout', 'There is no workout currently in progress.', [
@@ -134,6 +133,22 @@ export default function ActiveWorkoutScreen() {
           ]);
           return;
         }
+
+        // Resume from paused state if applicable
+        if (active.pausedAt) {
+          const pauseStartMs = new Date(active.pausedAt).getTime();
+          const nowMs = Date.now();
+          const pauseDurationSec = Math.max(0, Math.floor((nowMs - pauseStartMs) / 1000));
+          
+          active = {
+            ...active,
+            accumulatedPauseSeconds: (active.accumulatedPauseSeconds || 0) + pauseDurationSec,
+            pausedAt: null,
+          };
+          // Persist the resumed state
+          await workoutRepository.updateActiveWorkout(active);
+        }
+
         setSession(active);
       } catch {
         if (isMounted) {
@@ -158,9 +173,11 @@ export default function ActiveWorkoutScreen() {
     if (!session || session.status !== 'active') return;
 
     const startMs = new Date(session.startedAt).getTime();
+    const pausedSecs = session.accumulatedPauseSeconds || 0;
+
     const updateElapsed = () => {
       const nowMs = Date.now();
-      const diffSec = Math.max(0, Math.floor((nowMs - startMs) / 1000));
+      const diffSec = Math.max(0, Math.floor((nowMs - startMs) / 1000) - pausedSecs);
       setElapsedSeconds(diffSec);
     };
 
@@ -168,35 +185,9 @@ export default function ActiveWorkoutScreen() {
     const interval = setInterval(updateElapsed, 1000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.startedAt, session?.status]);
+  }, [session?.startedAt, session?.status, session?.accumulatedPauseSeconds]);
 
-  // Rest interval countdown ticker (timestamp-based)
-  useEffect(() => {
-    if (!session?.activeRestTimer) {
-      return;
-    }
 
-    const { targetEndTime } = session.activeRestTimer;
-
-    const checkRest = () => {
-      const now = Date.now();
-      const diff = Math.ceil((targetEndTime - now) / 1000);
-      if (diff <= 0) {
-        setRestRemaining(0);
-        setIsRestFinished(true);
-      } else {
-        setRestRemaining(diff);
-        setIsRestFinished(false);
-      }
-    };
-
-    const timer = setTimeout(checkRest, 0);
-    const interval = setInterval(checkRest, 1000);
-    return () => {
-      clearTimeout(timer);
-      clearInterval(interval);
-    };
-  }, [session?.activeRestTimer]);
 
   // Format MM:SS or HH:MM:SS
   const formatTime = (totalSec: number) => {
@@ -379,8 +370,6 @@ export default function ActiveWorkoutScreen() {
         restTime,
         exercise.exerciseName,
       );
-      setIsRestFinished(false);
-      setRestRemaining(restTime);
 
       await updateSessionAndAutosave(updated);
     } else {
@@ -393,39 +382,19 @@ export default function ActiveWorkoutScreen() {
     }
   };
 
-  // Extend active rest timer by +10s or +20s
+  // Extend active rest timer
   const handleExtendRest = async (addedSeconds: number) => {
     if (!session || !session.activeRestTimer) return;
-    if (session.activeRestTimer.targetEndTime <= Date.now()) return;
-
     const updated = workoutRepository.extendRestTimer(session, addedSeconds);
-    const now = Date.now();
-    if (updated.activeRestTimer) {
-      const diff = Math.max(0, Math.ceil((updated.activeRestTimer.targetEndTime - now) / 1000));
-      setRestRemaining(diff);
-      setIsRestFinished(false);
-    }
     await updateSessionAndAutosave(updated);
   };
 
-  // Skip rest timer
-  const handleSkipRest = async () => {
+  // Skip or dismiss rest timer
+  const handleClearRest = async () => {
     if (!session) return;
-    setIsRestFinished(false);
-    setRestRemaining(null);
     const updated = workoutRepository.clearRestTimer(session);
     await updateSessionAndAutosave(updated);
   };
-
-  // Dismiss completed rest banner
-  const handleDismissRestComplete = async () => {
-    if (!session) return;
-    setIsRestFinished(false);
-    setRestRemaining(null);
-    const updated = workoutRepository.clearRestTimer(session);
-    await updateSessionAndAutosave(updated);
-  };
-
   // Discard workout
   const handleDiscard = () => {
     Alert.alert(
@@ -482,6 +451,15 @@ export default function ActiveWorkoutScreen() {
     );
   };
 
+  const handleMinimize = async () => {
+    if (session) {
+      const updatedSession = { ...session, pausedAt: new Date().toISOString() };
+      setSession(updatedSession);
+      await workoutRepository.updateActiveWorkout(updatedSession);
+    }
+    router.push('/home' as any);
+  };
+
   if (loading || !session) {
     return (
       <ScreenContainer>
@@ -504,7 +482,7 @@ export default function ActiveWorkoutScreen() {
         <ScrollView
           contentContainerStyle={[
             styles.scrollContent,
-            ((restRemaining !== null && restRemaining > 0 && !isRestFinished) || isRestFinished) && styles.scrollContentRestActive
+            !!session?.activeRestTimer && styles.scrollContentRestActive
           ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
@@ -513,7 +491,7 @@ export default function ActiveWorkoutScreen() {
           <View style={styles.topBar}>
             <Pressable
               testID="minimize-workout-button"
-              onPress={() => router.push('/home' as any)}
+              onPress={handleMinimize}
               style={styles.minimizeButton}
               hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
               accessibilityLabel="Minimize workout"
@@ -608,87 +586,13 @@ export default function ActiveWorkoutScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* Persistent Bottom Rest Countdown Banner */}
-      {restRemaining !== null && restRemaining > 0 && !isRestFinished && (
-        <View style={styles.persistentRestOverlay}>
-          <Card style={styles.restBannerCard} testID="rest-timer-banner">
-            <View style={styles.restBannerContent}>
-              <View style={styles.restInfo}>
-                <Text variant="caption" color="accent" style={styles.restLabel}>
-                  REST INTERVAL
-                </Text>
-                <Text variant="titleLarge" color="primary" style={styles.restCountdownText}>
-                  REST {formatTime(restRemaining)}
-                </Text>
-                {session.activeRestTimer?.exerciseName ? (
-                  <Text variant="caption" color="secondary" numberOfLines={1}>
-                    After Set {session.activeRestTimer.setNumber} •{' '}
-                    {session.activeRestTimer.exerciseName}
-                  </Text>
-                ) : null}
-              </View>
-              <View style={styles.restControlsGroup}>
-                <View style={styles.extendButtonsRow}>
-                  <Button
-                    testID="extend-rest-10-button"
-                    title="+10s"
-                    onPress={() => handleExtendRest(10)}
-                    variant="outline"
-                    size="sm"
-                    style={styles.extendRestButton}
-                  />
-                  <Button
-                    testID="extend-rest-20-button"
-                    title="+20s"
-                    onPress={() => handleExtendRest(20)}
-                    variant="outline"
-                    size="sm"
-                    style={styles.extendRestButton}
-                  />
-                </View>
-                <Button
-                  testID="skip-rest-timer-button"
-                  title="Skip Rest"
-                  onPress={handleSkipRest}
-                  variant="secondary"
-                  size="sm"
-                  style={styles.skipRestButton}
-                />
-              </View>
-            </View>
-          </Card>
-        </View>
-      )}
-
-      {/* Persistent Bottom Completed Rest Banner */}
-      {isRestFinished && (
-        <View style={styles.persistentRestOverlay}>
-          <Card style={styles.restCompleteCard} testID="rest-complete-banner">
-            <View style={styles.restBannerContent}>
-              <View style={styles.restInfo}>
-                <Text variant="caption" style={styles.restCompleteLabel}>
-                  REST COMPLETE
-                </Text>
-                <Text variant="titleMedium" color="primary" style={styles.restCompleteTitle}>
-                  Ready for your next set!
-                </Text>
-                {session.activeRestTimer?.exerciseName ? (
-                  <Text variant="caption" color="secondary" numberOfLines={1}>
-                    Target rest finished for {session.activeRestTimer.exerciseName}
-                  </Text>
-                ) : null}
-              </View>
-              <Button
-                testID="dismiss-rest-timer-button"
-                title="Dismiss"
-                onPress={handleDismissRestComplete}
-                variant="primary"
-                size="sm"
-                style={styles.dismissRestButton}
-              />
-            </View>
-          </Card>
-        </View>
+      {/* Persistent Bottom Rest Overlay */}
+      {session.activeRestTimer && (
+        <RestTimerOverlay
+          activeRestTimer={session.activeRestTimer}
+          onExtend={handleExtendRest}
+          onClear={handleClearRest}
+        />
       )}
 
       {/* Exercise Picker Modal */}

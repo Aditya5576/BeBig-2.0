@@ -391,10 +391,21 @@ export class WorkoutRepository {
       throw new Error('Cannot complete workout: at least one set must be completed.');
     }
 
-    const finishedAt = new Date().toISOString();
+    const finishTimeMs = Date.now();
+    const finishedAt = new Date(finishTimeMs).toISOString();
     const startTimeMs = new Date(sessionToFinish.startedAt).getTime();
-    const finishTimeMs = new Date(finishedAt).getTime();
-    const totalDuration = Math.max(0, Math.floor((finishTimeMs - startTimeMs) / 1000));
+    
+    // Total duration should exclude any time the workout spent paused (minimized)
+    const pausedSecs = sessionToFinish.accumulatedPauseSeconds || 0;
+    
+    // If completed while actively paused, also subtract the current pause duration
+    let currentPauseSecs = 0;
+    if (sessionToFinish.pausedAt) {
+      const pauseStartMs = new Date(sessionToFinish.pausedAt).getTime();
+      currentPauseSecs = Math.max(0, Math.floor((finishTimeMs - pauseStartMs) / 1000));
+    }
+    
+    const totalDuration = Math.max(0, Math.floor((finishTimeMs - startTimeMs) / 1000) - pausedSecs - currentPauseSecs);
     const totalVolume = this.calculateTotalVolume(sessionToFinish);
 
     const completedSession: WorkoutSession = {

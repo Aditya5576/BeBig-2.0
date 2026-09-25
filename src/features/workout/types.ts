@@ -55,4 +55,6 @@ export interface WorkoutSession {
   totalVolume?: number; // Total volume in kg (sum of weight * reps for completed sets)
   completedSetsCount?: number;
   activeRestTimer?: ActiveRestTimer | null;
+  pausedAt?: string | null; // ISO 8601 when the session was minimized/paused
+  accumulatedPauseSeconds?: number; // Total seconds spent paused
 }

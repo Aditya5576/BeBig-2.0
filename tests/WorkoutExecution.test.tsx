@@ -449,6 +449,49 @@ describe('BeBig 2.0 — Milestone 5: Workout Execution', () => {
     });
   });
 
+  describe('Workout Timer Pause & Resume', () => {
+    it('correctly tracks paused time and excludes it from total duration', async () => {
+      const nowMs = Date.now();
+      // Start a workout 1 hour ago
+      const session = await workoutRepository.startEmptyWorkout('Timer Test');
+      const startedAt = new Date(nowMs - 3600 * 1000);
+      session.startedAt = startedAt.toISOString();
+      await workoutRepository.updateActiveWorkout(session);
+
+      // Pause it 30 mins ago
+      const pausedAt = new Date(nowMs - 1800 * 1000);
+      session.pausedAt = pausedAt.toISOString();
+      await workoutRepository.updateActiveWorkout(session);
+
+      // Resume it now (simulating initActiveWorkout behavior)
+      const active = await workoutRepository.getActiveWorkout();
+      expect(active).toBeTruthy();
+      if (active && active.pausedAt) {
+        const pauseStartMs = new Date(active.pausedAt).getTime();
+        const pauseDurationSec = Math.max(0, Math.floor((nowMs - pauseStartMs) / 1000));
+        active.accumulatedPauseSeconds = (active.accumulatedPauseSeconds || 0) + pauseDurationSec;
+        active.pausedAt = null;
+        await workoutRepository.updateActiveWorkout(active);
+      }
+
+      // Elapsed time should be (1 hour) - (30 mins paused) = 30 mins (1800 sec)
+      const resumedSession = await workoutRepository.getActiveWorkout();
+      expect(resumedSession?.accumulatedPauseSeconds).toBe(1800);
+
+      // Complete the workout and verify duration
+      const withSets = workoutRepository.addExerciseToWorkout(resumedSession!, { id: 'test', name: 'test' });
+      withSets.exercises[0].actualSets[0].completed = true;
+      withSets.exercises[0].actualSets[0].weight = 100;
+      await workoutRepository.updateActiveWorkout(withSets);
+
+      const completed = await workoutRepository.completeActiveWorkout(withSets);
+      
+      // Total duration should be roughly 1800 seconds (accounting for millisecond jitter, allow a small delta)
+      expect(completed.totalDuration).toBeGreaterThanOrEqual(1799);
+      expect(completed.totalDuration).toBeLessThanOrEqual(1801);
+    });
+  });
+
   // 13: UI Integration Screens
   describe('Workout Execution UI Screens', () => {
     it('StartWorkoutScreen renders quick start and saved templates, handles start empty', async () => {
