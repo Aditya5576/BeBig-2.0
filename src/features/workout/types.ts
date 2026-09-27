@@ -47,6 +47,7 @@ export interface WorkoutSession {
   ownerType?: OwnerType;
   name: string;
   sourceTemplateId?: string;
+  sourceScheduledWorkoutId?: string;
   startedAt: string; // ISO 8601
   finishedAt?: string; // ISO 8601
   status: 'active' | 'completed';

@@ -126,3 +126,33 @@ export interface CustomExerciseCloudInput {
   deletedAt?: string | null;
   expectedUserId?: string;
 }
+
+export interface ScheduledWorkoutCloudRecord {
+  id: string;
+  user_id: string;
+  template_id: string | null;
+  name: string;
+  scheduled_date: string;
+  scheduled_time: string | null;
+  status: 'scheduled' | 'completed' | 'skipped';
+  completed_session_id: string | null;
+  notes: string | null;
+  client_updated_at: string;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ScheduledWorkoutCloudInput {
+  id: string;
+  templateId?: string | null;
+  name: string;
+  scheduledDate: string;
+  scheduledTime?: string | null;
+  status: 'scheduled' | 'completed' | 'skipped';
+  completedSessionId?: string | null;
+  notes?: string | null;
+  clientUpdatedAt?: string;
+  deletedAt?: string | null;
+  expectedUserId?: string;
+}

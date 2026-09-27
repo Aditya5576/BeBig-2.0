@@ -3,6 +3,7 @@ import { guestStorage } from '../../../lib/storage';
 import { workoutStorage } from '../../workout/storage/workoutStorage';
 import { templateStorage } from '../../templates/storage/templateStorage';
 import { customExerciseStorage } from '../../exercises/storage/customExerciseStorage';
+import { scheduledWorkoutStorage } from '../../scheduling/storage/scheduledWorkoutStorage';
 import { syncMetadataStore } from '../../../services/sync/syncMetadataStore';
 import { WorkoutSession } from '../../workout/types';
 import { WorkoutTemplate } from '../../templates/types';
@@ -93,6 +94,25 @@ export const guestMigrationService = {
             'custom_exercise',
             exercise.id,
             exercise.updatedAt || exercise.createdAt || new Date().toISOString(),
+            authScope
+          );
+        }
+      }
+
+      // 4. Scheduled Workouts
+      const scheduled = await scheduledWorkoutStorage.getScheduledWorkouts(guestScope, true);
+      const authScheduled = await scheduledWorkoutStorage.getScheduledWorkouts(authScope, true);
+      const authScheduledIds = new Set(authScheduled.map(s => s.id));
+
+      for (const sched of scheduled) {
+        if (!authScheduledIds.has(sched.id)) {
+          const updatedSched = { ...sched, ownerId: authScope.ownerId, ownerType: authScope.ownerType };
+          await scheduledWorkoutStorage.saveScheduledWorkout(updatedSched, authScope);
+
+          await syncMetadataStore.markPendingUpload(
+            'scheduled_workout',
+            sched.id,
+            sched.clientUpdatedAt || sched.updatedAt || sched.createdAt || new Date().toISOString(),
             authScope
           );
         }

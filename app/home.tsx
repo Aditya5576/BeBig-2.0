@@ -14,6 +14,8 @@ import {
 } from '../src/features/workout';
 import { templateRepository, WorkoutTemplate } from '../src/features/templates';
 import { profileService, getInitials } from '../src/features/profile';
+import { scheduledWorkoutRepository, ScheduledWorkout, ScheduledWorkoutPreviewModal } from '../src/features/scheduling';
+import { Icon } from '../src/components/ui';
 import { guestStorage } from '../src/lib/storage';
 import { spacing, radii } from '../src/constants/theme';
 import { env } from '../src/config/env';
@@ -40,6 +42,9 @@ export default function HomeScreen() {
   const [completedWorkouts, setCompletedWorkouts] = useState<WorkoutSession[]>([]);
   const [activeWorkout, setActiveWorkout] = useState<WorkoutSession | null>(null);
   const [templates, setTemplates] = useState<WorkoutTemplate[]>([]);
+  const [todaySchedules, setTodaySchedules] = useState<ScheduledWorkout[]>([]);
+  const [previewWorkout, setPreviewWorkout] = useState<ScheduledWorkout | null>(null);
+  const [previewVisible, setPreviewVisible] = useState(false);
   const [profileDisplayName, setProfileDisplayName] = useState<string | null>(null);
   const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(null);
   const [avatarLoadError, setAvatarLoadError] = useState(false);
@@ -91,18 +96,21 @@ export default function HomeScreen() {
         }
       }
 
-      const [workouts, active, userTemplates] = await Promise.all([
+      const [workouts, active, userTemplates, schedulesToday] = await Promise.all([
         workoutRepository.getCompletedWorkouts(),
         workoutRepository.getActiveWorkout(),
         templateRepository.getTemplates(),
+        scheduledWorkoutRepository.getTodayScheduledWorkouts(),
       ]);
       setCompletedWorkouts(workouts);
       setActiveWorkout(active);
       setTemplates(userTemplates);
+      setTodaySchedules(schedulesToday);
     } catch {
       setCompletedWorkouts([]);
       setActiveWorkout(null);
       setTemplates([]);
+      setTodaySchedules([]);
     }
   }, []);
 
@@ -151,6 +159,50 @@ export default function HomeScreen() {
     } catch (err: any) {
       Alert.alert('Error', err?.message || 'Failed to start workout.');
     }
+  };
+
+  const handleStartScheduledWorkout = async (scheduledWorkout: ScheduledWorkout) => {
+    try {
+      if (activeWorkout) {
+        Alert.alert(
+          'Active Workout in Progress',
+          'You already have an active workout in progress. Discard it to start this scheduled workout?',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Resume Active',
+              onPress: () => router.push('/workout/active' as any),
+            },
+            {
+              text: 'Discard & Start New',
+              style: 'destructive',
+              onPress: async () => {
+                await workoutRepository.discardActiveWorkout();
+                setActiveWorkout(null);
+                await startScheduled(scheduledWorkout);
+                router.push('/workout/active' as any);
+              },
+            },
+          ],
+        );
+        return;
+      }
+      await startScheduled(scheduledWorkout);
+      router.push('/workout/active' as any);
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Failed to start scheduled workout.');
+    }
+  };
+
+  const startScheduled = async (scheduledWorkout: ScheduledWorkout) => {
+    if (scheduledWorkout.templateId) {
+      const tpl = await templateRepository.getTemplateById(scheduledWorkout.templateId);
+      if (tpl) {
+        await workoutRepository.startWorkoutFromTemplate(tpl, scheduledWorkout.name, scheduledWorkout.id);
+        return;
+      }
+    }
+    await workoutRepository.startEmptyWorkout(scheduledWorkout.name, scheduledWorkout.id);
   };
 
   const handleStartEmptyWorkout = async () => {
@@ -327,80 +379,131 @@ export default function HomeScreen() {
           </Card>
         )}
 
-        {/* 3. Today's / Recommended Workout Hero Card */}
-        <Card style={styles.todayCard} testID="today-workout-card">
-          <View style={styles.todayHeaderRow}>
-            <Text variant="label" color="accent" style={styles.todayPill}>
-              {analytics.suggestedTemplate ? "TODAY'S WORKOUT" : 'QUICK START'}
-            </Text>
+        {/* 2.5 Scheduled Today Card */}
+        <Card style={styles.scheduledTodayCard} testID="scheduled-today-card">
+          <View style={styles.scheduledTodayHeader}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Icon name="calendar" size={16} color="#E5A93C" />
+              <Text variant="label" color="accent" style={{ marginLeft: 6, fontWeight: '800', letterSpacing: 0.8 }}>
+                SCHEDULED TODAY
+              </Text>
+            </View>
+            <Pressable
+              onPress={() => router.push('/calendar' as any)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityLabel="View Calendar"
+              accessibilityRole="button"
+            >
+              <Text variant="caption" color="accent" style={{ fontWeight: '700', fontSize: 12 }}>
+                View Calendar ›
+              </Text>
+            </Pressable>
           </View>
 
-          <Text variant="titleLarge" color="primary" style={styles.todayTitle}>
-            {analytics.suggestedTemplate ? analytics.suggestedTemplate.name : 'Start Workout'}
-          </Text>
+          {todaySchedules.length > 0 ? (
+            <View style={{ marginTop: 6 }}>
+              {todaySchedules.map((item) => (
+                <View key={item.id} style={styles.scheduledItemRow}>
+                  <View style={{ flex: 1, marginRight: 8 }}>
+                    <Text variant="titleMedium" color="primary" style={{ fontWeight: '700', fontSize: 15 }}>
+                      {item.name}
+                    </Text>
+                    {item.scheduledTime ? (
+                      <Text variant="caption" color="secondary" style={{ marginTop: 2, fontWeight: '600' }}>
+                        ⏰ {item.scheduledTime}
+                      </Text>
+                    ) : null}
+                    {item.notes ? (
+                      <Text variant="caption" color="secondary" numberOfLines={1} style={{ marginTop: 2, fontStyle: 'italic' }}>
+                        "{item.notes}"
+                      </Text>
+                    ) : null}
 
-          <Text variant="body" color="secondary" style={styles.todaySubtitle}>
-            {analytics.suggestedTemplate
-              ? `${analytics.suggestedTemplate.exercises.length} Exercises • Planned targets configured`
-              : 'Start an empty workout session or pick an existing routine.'}
-          </Text>
+                    {/* View Workout Action Button */}
+                    <Pressable
+                      onPress={() => {
+                        setPreviewWorkout(item);
+                        setPreviewVisible(true);
+                      }}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      style={styles.homePreviewBtn}
+                    >
+                      <Icon name="search" size={13} color="#E5A93C" />
+                      <Text style={styles.homePreviewText}>VIEW WORKOUT</Text>
+                    </Pressable>
+                  </View>
 
-          {analytics.suggestedTemplate && analytics.suggestedTemplate.exercises.length > 0 && (
-            <View style={styles.exercisePreviewChips}>
-              {analytics.suggestedTemplate.exercises.slice(0, 3).map((ex, idx) => (
-                <View key={ex.exerciseId || idx} style={styles.exerciseChip}>
-                  <Text variant="caption" color="secondary">
-                    {ex.exerciseName}
-                  </Text>
+                  <View style={[
+                    styles.schedStatusBadge,
+                    item.status === 'completed' && { backgroundColor: 'rgba(16, 185, 129, 0.15)', borderColor: '#10B981' },
+                    item.status === 'skipped' && { backgroundColor: 'rgba(156, 163, 175, 0.15)', borderColor: '#9CA3AF' },
+                  ]}>
+                    <Text style={[
+                      styles.schedStatusText,
+                      item.status === 'completed' && { color: '#10B981' },
+                      item.status === 'skipped' && { color: '#9CA3AF' },
+                    ]}>
+                      {item.status.toUpperCase()}
+                    </Text>
+                  </View>
                 </View>
               ))}
-              {analytics.suggestedTemplate.exercises.length > 3 && (
-                <View style={styles.exerciseChip}>
-                  <Text variant="caption" color="accent">
-                    +{analytics.suggestedTemplate.exercises.length - 3} more
-                  </Text>
-                </View>
-              )}
+            </View>
+          ) : (
+            <View style={styles.scheduledEmptyRow}>
+              <Text variant="body" color="secondary" style={{ fontSize: 13 }}>
+                No workout planned for today.
+              </Text>
+              <Pressable
+                onPress={() => router.push('/calendar' as any)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text variant="caption" color="accent" style={{ fontWeight: '800', marginLeft: 10, fontSize: 12 }}>
+                  + Schedule
+                </Text>
+              </Pressable>
             </View>
           )}
+        </Card>
 
-          <View style={styles.todayActions}>
+        {/* 3. Dedicated Quick Start Card */}
+        <Card style={styles.quickStartCard} testID="quick-start-card">
+          <View style={styles.quickStartHeader}>
+            <View style={styles.quickStartPill}>
+              <Icon name="fire" size={14} color="#E5A93C" />
+              <Text variant="label" color="accent" style={styles.quickStartPillText}>
+                QUICK START
+              </Text>
+            </View>
+          </View>
+
+          <Text variant="titleLarge" color="primary" style={styles.quickStartTitle}>
+            Start Unscheduled Workout
+          </Text>
+
+          <Text variant="body" color="secondary" style={styles.quickStartSubtitle}>
+            Start an ad-hoc session immediately or pick a blueprint from your saved templates.
+          </Text>
+
+          <View style={styles.quickStartActions}>
             <Button
-              testID="start-workout-button"
-              title="Start Workout"
-              onPress={async () => {
-                if (analytics.suggestedTemplate) {
-                  await handleStartTemplate(analytics.suggestedTemplate);
-                } else {
-                  await handleStartEmptyWorkout();
-                }
-              }}
+              testID="start-quick-workout-button"
+              title="START QUICK WORKOUT"
+              onPress={handleStartEmptyWorkout}
               variant="primary"
               size="lg"
-              style={styles.todayStartButton}
+              style={styles.quickStartButton}
             />
 
-            <View style={styles.secondaryStartRow}>
-              <Pressable
-                testID="start-empty-workout-button"
-                onPress={handleStartEmptyWorkout}
-                style={styles.linkAction}
-              >
-                <Text variant="label" color="accent">
-                  + Start Empty Workout
-                </Text>
-              </Pressable>
-
-              <Pressable
-                testID="browse-templates-link"
-                onPress={() => router.push('/workout/start' as any)}
-                style={styles.linkAction}
-              >
-                <Text variant="label" color="secondary">
-                  Choose Another Routine ›
-                </Text>
-              </Pressable>
-            </View>
+            <Pressable
+              testID="browse-templates-link"
+              onPress={() => router.push('/workout/start' as any)}
+              style={styles.quickStartSecondaryLink}
+            >
+              <Text variant="label" color="secondary" style={styles.quickStartLinkText}>
+                Choose Routine Blueprint ›
+              </Text>
+            </Pressable>
           </View>
         </Card>
 
@@ -677,6 +780,17 @@ export default function HomeScreen() {
           </View>
         </View>
       </ScreenScrollView>
+
+      {/* Scheduled Workout Read-Only Preview Modal */}
+      <ScheduledWorkoutPreviewModal
+        visible={previewVisible}
+        scheduledWorkout={previewWorkout}
+        onClose={() => setPreviewVisible(false)}
+        onStart={(workout) => {
+          setPreviewVisible(false);
+          handleStartScheduledWorkout(workout);
+        }}
+      />
     </ScreenContainer>
   );
 }
@@ -806,6 +920,112 @@ const createStyles = (colors: any) => StyleSheet.create({
     flex: 1,
     minHeight: 40,
     borderColor: colors.error,
+  },
+  scheduledTodayCard: {
+    backgroundColor: '#111218',
+    borderColor: colors.border,
+    borderWidth: 1,
+    padding: spacing.md,
+    gap: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  scheduledTodayHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  scheduledItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#181A22',
+    padding: spacing.sm,
+    borderRadius: radii.sm,
+    marginTop: 6,
+  },
+  scheduledEmptyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  schedStatusBadge: {
+    backgroundColor: 'rgba(229, 169, 60, 0.15)',
+    borderColor: '#E5A93C',
+    borderWidth: 1,
+    borderRadius: radii.sm,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginLeft: 8,
+  },
+  schedStatusText: {
+    color: '#E5A93C',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  homePreviewBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+    paddingVertical: 3,
+  },
+  homePreviewText: {
+    color: '#E5A93C',
+    fontSize: 11,
+    fontWeight: '800',
+    marginLeft: 4,
+    letterSpacing: 0.5,
+  },
+  quickStartCard: {
+    backgroundColor: colors.surface,
+    borderColor: colors.borderLight,
+    borderWidth: 1.5,
+    padding: spacing.md,
+    gap: spacing.xs + 2,
+  },
+  quickStartHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  quickStartPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(229, 169, 60, 0.15)',
+    borderColor: '#E5A93C',
+    borderWidth: 1,
+    borderRadius: radii.sm,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  quickStartPillText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    marginLeft: 4,
+  },
+  quickStartTitle: {
+    fontSize: 19,
+    lineHeight: 24,
+    fontWeight: '700',
+  },
+  quickStartSubtitle: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  quickStartActions: {
+    marginTop: spacing.xs,
+    gap: spacing.sm,
+  },
+  quickStartButton: {
+    width: '100%',
+  },
+  quickStartSecondaryLink: {
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  quickStartLinkText: {
+    fontWeight: '700',
+    fontSize: 13,
   },
   todayCard: {
     backgroundColor: colors.surface,

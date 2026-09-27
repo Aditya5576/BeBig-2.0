@@ -20,9 +20,11 @@ import { getCurrentUserScope, UserScope } from '../../features/auth/utils/userSc
 import { workoutStorage } from '../../features/workout/storage/workoutStorage';
 import { templateStorage } from '../../features/templates/storage/templateStorage';
 import { customExerciseStorage } from '../../features/exercises/storage/customExerciseStorage';
+import { scheduledWorkoutStorage } from '../../features/scheduling/storage/scheduledWorkoutStorage';
 import { WorkoutSession } from '../../features/workout/types';
 import { WorkoutTemplate } from '../../features/templates/types';
 import { Exercise } from '../../features/exercises/types';
+import { ScheduledWorkout } from '../../features/scheduling/types';
 import {
   WorkoutCloudService,
   TemplateCloudService,
@@ -33,6 +35,9 @@ import {
   WorkoutCloudRecord,
   TemplateCloudRecord,
   CustomExerciseCloudRecord,
+  ScheduledWorkoutCloudService,
+  ScheduledWorkoutCloudInput,
+  ScheduledWorkoutCloudRecord,
   CloudPullOptions,
   CloudPullResult,
   CloudError,
@@ -58,6 +63,7 @@ export class SyncEngine {
   private workoutCloudService: WorkoutCloudService;
   private templateCloudService: TemplateCloudService;
   private customExerciseCloudService: CustomExerciseCloudService;
+  private scheduledWorkoutCloudService: ScheduledWorkoutCloudService;
   private isPushing = false;
   private isPulling = false;
   private isSyncing = false;
@@ -66,10 +72,12 @@ export class SyncEngine {
     workoutCloudService: WorkoutCloudService = new WorkoutCloudService(),
     templateCloudService: TemplateCloudService = new TemplateCloudService(),
     customExerciseCloudService: CustomExerciseCloudService = new CustomExerciseCloudService(),
+    scheduledWorkoutCloudService: ScheduledWorkoutCloudService = new ScheduledWorkoutCloudService(),
   ) {
     this.workoutCloudService = workoutCloudService;
     this.templateCloudService = templateCloudService;
     this.customExerciseCloudService = customExerciseCloudService;
+    this.scheduledWorkoutCloudService = scheduledWorkoutCloudService;
   }
 
   /**
@@ -248,8 +256,7 @@ export class SyncEngine {
     const batchResults: PushBatchResult[] = [];
     const errors: { entityType?: SyncEntityType; id?: string; message: string; kind: string }[] = [];
 
-    // Step 2: Process entities in order: workouts -> templates -> custom exercises
-    const entityTypes: SyncEntityType[] = ['workout', 'template', 'custom_exercise'];
+    const entityTypes: SyncEntityType[] = ['workout', 'template', 'custom_exercise', 'scheduled_workout'];
 
     for (const entityType of entityTypes) {
       const pendingRecords = await syncMetadataStore.getPendingRecords(entityType, resolvedScope);
@@ -386,6 +393,37 @@ export class SyncEngine {
           const cloudErr = err instanceof CloudError ? err : classifySupabaseError(err);
           if (cloudErr.kind === 'validation') {
             const qResult = await this.fallbackIndividualCustomExercises(payloads, validMeta, scope);
+            synced += qResult.synced;
+            reconciled += qResult.reconciled;
+            quarantined += qResult.quarantined;
+          } else {
+            return {
+              entityType,
+              attempted,
+              synced,
+              reconciled,
+              quarantined,
+              fatalError: { entityType, message: cloudErr.message, kind: cloudErr.kind },
+            };
+          }
+        }
+        break;
+      }
+      
+      case 'scheduled_workout': {
+        const { payloads, validMeta } = await this.buildScheduledWorkoutPayloads(chunk, scope);
+        attempted = payloads.length;
+        if (attempted === 0) return { entityType, attempted: 0, synced: 0, reconciled: 0, quarantined: 0 };
+
+        try {
+          const returnedRows = await this.scheduledWorkoutCloudService.upsertBatch(payloads);
+          const outcome = await this.reconcileScheduledWorkoutResponses(payloads, returnedRows, scope);
+          synced += outcome.synced;
+          reconciled += outcome.reconciled;
+        } catch (err: any) {
+          const cloudErr = err instanceof CloudError ? err : classifySupabaseError(err);
+          if (cloudErr.kind === 'validation') {
+            const qResult = await this.fallbackIndividualScheduledWorkouts(payloads, validMeta, scope);
             synced += qResult.synced;
             reconciled += qResult.reconciled;
             quarantined += qResult.quarantined;
@@ -878,7 +916,158 @@ export class SyncEngine {
 
     return { synced, reconciled, quarantined };
   }
+  // --------------------------------------------------------------------------
+  // SCHEDULED WORKOUT PAYLOAD BUILDERS & RECONCILERS
+  // --------------------------------------------------------------------------
 
+  private async buildScheduledWorkoutPayloads(
+    chunk: EntitySyncMetadata[],
+    scope: UserScope,
+  ): Promise<{ payloads: ScheduledWorkoutCloudInput[]; validMeta: EntitySyncMetadata[] }> {
+    const payloads: ScheduledWorkoutCloudInput[] = [];
+    const validMeta: EntitySyncMetadata[] = [];
+
+    for (const meta of chunk) {
+      if (meta.syncStatus === 'pending_upload') {
+        const local = await scheduledWorkoutStorage.getScheduledWorkoutById(meta.id, scope);
+        if (!local) {
+          await syncMetadataStore.removeRecord('scheduled_workout', meta.id, scope);
+          continue;
+        }
+
+        payloads.push({
+          id: local.id,
+          name: local.name,
+          templateId: local.templateId || null,
+          scheduledDate: local.scheduledDate,
+          scheduledTime: local.scheduledTime || null,
+          status: local.status,
+          completedSessionId: local.completedSessionId || null,
+          notes: local.notes || null,
+          clientUpdatedAt: meta.clientUpdatedAt,
+          deletedAt: null,
+          expectedUserId: scope.ownerId,
+        });
+        validMeta.push(meta);
+      } else if (meta.syncStatus === 'pending_delete') {
+        payloads.push({
+          id: meta.id,
+          name: 'Deleted Schedule',
+          scheduledDate: new Date().toISOString().split('T')[0], // Fallback safe date
+          status: 'scheduled',
+          clientUpdatedAt: meta.clientUpdatedAt,
+          deletedAt: meta.deletedAt || meta.clientUpdatedAt,
+          expectedUserId: scope.ownerId,
+        });
+        validMeta.push(meta);
+      }
+    }
+
+    return { payloads, validMeta };
+  }
+
+  private async reconcileScheduledWorkoutResponses(
+    pushed: ScheduledWorkoutCloudInput[],
+    returned: ScheduledWorkoutCloudRecord[],
+    scope: UserScope,
+  ): Promise<{ synced: number; reconciled: number }> {
+    const pushedMap = new Map(pushed.map((p) => [p.id, p]));
+    let synced = 0;
+    let reconciled = 0;
+
+    for (const row of returned) {
+      const p = pushedMap.get(row.id);
+      if (!p) continue;
+
+      const pushedMs = new Date(p.clientUpdatedAt || new Date().toISOString()).getTime();
+      const returnedMs = new Date(row.client_updated_at).getTime();
+
+      // CASE A: Cloud record is a tombstone
+      if (row.deleted_at !== null) {
+        await scheduledWorkoutStorage.tombstoneScheduledWorkout(row.id, scope);
+        await syncMetadataStore.setRecord(
+          {
+            entityType: 'scheduled_workout',
+            id: row.id,
+            clientUpdatedAt: row.client_updated_at,
+            deletedAt: row.deleted_at,
+            syncStatus: 'synced',
+            lastSyncedServerUpdatedAt: row.updated_at,
+          },
+          scope,
+        );
+        reconciled++;
+      }
+      // CASE B: Cloud record is LIVE
+      else {
+        if (returnedMs > pushedMs) {
+          // Stale push rejected: Cloud authority is newer -> overwrite local storage
+          const localItem: ScheduledWorkout = {
+            id: row.id,
+            name: row.name,
+            templateId: row.template_id || undefined,
+            scheduledDate: row.scheduled_date,
+            scheduledTime: row.scheduled_time || undefined,
+            status: row.status,
+            completedSessionId: row.completed_session_id || undefined,
+            notes: row.notes || undefined,
+            ownerId: scope.ownerId,
+            ownerType: 'authenticated',
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
+            clientUpdatedAt: row.client_updated_at,
+          };
+          await scheduledWorkoutStorage.saveScheduledWorkout(localItem, scope);
+          await syncMetadataStore.setRecord(
+            {
+              entityType: 'scheduled_workout',
+              id: row.id,
+              clientUpdatedAt: row.client_updated_at,
+              deletedAt: null,
+              syncStatus: 'synced',
+              lastSyncedServerUpdatedAt: row.updated_at,
+            },
+            scope,
+          );
+          reconciled++;
+        } else {
+          // Normal winning push
+          await syncMetadataStore.markSynced('scheduled_workout', row.id, row.updated_at, null, scope);
+          synced++;
+        }
+      }
+    }
+
+    return { synced, reconciled };
+  }
+
+  private async fallbackIndividualScheduledWorkouts(
+    payloads: ScheduledWorkoutCloudInput[],
+    validMeta: EntitySyncMetadata[],
+    scope: UserScope,
+  ): Promise<{ synced: number; reconciled: number; quarantined: number }> {
+    let synced = 0;
+    let reconciled = 0;
+    let quarantined = 0;
+
+    for (let i = 0; i < payloads.length; i++) {
+      const p = payloads[i];
+      try {
+        const returned = await this.scheduledWorkoutCloudService.upsert(p);
+        const outcome = await this.reconcileScheduledWorkoutResponses([p], [returned], scope);
+        synced += outcome.synced;
+        reconciled += outcome.reconciled;
+      } catch (err: any) {
+        const cloudErr = err instanceof CloudError ? err : classifySupabaseError(err);
+        if (cloudErr.kind === 'validation') {
+          await syncMetadataStore.markError('scheduled_workout', p.id, scope);
+          quarantined++;
+        }
+      }
+    }
+
+    return { synced, reconciled, quarantined };
+  }
   // ==========================================================================
   // PULL PATH IMPLEMENTATION (CHECKPOINT 3.3)
   // ==========================================================================
@@ -929,7 +1118,7 @@ export class SyncEngine {
       };
     }
 
-    const ENTITY_PULL_ORDER: SyncEntityType[] = ['workout', 'template', 'custom_exercise'];
+    const ENTITY_PULL_ORDER: SyncEntityType[] = ['workout', 'template', 'custom_exercise', 'scheduled_workout'];
 
     let remainingBudget = MAX_PULL_RECORDS_PER_PASS;
     let totalPulled = 0;
@@ -992,6 +1181,9 @@ export class SyncEngine {
               break;
             case 'custom_exercise':
               cloudResult = await this.customExerciseCloudService.fetchChanged(pullOptions);
+              break;
+            case 'scheduled_workout':
+              cloudResult = await this.scheduledWorkoutCloudService.fetchChanged(pullOptions);
               break;
           }
         } catch (err: any) {
@@ -1143,6 +1335,8 @@ export class SyncEngine {
         return await this.reconcilePulledTemplates(records as TemplateCloudRecord[], scope);
       case 'custom_exercise':
         return await this.reconcilePulledCustomExercises(records as CustomExerciseCloudRecord[], scope);
+      case 'scheduled_workout':
+        return await this.reconcilePulledScheduledWorkouts(records as ScheduledWorkoutCloudRecord[], scope);
     }
   }
 
@@ -1639,6 +1833,120 @@ export class SyncEngine {
           applied++;
         }
       }
+    }
+
+    return { applied, ignored, tombstones, quarantined, quarantinedErrors };
+  }
+
+  private async reconcilePulledScheduledWorkouts(
+    records: ScheduledWorkoutCloudRecord[],
+    scope: UserScope,
+  ): Promise<{
+    applied: number;
+    ignored: number;
+    tombstones: number;
+    quarantined: number;
+    quarantinedErrors: { entityType: SyncEntityType; id?: string; message: string; kind: string }[];
+  }> {
+    let applied = 0;
+    let ignored = 0;
+    let tombstones = 0;
+    let quarantined = 0;
+    const quarantinedErrors: { entityType: SyncEntityType; id?: string; message: string; kind: string }[] = [];
+
+    const localItems = await scheduledWorkoutStorage.getScheduledWorkouts(scope, true);
+    const itemMap = new Map(localItems.map((s) => [s.id, s]));
+
+    for (const row of records) {
+      if (
+        !row.id ||
+        !row.name ||
+        !row.scheduled_date ||
+        !row.status ||
+        !row.client_updated_at ||
+        !row.updated_at
+      ) {
+        quarantined++;
+        quarantinedErrors.push({
+          entityType: 'scheduled_workout',
+          id: row.id,
+          message: 'Cloud record missing required schema fields',
+          kind: 'validation',
+        });
+        continue;
+      }
+
+      const localItem = itemMap.get(row.id);
+
+      // CASE A: Cloud is a tombstone
+      if (row.deleted_at !== null) {
+        if (!localItem || localItem.deletedAt) {
+          ignored++;
+        } else {
+          await scheduledWorkoutStorage.tombstoneScheduledWorkout(row.id, scope);
+          tombstones++;
+        }
+
+        await syncMetadataStore.setRecord(
+          {
+            entityType: 'scheduled_workout',
+            id: row.id,
+            clientUpdatedAt: row.client_updated_at,
+            deletedAt: row.deleted_at,
+            syncStatus: 'synced',
+            lastSyncedServerUpdatedAt: row.updated_at,
+          },
+          scope,
+        );
+        continue;
+      }
+
+      // CASE B: Cloud is live
+      const cloudMs = new Date(row.client_updated_at).getTime();
+      const localMs = localItem ? new Date(localItem.clientUpdatedAt).getTime() : 0;
+      const isLocalPendingUpload = (await syncMetadataStore.getRecord('scheduled_workout', row.id, scope))?.syncStatus === 'pending_upload';
+
+      if (localItem && isLocalPendingUpload && localMs > cloudMs) {
+        ignored++;
+        continue;
+      }
+
+      if (localItem && localMs === cloudMs && !localItem.deletedAt) {
+        ignored++;
+        await syncMetadataStore.markSynced('scheduled_workout', row.id, row.updated_at, null, scope);
+        continue;
+      }
+
+      // Overwrite local storage (Cloud wins)
+      const newItem: ScheduledWorkout = {
+        id: row.id,
+        name: row.name,
+        templateId: row.template_id || undefined,
+        scheduledDate: row.scheduled_date,
+        scheduledTime: row.scheduled_time || undefined,
+        status: row.status,
+        completedSessionId: row.completed_session_id || undefined,
+        notes: row.notes || undefined,
+        ownerId: scope.ownerId,
+        ownerType: 'authenticated',
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        clientUpdatedAt: row.client_updated_at,
+      };
+
+      await scheduledWorkoutStorage.saveScheduledWorkout(newItem, scope);
+      await syncMetadataStore.setRecord(
+        {
+          entityType: 'scheduled_workout',
+          id: row.id,
+          clientUpdatedAt: row.client_updated_at,
+          deletedAt: null,
+          syncStatus: 'synced',
+          lastSyncedServerUpdatedAt: row.updated_at,
+        },
+        scope,
+      );
+      applied++;
     }
 
     return { applied, ignored, tombstones, quarantined, quarantinedErrors };

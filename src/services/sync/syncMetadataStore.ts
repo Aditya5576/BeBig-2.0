@@ -136,6 +136,7 @@ export const syncMetadataStore = {
           workout: parsed.watermarks.workout || createInitialWatermarkState(),
           template: parsed.watermarks.template || createInitialWatermarkState(),
           custom_exercise: parsed.watermarks.custom_exercise || createInitialWatermarkState(),
+          scheduled_workout: parsed.watermarks.scheduled_workout || createInitialWatermarkState(),
         },
         activeStreamEntity: parsed.activeStreamEntity || null,
       };

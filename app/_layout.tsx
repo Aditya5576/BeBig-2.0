@@ -37,7 +37,7 @@ function useProtectedRoute() {
 
     const firstSegment = segments[0];
     const secondSegment = segments[1];
-    const isProtected = ['home', 'workout', 'templates', 'exercises', 'settings'].includes(firstSegment);
+    const isProtected = ['home', 'workout', 'templates', 'exercises', 'settings', 'calendar'].includes(firstSegment);
 
     if (status === 'unauthenticated' && isProtected) {
       router.replace('/onboarding/welcome');
@@ -112,6 +112,7 @@ export default function RootLayout() {
           <Stack.Screen name="workout/history/[id]" />
           <Stack.Screen name="workout/progress/prs" />
           <Stack.Screen name="workout/progress/exercise/[id]" />
+          <Stack.Screen name="calendar/index" />
           <Stack.Screen name="+not-found" options={{ title: 'Not Found' }} />
         </Stack>
         <BottomNavBar />

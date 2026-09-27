@@ -10,6 +10,7 @@ import { WorkoutSession, WorkoutExercise, WorkoutSet, ActiveRestTimer } from '..
 import { workoutStorage } from '../storage/workoutStorage';
 import { getCurrentUserScope, UserScope } from '../../auth/utils/userScope';
 import { syncMetadataStore, syncLifecycleManager } from '../../../services/sync';
+import { scheduledWorkoutRepository } from '../../scheduling/services/scheduledWorkoutRepository';
 
 export class WorkoutRepository {
   /**
@@ -49,6 +50,7 @@ export class WorkoutRepository {
   async startWorkoutFromTemplate(
     template: WorkoutTemplate,
     customName?: string,
+    sourceScheduledWorkoutId?: string
   ): Promise<WorkoutSession> {
     if (!template || !template.id) {
       throw new Error('Valid workout template is required to start a workout.');
@@ -100,6 +102,7 @@ export class WorkoutRepository {
       ownerType: scope?.ownerType,
       name: customName?.trim() || template.name,
       sourceTemplateId: template.id,
+      sourceScheduledWorkoutId,
       startedAt: now,
       status: 'active',
       exercises,
@@ -113,7 +116,7 @@ export class WorkoutRepository {
   /**
    * Starts a blank, empty workout session.
    */
-  async startEmptyWorkout(name?: string): Promise<WorkoutSession> {
+  async startEmptyWorkout(name?: string, sourceScheduledWorkoutId?: string): Promise<WorkoutSession> {
     const sessionId = `workout_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
     const now = new Date().toISOString();
     const scope = getCurrentUserScope();
@@ -123,6 +126,7 @@ export class WorkoutRepository {
       ownerId: scope?.ownerId,
       ownerType: scope?.ownerType,
       name: name?.trim() || 'Quick Workout',
+      sourceScheduledWorkoutId,
       startedAt: now,
       status: 'active',
       exercises: [],
@@ -420,6 +424,23 @@ export class WorkoutRepository {
 
     // 1. Save completed workout locally (Source of Truth)
     await workoutStorage.saveCompletedWorkout(completedSession);
+
+    // 1.5. Link to Scheduled Workout if applicable
+    if (completedSession.sourceScheduledWorkoutId) {
+      try {
+        const scope = getCurrentUserScope();
+        await scheduledWorkoutRepository.updateScheduledWorkout({
+          id: completedSession.sourceScheduledWorkoutId,
+          status: 'completed',
+          completedSessionId: completedSession.id
+        }, scope || undefined);
+      } catch (err) {
+        // We log but do not fail the workout completion. 
+        // Sync retry or next launch will eventually correct it if local failed,
+        // though local should practically never fail if storage is available.
+        console.warn('Failed to link completed workout to schedule locally', err);
+      }
+    }
 
     // 2. Clear active in-progress draft (Immunity preserved)
     await workoutStorage.clearActiveWorkout();

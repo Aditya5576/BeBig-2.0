@@ -7,7 +7,7 @@
 
 export type SyncStatus = 'synced' | 'pending_upload' | 'pending_delete' | 'error';
 
-export type SyncEntityType = 'workout' | 'template' | 'custom_exercise';
+export type SyncEntityType = 'workout' | 'template' | 'custom_exercise' | 'scheduled_workout';
 
 export interface EntitySyncMetadata {
   entityType: SyncEntityType;
@@ -119,6 +119,7 @@ export function createInitialSyncMetadataState(): SyncMetadataState {
       workout: createInitialWatermarkState(),
       template: createInitialWatermarkState(),
       custom_exercise: createInitialWatermarkState(),
+      scheduled_workout: createInitialWatermarkState(),
     },
     activeStreamEntity: null,
   };
