@@ -47,6 +47,7 @@ export default function ExerciseListScreen() {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedSource, setSelectedSource] = useState<'all' | 'custom' | 'external'>('all');
   const [nextOffset, setNextOffset] = useState<number | undefined>(undefined);
   const [hasMore, setHasMore] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -63,7 +64,7 @@ export default function ExerciseListScreen() {
       setLoading(false);
       setError(null);
     }
-  }, [searchQuery, selectedCategory]);
+  }, [searchQuery, selectedCategory, selectedSource]);
 
   // 2. Background API refresh with debounce
   useEffect(() => {
@@ -114,7 +115,7 @@ export default function ExerciseListScreen() {
       isMounted = false;
       clearTimeout(timeoutId);
     };
-  }, [searchQuery, selectedCategory, refreshTrigger]);
+  }, [searchQuery, selectedCategory, refreshTrigger, selectedSource]);
 
   const handleCategorySelect = (categoryId: string) => {
     setSelectedCategory(categoryId);

@@ -112,7 +112,7 @@ export class ExerciseRepository {
 
     // 1. Retrieve local custom exercises
     let customMatches: Exercise[] = [];
-    if (isFirstPage) {
+    if (isFirstPage && (!options.source || options.source === 'all' || options.source === 'custom')) {
       const allCustom = await customExerciseStorage.getCustomExercises(scope);
       if (hasQuery) {
         customMatches = filterAndRankExercises(allCustom, rawQuery, options.category);
@@ -132,7 +132,8 @@ export class ExerciseRepository {
     let hasMore = false;
     let nextOffset: number | undefined = undefined;
 
-    if (!hasQuery) {
+    if (!options.source || options.source === 'all' || options.source === 'external') {
+      if (!hasQuery) {
       // Standard browsing / pagination with local-first cache update
       try {
         const providerResult = await withTimeout(this.provider.listExercises(options), 4000);
@@ -250,6 +251,7 @@ export class ExerciseRepository {
       hasMore = false;
       nextOffset = undefined;
     }
+    }
 
     // 3. Merge custom and provider exercises (exact & strongest matches ranked to top)
     const combined = isFirstPage
@@ -299,6 +301,9 @@ export class ExerciseRepository {
    * Returns cached exercises synchronously or locally without network delay.
    */
   getCachedExercises(options: ExerciseFilterOptions = {}): Exercise[] {
+    if (options.source === 'custom') {
+      return []; // Custom exercises are retrieved asynchronously
+    }
     return exerciseCacheStorage.searchCached({
       query: options.query,
       category: options.category,
