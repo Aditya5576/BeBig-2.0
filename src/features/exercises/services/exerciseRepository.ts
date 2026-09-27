@@ -315,9 +315,24 @@ export class ExerciseRepository {
     input: CreateCustomExerciseInput,
     scope?: UserScope | null,
   ): Promise<Exercise> {
-    const trimmedName = input.name.trim();
+    const trimmedName = input.name ? input.name.trim() : '';
     if (!trimmedName) {
-      throw new Error('Exercise name is required.');
+      throw new Error('Please enter an exercise name.');
+    }
+    if (trimmedName.length > 100) {
+      throw new Error('Exercise name cannot exceed 100 characters.');
+    }
+
+    const resolvedScope = scope !== undefined ? scope : getCurrentUserScope();
+
+    // Check for existing custom exercise duplicate for the user scope (case-insensitive & trimmed)
+    const existingCustoms = await customExerciseStorage.getCustomExercises(resolvedScope);
+    const normalizedName = trimmedName.toLowerCase();
+    const duplicate = existingCustoms.find(
+      (e) => e.name.trim().toLowerCase() === normalizedName,
+    );
+    if (duplicate) {
+      throw new Error(`A custom exercise named "${trimmedName}" already exists.`);
     }
 
     const id = `custom_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
@@ -335,7 +350,6 @@ export class ExerciseRepository {
       .map((name, idx) => ({ id: `ceq_${idx}`, name: name.trim() }))
       .filter((eq) => eq.name.length > 0);
 
-    const resolvedScope = scope !== undefined ? scope : getCurrentUserScope();
     const now = new Date().toISOString();
 
     const newExercise: Exercise = {
@@ -358,6 +372,9 @@ export class ExerciseRepository {
 
     // 1. Local durable save first (Source of Truth)
     await customExerciseStorage.saveCustomExercise(newExercise, resolvedScope);
+
+    // Invalidate candidate cache so new custom exercise immediately shows up in queries
+    this.invalidateCandidateCache();
 
     // 2. Mark pending upload in sync metadata (authenticated only)
     if (resolvedScope && resolvedScope.ownerType === 'authenticated') {

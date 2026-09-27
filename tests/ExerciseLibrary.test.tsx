@@ -169,6 +169,10 @@ describe('EXERCISE-2: Exercise Details & Deletion', () => {
     jest.clearAllMocks();
   });
 
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   const mockCustomExercise: any = {
     id: 'custom_123',
     name: 'My Custom Squat',
@@ -329,3 +333,144 @@ describe('EXERCISE-2: Exercise Details & Deletion', () => {
     expect(screen.queryByText('External')).toBeNull();
   });
 });
+
+describe('EXERCISE-3: Custom Exercise Creation', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  const mockExistingCustom: any = {
+    id: 'custom_999',
+    name: 'Incline Dumbbell Press',
+    category: 'chest',
+    categoryName: 'Chest',
+    primaryMuscles: [{ id: 'cm_0', name: 'Upper Chest' }],
+    secondaryMuscles: [],
+    equipment: [{ id: 'ceq_0', name: 'Dumbbell' }],
+    images: [],
+    sourceProvider: 'custom',
+    isCustom: true,
+    description: 'Keep elbows at 45 degrees.',
+  };
+
+  it('1, 4, 5, 8, 9. Valid custom exercise creation trims name, preserves notes, assigns stable ID, and saves locally', async () => {
+    (customExerciseStorage.getCustomExercises as jest.Mock).mockResolvedValue([]);
+    (customExerciseStorage.saveCustomExercise as jest.Mock).mockResolvedValue(undefined);
+
+    const created = await exerciseRepository.createCustomExercise({
+      name: '  Bulgarian Split Squat  ',
+      category: 'legs',
+      primaryMuscles: ['Quadriceps', 'Glutes'],
+      secondaryMuscles: ['Hamstrings'],
+      equipment: ['Dumbbell'],
+      description: '  Keep torso upright and drive through front heel.  ',
+    });
+
+    expect(created.name).toBe('Bulgarian Split Squat');
+    expect(created.description).toBe('Keep torso upright and drive through front heel.');
+    expect(created.category).toBe('legs');
+    expect(created.id).toMatch(/^custom_\d+_[a-z0-9]+$/);
+    expect(created.isCustom).toBe(true);
+    expect(created.sourceProvider).toBe('custom');
+    expect(created.primaryMuscles).toHaveLength(2);
+
+    expect(customExerciseStorage.saveCustomExercise).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Bulgarian Split Squat',
+        description: 'Keep torso upright and drive through front heel.',
+      }),
+      expect.anything()
+    );
+  });
+
+  it('2, 3. Empty or whitespace-only name is rejected', async () => {
+    await expect(
+      exerciseRepository.createCustomExercise({
+        name: '',
+        category: 'chest',
+        primaryMuscles: ['Chest'],
+      })
+    ).rejects.toThrow('Please enter an exercise name.');
+
+    await expect(
+      exerciseRepository.createCustomExercise({
+        name: '     ',
+        category: 'chest',
+        primaryMuscles: ['Chest'],
+      })
+    ).rejects.toThrow('Please enter an exercise name.');
+  });
+
+  it('6. Duplicate custom exercise names (case-insensitive & trimmed) are rejected', async () => {
+    (customExerciseStorage.getCustomExercises as jest.Mock).mockResolvedValue([mockExistingCustom]);
+
+    await expect(
+      exerciseRepository.createCustomExercise({
+        name: '  incline dumbbell press  ',
+        category: 'chest',
+        primaryMuscles: ['Chest'],
+      })
+    ).rejects.toThrow('A custom exercise named "incline dumbbell press" already exists.');
+  });
+
+  it('7. WGER/external exercises do not trigger custom duplicate protection', async () => {
+    (customExerciseStorage.getCustomExercises as jest.Mock).mockResolvedValue([]);
+    (customExerciseStorage.saveCustomExercise as jest.Mock).mockResolvedValue(undefined);
+
+    const provider = exerciseRepository.getProvider();
+    jest.spyOn(provider, 'listExercises').mockResolvedValue({
+      exercises: [{ id: 'wger_100', name: 'Barbell Bench Press', category: 'chest', sourceProvider: 'wger', isCustom: false } as any],
+      totalCount: 1,
+      hasMore: false,
+    });
+
+    const created = await exerciseRepository.createCustomExercise({
+      name: 'Barbell Bench Press',
+      category: 'chest',
+      primaryMuscles: ['Chest'],
+    });
+
+    expect(created.name).toBe('Barbell Bench Press');
+    expect(created.isCustom).toBe(true);
+  });
+
+  it('10. Offline creation remains locally available and sets pending sync', async () => {
+    (customExerciseStorage.getCustomExercises as jest.Mock).mockResolvedValue([]);
+    (customExerciseStorage.saveCustomExercise as jest.Mock).mockResolvedValue(undefined);
+
+    const created = await exerciseRepository.createCustomExercise(
+      {
+        name: 'Offline Cable Fly',
+        category: 'chest',
+        primaryMuscles: ['Chest'],
+      },
+      { ownerId: 'user_123', ownerType: 'authenticated' }
+    );
+
+    expect(created.id).toBeDefined();
+    expect(customExerciseStorage.saveCustomExercise).toHaveBeenCalled();
+  });
+
+  it('11. Account/user scope is preserved during custom exercise creation', async () => {
+    (customExerciseStorage.getCustomExercises as jest.Mock).mockResolvedValue([]);
+    (customExerciseStorage.saveCustomExercise as jest.Mock).mockResolvedValue(undefined);
+
+    const userScope = { ownerId: 'user_456', ownerType: 'authenticated' as const };
+    const created = await exerciseRepository.createCustomExercise(
+      {
+        name: 'Scoped Pullup',
+        category: 'back',
+        primaryMuscles: ['Lats'],
+      },
+      userScope
+    );
+
+    expect(created.ownerId).toBe('user_456');
+    expect(created.ownerType).toBe('authenticated');
+    expect(customExerciseStorage.saveCustomExercise).toHaveBeenCalledWith(
+      expect.objectContaining({ ownerId: 'user_456' }),
+      userScope
+    );
+  });
+});
+

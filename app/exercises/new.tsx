@@ -8,6 +8,7 @@ import {
   Pressable,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ScreenContainer, Text, Button, Card } from '../../src/components/ui';
@@ -33,6 +34,27 @@ export default function CreateCustomExerciseScreen() {
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const isDirty =
+    name.trim().length > 0 ||
+    description.trim().length > 0 ||
+    primaryMuscles.trim().length > 0 ||
+    secondaryMuscles.trim().length > 0;
+
+  const handleCancel = () => {
+    if (isDirty) {
+      Alert.alert(
+        'Discard Changes?',
+        'Are you sure you want to discard this custom exercise? Your input will be lost.',
+        [
+          { text: 'Keep Editing', style: 'cancel' },
+          { text: 'Discard', style: 'destructive', onPress: () => router.back() },
+        ],
+      );
+    } else {
+      router.back();
+    }
+  };
 
   const handleSave = async () => {
     if (!name.trim()) {
@@ -89,7 +111,7 @@ export default function CreateCustomExerciseScreen() {
             <Button
               testID="create-custom-back-button"
               title="← Cancel"
-              onPress={() => router.back()}
+              onPress={handleCancel}
               variant="ghost"
               size="sm"
               style={styles.backButton}
