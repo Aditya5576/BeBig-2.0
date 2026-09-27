@@ -250,6 +250,8 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   badgeRow: {
     flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     flexWrap: 'wrap',
     marginTop: 2,
   },

@@ -168,7 +168,7 @@ export default function ExerciseListScreen() {
               </Text>
             </View>
 
-                          <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 {item.isCustom && (
                   <View style={styles.customBadge} testID="custom-badge">
                     <Text variant="caption" color="accent" style={styles.badgeText}>

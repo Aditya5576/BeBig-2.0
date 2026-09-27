@@ -267,11 +267,11 @@ export default function WorkoutHistoryScreen() {
                               </View>
                             ) : (
                               <View style={{ gap: 4 }}>
-                                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                                     <Text
                                       variant="titleMedium"
                                       color="primary"
-                                      style={[styles.workoutName, { flex: 1, marginRight: 8 }]}
+                                      style={[styles.workoutName, { flexShrink: 1 }]}
                                       numberOfLines={1}
                                     >
                                       {item.name}

@@ -139,14 +139,14 @@ export default function ExerciseDetailScreen() {
             </View>
 
             {exercise.isCustom ? (
-                <>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                   <View style={styles.customBadge} testID="detail-custom-badge">
                     <Text variant="caption" color="accent" style={styles.badgeText}>
                       CUSTOM EXERCISE
                     </Text>
                   </View>
                   <CustomExerciseSyncStatus exerciseId={exercise.id} isCustom={exercise.isCustom} />
-                </>
+                  </View>
               ) : (
               <View style={styles.sourceBadge}>
                 <Text variant="caption" color="muted" style={styles.badgeText}>

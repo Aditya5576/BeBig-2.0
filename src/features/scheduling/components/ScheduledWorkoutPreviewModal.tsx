@@ -91,7 +91,7 @@ export function ScheduledWorkoutPreviewModal({
         <View style={styles.modalCard}>
           {/* Header */}
           <View style={styles.header}>
-            <View style={{ flex: 1, marginRight: 8 }}>
+            <View style={{ flexShrink: 1, marginRight: 8 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <Icon name="workout" size={20} color="#E5A93C" />
                 <Text variant="titleMedium" style={styles.headerTitle} numberOfLines={1}>

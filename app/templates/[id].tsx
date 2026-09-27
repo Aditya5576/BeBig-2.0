@@ -270,7 +270,7 @@ export default function TemplateDetailScreen() {
 
           {/* Header */}
             <View style={styles.header}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <Text variant="titleLarge" color="primary" testID="template-detail-title">
                   Edit Template
                 </Text>
