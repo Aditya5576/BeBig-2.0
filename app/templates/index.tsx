@@ -5,6 +5,14 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { ScreenContainer, ScreenFlatList, Text, Button, Card } from '../../src/components/ui';
 import { templateRepository, WorkoutTemplate } from '../../src/features/templates';
 import { spacing, radii } from '../../src/constants/theme';
+import { useEntitySyncStatus } from '../../src/services/sync';
+import { SyncStatusChip } from '../../src/components/ui';
+
+function TemplateSyncStatus({ templateId }: { templateId: string }) {
+  const status = useEntitySyncStatus('template', templateId);
+  return <SyncStatusChip status={status} />;
+}
+
 
 export default function TemplatesListScreen() {
   const { colors } = useAppTheme();
@@ -72,10 +80,11 @@ export default function TemplatesListScreen() {
               </Text>
               <View style={styles.badgeRow}>
                 <View style={styles.countBadge}>
-                  <Text variant="caption" color="accent" style={styles.badgeText}>
-                    {item.exercises.length} {item.exercises.length === 1 ? 'EXERCISE' : 'EXERCISES'}
-                  </Text>
-                </View>
+                    <Text variant="caption" color="accent" style={styles.badgeText}>
+                      {item.exercises.length} {item.exercises.length === 1 ? 'EXERCISE' : 'EXERCISES'}
+                    </Text>
+                  </View>
+                  <TemplateSyncStatus templateId={item.id} />
               </View>
             </View>
           </View>

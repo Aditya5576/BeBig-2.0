@@ -21,6 +21,14 @@ import {
 } from '../../src/features/templates';
 import { Exercise } from '../../src/features/exercises';
 import { spacing, radii } from '../../src/constants/theme';
+import { useEntitySyncStatus } from '../../src/services/sync';
+import { SyncStatusChip } from '../../src/components/ui';
+
+function TemplateSyncStatus({ templateId }: { templateId: string }) {
+  const status = useEntitySyncStatus('template', templateId);
+  return <SyncStatusChip status={status} />;
+}
+
 
 type FormExercise = Omit<TemplateExercise, 'order'>;
 
@@ -261,14 +269,17 @@ export default function TemplateDetailScreen() {
           </View>
 
           {/* Header */}
-          <View style={styles.header}>
-            <Text variant="titleLarge" color="primary" testID="template-detail-title">
-              Edit Template
-            </Text>
-            <Text variant="caption" color="muted">
-              Update exercises, target sets, and reps
-            </Text>
-          </View>
+            <View style={styles.header}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text variant="titleLarge" color="primary" testID="template-detail-title">
+                  Edit Template
+                </Text>
+                <TemplateSyncStatus templateId={template.id} />
+              </View>
+              <Text variant="caption" color="muted">
+                Update exercises, target sets, and reps
+              </Text>
+            </View>
 
           {/* Error Banner */}
           {error ? (

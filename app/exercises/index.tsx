@@ -13,6 +13,15 @@ import { useRouter } from 'expo-router';
 import { ScreenContainer, ScreenScrollView, ScreenFlatList, Text, Button, Card } from '../../src/components/ui';
 import { exerciseRepository, Exercise, STANDARD_CATEGORIES } from '../../src/features/exercises';
 import { spacing, radii } from '../../src/constants/theme';
+import { useEntitySyncStatus } from '../../src/services/sync';
+import { SyncStatusChip } from '../../src/components/ui';
+
+function CustomExerciseSyncStatus({ exerciseId, isCustom }: { exerciseId: string; isCustom: boolean }) {
+  const status = useEntitySyncStatus('custom_exercise', exerciseId);
+  if (!isCustom) return null;
+  return <SyncStatusChip status={status} />;
+}
+
 
 export default function ExerciseListScreen() {
   const { colors } = useAppTheme();
@@ -158,13 +167,16 @@ export default function ExerciseListScreen() {
               </Text>
             </View>
 
-            {item.isCustom && (
-              <View style={styles.customBadge} testID="custom-badge">
-                <Text variant="caption" color="accent" style={styles.badgeText}>
-                  CUSTOM
-                </Text>
+                          <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                {item.isCustom && (
+                  <View style={styles.customBadge} testID="custom-badge">
+                    <Text variant="caption" color="accent" style={styles.badgeText}>
+                      CUSTOM
+                    </Text>
+                  </View>
+                )}
+                <CustomExerciseSyncStatus exerciseId={item.id} isCustom={item.isCustom} />
               </View>
-            )}
           </View>
 
           <View style={styles.muscleRow}>

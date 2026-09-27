@@ -5,6 +5,15 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ScreenContainer, Text, Button, Card } from '../../src/components/ui';
 import { exerciseRepository, Exercise } from '../../src/features/exercises';
 import { spacing, radii } from '../../src/constants/theme';
+import { useEntitySyncStatus } from '../../src/services/sync';
+import { SyncStatusChip } from '../../src/components/ui';
+
+function CustomExerciseSyncStatus({ exerciseId, isCustom }: { exerciseId: string; isCustom: boolean }) {
+  const status = useEntitySyncStatus('custom_exercise', exerciseId);
+  if (!isCustom) return null;
+  return <SyncStatusChip status={status} />;
+}
+
 
 export default function ExerciseDetailScreen() {
   const { colors } = useAppTheme();
@@ -130,12 +139,15 @@ export default function ExerciseDetailScreen() {
             </View>
 
             {exercise.isCustom ? (
-              <View style={styles.customBadge} testID="detail-custom-badge">
-                <Text variant="caption" color="accent" style={styles.badgeText}>
-                  CUSTOM EXERCISE
-                </Text>
-              </View>
-            ) : (
+                <>
+                  <View style={styles.customBadge} testID="detail-custom-badge">
+                    <Text variant="caption" color="accent" style={styles.badgeText}>
+                      CUSTOM EXERCISE
+                    </Text>
+                  </View>
+                  <CustomExerciseSyncStatus exerciseId={exercise.id} isCustom={exercise.isCustom} />
+                </>
+              ) : (
               <View style={styles.sourceBadge}>
                 <Text variant="caption" color="muted" style={styles.badgeText}>
                   WGER CATALOG

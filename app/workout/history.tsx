@@ -11,6 +11,13 @@ import {
   getMonthGroupLabel,
 } from '../../src/features/workout';
 import { spacing, radii } from '../../src/constants/theme';
+import { useEntitySyncStatus } from '../../src/services/sync';
+import { SyncStatusChip } from '../../src/components/ui';
+
+function HistorySyncStatus({ workoutId }: { workoutId: string }) {
+  const status = useEntitySyncStatus('workout', workoutId);
+  return <SyncStatusChip status={status} />;
+}
 
 const useFocusEffect = routerFocusEffect || React.useEffect;
 
@@ -259,19 +266,22 @@ export default function WorkoutHistoryScreen() {
                                 </View>
                               </View>
                             ) : (
-                              <>
-                                <Text
-                                  variant="titleMedium"
-                                  color="primary"
-                                  style={styles.workoutName}
-                                  numberOfLines={1}
-                                >
-                                  {item.name}
-                                </Text>
-                                <Text variant="caption" color="muted">
-                                  {formatCompletedDate(item.finishedAt || item.startedAt)}
-                                </Text>
-                              </>
+                              <View style={{ gap: 4 }}>
+                                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                    <Text
+                                      variant="titleMedium"
+                                      color="primary"
+                                      style={[styles.workoutName, { flex: 1, marginRight: 8 }]}
+                                      numberOfLines={1}
+                                    >
+                                      {item.name}
+                                    </Text>
+                                    <HistorySyncStatus workoutId={item.id} />
+                                  </View>
+                                  <Text variant="caption" color="muted">
+                                    {formatCompletedDate(item.finishedAt || item.startedAt)}
+                                  </Text>
+                                </View>
                             )}
                           </View>
 
