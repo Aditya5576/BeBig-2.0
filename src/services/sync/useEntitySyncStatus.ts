@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { SyncEntityType, EntitySyncMetadata } from './types';
 import { syncMetadataStore } from './syncMetadataStore';
 import { syncEngine } from './syncEngine';
+import { syncLifecycleManager } from './index';
 import { resolveSyncStatus, ObservabilitySyncStatus } from './syncStatusResolver';
 import { UserScope, getCurrentUserScope } from '../../features/auth/utils/userScope';
 
@@ -30,8 +31,10 @@ export function useEntitySyncStatus(
       try {
         const metadata = await syncMetadataStore.getRecord(entityType, id, resolvedScope);
         const isBusy = syncEngine.isBusy();
+        const isRetrying = syncLifecycleManager.isRetrying();
+        const hasLastSyncFailed = syncLifecycleManager.hasLastSyncFailed();
         // Assuming network is online for now, can be enhanced with networkMonitor if needed
-        const resolved = resolveSyncStatus(metadata, isBusy, true);
+        const resolved = resolveSyncStatus(metadata, isBusy, true, isRetrying, hasLastSyncFailed);
         
         if (isMounted) {
           setStatus(resolved);

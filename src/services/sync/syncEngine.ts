@@ -274,17 +274,24 @@ export class SyncEngine {
 
         if (batchOutcome.fatalError) {
           errors.push(batchOutcome.fatalError);
-          // Halt further processing on network, auth, permission, unknown, or other non-validation fatal errors.
-          // Metadata status (pending_upload / pending_delete) is strictly preserved so future sync passes can retry.
-          const hasAnySuccess = totalPushed > 0 || totalReconciled > 0;
-          return {
-            status: hasAnySuccess ? 'partial' : 'error',
-            pushedCount: totalPushed,
-            reconciledCount: totalReconciled,
-            quarantinedCount: totalQuarantined,
-            batches: batchResults,
-            errors,
-          };
+          const kind = batchOutcome.fatalError.kind;
+          
+          if (kind === 'auth' || kind === 'network') {
+            // Global transport/auth failure makes all continuation unsafe.
+            const hasAnySuccess = totalPushed > 0 || totalReconciled > 0;
+            return {
+              status: hasAnySuccess ? 'partial' : 'error',
+              pushedCount: totalPushed,
+              reconciledCount: totalReconciled,
+              quarantinedCount: totalQuarantined,
+              batches: batchResults,
+              errors,
+            };
+          } else {
+            // Data-specific unknown failure. Unsafe for this entity type's remaining chunks, 
+            // but safe to attempt independent entity types.
+            break; 
+          }
         }
       }
     }
@@ -328,7 +335,7 @@ export class SyncEngine {
           reconciled += outcome.reconciled;
         } catch (err: any) {
           const cloudErr = err instanceof CloudError ? err : classifySupabaseError(err);
-          if (cloudErr.kind === 'validation') {
+          if (cloudErr.kind === 'validation' || cloudErr.kind === 'permission') {
             // Quarantine fallback: test individually
             const qResult = await this.fallbackIndividualWorkouts(payloads, validMeta, scope);
             synced += qResult.synced;
@@ -360,7 +367,7 @@ export class SyncEngine {
           reconciled += outcome.reconciled;
         } catch (err: any) {
           const cloudErr = err instanceof CloudError ? err : classifySupabaseError(err);
-          if (cloudErr.kind === 'validation') {
+          if (cloudErr.kind === 'validation' || cloudErr.kind === 'permission') {
             const qResult = await this.fallbackIndividualTemplates(payloads, validMeta, scope);
             synced += qResult.synced;
             reconciled += qResult.reconciled;
@@ -391,7 +398,7 @@ export class SyncEngine {
           reconciled += outcome.reconciled;
         } catch (err: any) {
           const cloudErr = err instanceof CloudError ? err : classifySupabaseError(err);
-          if (cloudErr.kind === 'validation') {
+          if (cloudErr.kind === 'validation' || cloudErr.kind === 'permission') {
             const qResult = await this.fallbackIndividualCustomExercises(payloads, validMeta, scope);
             synced += qResult.synced;
             reconciled += qResult.reconciled;
@@ -422,7 +429,7 @@ export class SyncEngine {
           reconciled += outcome.reconciled;
         } catch (err: any) {
           const cloudErr = err instanceof CloudError ? err : classifySupabaseError(err);
-          if (cloudErr.kind === 'validation') {
+          if (cloudErr.kind === 'validation' || cloudErr.kind === 'permission') {
             const qResult = await this.fallbackIndividualScheduledWorkouts(payloads, validMeta, scope);
             synced += qResult.synced;
             reconciled += qResult.reconciled;
@@ -851,7 +858,7 @@ export class SyncEngine {
         reconciled += outcome.reconciled;
       } catch (err: any) {
         const cloudErr = err instanceof CloudError ? err : classifySupabaseError(err);
-        if (cloudErr.kind === 'validation') {
+        if (cloudErr.kind === 'validation' || cloudErr.kind === 'permission') {
           await syncMetadataStore.markError('workout', p.id, scope);
           quarantined++;
         }
@@ -879,7 +886,7 @@ export class SyncEngine {
         reconciled += outcome.reconciled;
       } catch (err: any) {
         const cloudErr = err instanceof CloudError ? err : classifySupabaseError(err);
-        if (cloudErr.kind === 'validation') {
+        if (cloudErr.kind === 'validation' || cloudErr.kind === 'permission') {
           await syncMetadataStore.markError('template', p.id, scope);
           quarantined++;
         }
@@ -907,7 +914,7 @@ export class SyncEngine {
         reconciled += outcome.reconciled;
       } catch (err: any) {
         const cloudErr = err instanceof CloudError ? err : classifySupabaseError(err);
-        if (cloudErr.kind === 'validation') {
+        if (cloudErr.kind === 'validation' || cloudErr.kind === 'permission') {
           await syncMetadataStore.markError('custom_exercise', p.id, scope);
           quarantined++;
         }
@@ -1059,7 +1066,7 @@ export class SyncEngine {
         reconciled += outcome.reconciled;
       } catch (err: any) {
         const cloudErr = err instanceof CloudError ? err : classifySupabaseError(err);
-        if (cloudErr.kind === 'validation') {
+        if (cloudErr.kind === 'validation' || cloudErr.kind === 'permission') {
           await syncMetadataStore.markError('scheduled_workout', p.id, scope);
           quarantined++;
         }
@@ -1954,3 +1961,4 @@ export class SyncEngine {
 }
 
 export const syncEngine = new SyncEngine();
+

@@ -51,6 +51,28 @@ describe('Sync-Status-1: resolveSyncStatus', () => {
     expect(resolveSyncStatus(meta, true, false)).toBe('WAITING_TO_SYNC');
   });
 
+  it('should return WAITING_TO_SYNC when pending and engine is not busy but is retrying', () => {
+    const meta: EntitySyncMetadata = {
+      entityType: 'workout',
+      id: 'w1',
+      clientUpdatedAt: '',
+      deletedAt: null,
+      syncStatus: 'pending_upload',
+    };
+    expect(resolveSyncStatus(meta, false, true, true, false)).toBe('WAITING_TO_SYNC');
+  });
+
+  it('should return SYNC_FAILED when pending and engine is not busy and last sync failed', () => {
+    const meta: EntitySyncMetadata = {
+      entityType: 'workout',
+      id: 'w1',
+      clientUpdatedAt: '',
+      deletedAt: null,
+      syncStatus: 'pending_upload',
+    };
+    expect(resolveSyncStatus(meta, false, true, false, true)).toBe('SYNC_FAILED');
+  });
+
   it('should return SYNCING when pending, engine is busy, and network is online', () => {
     const meta: EntitySyncMetadata = {
       entityType: 'workout',
@@ -59,7 +81,7 @@ describe('Sync-Status-1: resolveSyncStatus', () => {
       deletedAt: null,
       syncStatus: 'pending_upload',
     };
-    expect(resolveSyncStatus(meta, true, true)).toBe('SYNCING');
+    expect(resolveSyncStatus(meta, true, true, false, false)).toBe('SYNCING');
   });
 
   it('should return SYNCING when pending_delete, engine is busy, and network is online', () => {
@@ -70,6 +92,6 @@ describe('Sync-Status-1: resolveSyncStatus', () => {
       deletedAt: 'date',
       syncStatus: 'pending_delete',
     };
-    expect(resolveSyncStatus(meta, true, true)).toBe('SYNCING');
+    expect(resolveSyncStatus(meta, true, true, false, false)).toBe('SYNCING');
   });
 });

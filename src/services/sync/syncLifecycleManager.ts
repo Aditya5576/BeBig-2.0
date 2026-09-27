@@ -34,6 +34,11 @@ export class SyncLifecycleManager {
   private isNetworkInitialized = false;
   private isListening = false;
 
+  private activeRetryPromise: Promise<SyncResult> | null = null;
+  private isRetryActive = false;
+  private lastSyncFailed = false;
+  private retryTimeout: any = null;
+
   constructor(
     syncEngine: SyncEngine = new SyncEngine(),
     networkMonitor: NetworkMonitor = defaultNetworkMonitor,
@@ -193,6 +198,15 @@ export class SyncLifecycleManager {
       result = await this.syncEngine.sync(resolvedScope);
     }
 
+    this.lastSyncFailed = result.status === 'error';
+
+    if (this.lastSyncFailed && !this.activeRetryPromise) {
+      const isTransient = result.errors.some(e => e.kind === 'network' || e.kind === 'unknown');
+      if (isTransient) {
+         this.activeRetryPromise = this.executeRetryLoop(resolvedScope);
+      }
+    }
+
     return result;
   }
 
@@ -204,6 +218,11 @@ export class SyncLifecycleManager {
     this.lastTriggerTimestamps.clear();
     this.isNetworkInitialized = false;
     this.previousNetworkOnline = null;
+    if (this.retryTimeout) clearTimeout(this.retryTimeout);
+    this.retryTimeout = null;
+    this.isRetryActive = false;
+    this.activeRetryPromise = null;
+    this.lastSyncFailed = false;
   }
 
   /**
@@ -225,6 +244,48 @@ export class SyncLifecycleManager {
    */
   hasPendingTrailing(): boolean {
     return this.hasTrailingRequest;
+  }
+
+  isRetrying(): boolean {
+    return this.isRetryActive;
+  }
+
+  hasLastSyncFailed(): boolean {
+    return this.lastSyncFailed;
+  }
+
+  private async executeRetryLoop(scope: UserScope): Promise<SyncResult> {
+    this.isRetryActive = true;
+    let attempt = 1;
+    const maxAttempts = 3;
+    let delayMs = 2000;
+    
+    let lastResult: SyncResult = this.createBusyResult('Retry aborted');
+
+    while (attempt <= maxAttempts) {
+      await new Promise(resolve => {
+        this.retryTimeout = setTimeout(resolve, delayMs);
+      });
+      
+      this.retryTimeout = null;
+      if (!this.isRetryActive) break;
+
+      if (!this.syncEngine.isBusy()) {
+         lastResult = await this.syncEngine.sync(scope);
+         this.lastSyncFailed = lastResult.status === 'error';
+         
+         if (!this.lastSyncFailed) {
+            break;
+         }
+      }
+      
+      attempt++;
+      delayMs *= 2;
+    }
+    
+    this.isRetryActive = false;
+    this.activeRetryPromise = null;
+    return lastResult;
   }
 
   private createBusyResult(message: string): SyncResult {

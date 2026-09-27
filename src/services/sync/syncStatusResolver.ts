@@ -14,7 +14,9 @@ export type ObservabilitySyncStatus =
 export function resolveSyncStatus(
   metadata: EntitySyncMetadata | null | undefined,
   isEngineBusy: boolean = false,
-  isNetworkOnline: boolean = true
+  isNetworkOnline: boolean = true,
+  isRetrying: boolean = false,
+  hasLastSyncFailed: boolean = false
 ): ObservabilitySyncStatus {
   if (!metadata) {
     return 'LOCAL_ONLY';
@@ -32,6 +34,15 @@ export function resolveSyncStatus(
     if (isEngineBusy && isNetworkOnline) {
       return 'SYNCING';
     }
+    
+    if (isRetrying) {
+      return 'WAITING_TO_SYNC';
+    }
+    
+    if (hasLastSyncFailed) {
+      return 'SYNC_FAILED';
+    }
+
     return 'WAITING_TO_SYNC';
   }
 
