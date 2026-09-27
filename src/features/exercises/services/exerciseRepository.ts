@@ -81,6 +81,7 @@ export function inferCategoryFromQuery(query: string): ExerciseCategory | undefi
 export class ExerciseRepository {
   private provider: IExerciseProvider;
   private candidateCache = new Map<string, Exercise[]>();
+  private searchSequence = 0;
 
   constructor(provider?: IExerciseProvider) {
     this.provider = provider || new WgerExerciseProvider();
@@ -167,6 +168,7 @@ export class ExerciseRepository {
       }
     } else {
       // Query search flow: seeded with local-first cache
+      const currentSeq = ++this.searchSequence;
       const targetCategory =
         options.category && options.category !== 'all'
           ? (options.category as ExerciseCategory)
@@ -193,7 +195,7 @@ export class ExerciseRepository {
           3500,
         );
 
-        if (providerResult.exercises.length > 0) {
+        if (this.searchSequence === currentSeq && providerResult.exercises.length > 0) {
           void exerciseCacheStorage.saveToCatalog(providerResult.exercises);
         }
 
@@ -203,7 +205,7 @@ export class ExerciseRepository {
         providerResult.exercises.forEach((e) => poolMap.set(e.id, e));
         candidatePool = Array.from(poolMap.values());
 
-        if (targetCategory) {
+        if (targetCategory && this.searchSequence === currentSeq) {
           this.candidateCache.set(targetCategory, candidatePool);
         }
       } catch {
@@ -254,9 +256,16 @@ export class ExerciseRepository {
     }
 
     // 3. Merge custom and provider exercises (exact & strongest matches ranked to top)
-    const combined = isFirstPage
-      ? [...customMatches, ...providerExercises]
-      : providerExercises;
+    const combinedMap = new Map<string, Exercise>();
+    if (isFirstPage) {
+      customMatches.forEach((e) => combinedMap.set(e.id, e));
+    }
+    providerExercises.forEach((e) => {
+      if (!combinedMap.has(e.id)) {
+        combinedMap.set(e.id, e);
+      }
+    });
+    const combined = Array.from(combinedMap.values());
 
     const finalExercises = hasQuery && isFirstPage
       ? filterAndRankExercises(combined, rawQuery, options.category)

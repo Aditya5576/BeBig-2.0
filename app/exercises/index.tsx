@@ -87,6 +87,7 @@ export default function ExerciseListScreen() {
     const cached = exerciseRepository.getCachedExercises({
       query: searchQuery.trim() || undefined,
       category: selectedCategory !== 'all' ? selectedCategory : undefined,
+      source: selectedSource,
     });
     if (cached.length > 0) {
       setExercises(cached);
@@ -111,6 +112,7 @@ export default function ExerciseListScreen() {
           category: selectedCategory !== 'all' ? selectedCategory : undefined,
           limit: 20,
           offset: 0,
+          source: selectedSource,
         });
 
         if (isMounted) {
@@ -125,6 +127,7 @@ export default function ExerciseListScreen() {
           const cached = exerciseRepository.getCachedExercises({
             query: searchQuery.trim() || undefined,
             category: selectedCategory !== 'all' ? selectedCategory : undefined,
+            source: selectedSource,
           });
           if (cached.length > 0) {
             setExercises(cached);
@@ -160,6 +163,7 @@ export default function ExerciseListScreen() {
         category: selectedCategory !== 'all' ? selectedCategory : undefined,
         limit: 20,
         offset: nextOffset,
+        source: selectedSource,
       });
 
       setExercises((prev) => [...prev, ...result.exercises]);
@@ -259,6 +263,30 @@ export default function ExerciseListScreen() {
             autoCorrect={false}
             clearButtonMode="while-editing"
           />
+        </View>
+
+        {/* Source Filter Chips */}
+        <View style={styles.sourceRow} testID="source-filter-row">
+          {(['all', 'custom', 'external'] as const).map((src) => {
+            const isActive = selectedSource === src;
+            const label = src === 'all' ? 'All Sources' : src === 'custom' ? 'Custom Only' : 'External Only';
+            return (
+              <Pressable
+                key={src}
+                testID={`source-filter-${src}`}
+                onPress={() => setSelectedSource(src)}
+                style={[styles.sourceChip, isActive && styles.sourceChipActive]}
+              >
+                <Text
+                  variant="caption"
+                  color={isActive ? 'accent' : 'secondary'}
+                  style={styles.chipText}
+                >
+                  {label}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
 
         {/* Category Filter Chips */}
@@ -410,6 +438,23 @@ const createStyles = (colors: any) => StyleSheet.create({
     paddingVertical: spacing.sm + 2,
     color: colors.textPrimary,
     fontSize: 16,
+  },
+  sourceRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    paddingVertical: spacing.xs,
+  },
+  sourceChip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: radii.full,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  sourceChipActive: {
+    backgroundColor: colors.surfaceElevated,
+    borderColor: colors.primary,
   },
   categoryScroll: {
     gap: spacing.xs,

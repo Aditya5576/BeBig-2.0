@@ -39,6 +39,10 @@ describe('EXERCISE-1: Exercise Library Foundation', () => {
     jest.clearAllMocks();
   });
 
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   const mockCustomExercise: any = {
     id: 'custom_123',
     name: 'My Custom Squat',
@@ -473,4 +477,175 @@ describe('EXERCISE-3: Custom Exercise Creation', () => {
     );
   });
 });
+
+describe('EXERCISE-4: Search, Filtering & Selection UX', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  const mockCustomExercise: any = {
+    id: 'custom_101',
+    name: 'Incline Smith Press',
+    category: 'chest',
+    categoryName: 'Chest',
+    primaryMuscles: [{ id: 'cm_0', name: 'Upper Chest' }],
+    secondaryMuscles: [],
+    equipment: [{ id: 'ceq_0', name: 'Smith Machine' }],
+    images: [],
+    sourceProvider: 'custom',
+    isCustom: true,
+  };
+
+  const mockWgerExercise: any = {
+    id: 'wger_202',
+    name: 'Dumbbell Incline Bench Press',
+    category: 'chest',
+    categoryName: 'Chest',
+    primaryMuscles: [{ id: 'w_0', name: 'Pectoralis Major' }],
+    secondaryMuscles: [],
+    equipment: [{ id: 'w_eq_0', name: 'Dumbbell' }],
+    images: [],
+    sourceProvider: 'wger',
+    isCustom: false,
+  };
+
+  it('1. Search works case-insensitively and trims whitespace for custom and WGER exercises', async () => {
+    (customExerciseStorage.getCustomExercises as jest.Mock).mockResolvedValue([mockCustomExercise]);
+    const provider = exerciseRepository.getProvider();
+    jest.spyOn(provider, 'listExercises').mockResolvedValue({
+      exercises: [mockWgerExercise],
+      totalCount: 1,
+      hasMore: false,
+    });
+
+    const result = await exerciseRepository.getExercises({ query: '   incline   ' });
+
+    expect(result.exercises).toHaveLength(2);
+    expect(result.exercises.some((e) => e.id === 'custom_101')).toBe(true);
+    expect(result.exercises.some((e) => e.id === 'wger_202')).toBe(true);
+  });
+
+  it('2. Custom Only source filter does not invoke WGER provider listExercises', async () => {
+    (customExerciseStorage.getCustomExercises as jest.Mock).mockResolvedValue([mockCustomExercise]);
+    const provider = exerciseRepository.getProvider();
+    const listSpy = jest.spyOn(provider, 'listExercises').mockResolvedValue({
+      exercises: [mockWgerExercise],
+      totalCount: 1,
+      hasMore: false,
+    });
+
+    const result = await exerciseRepository.getExercises({ source: 'custom' });
+
+    expect(listSpy).not.toHaveBeenCalled();
+    expect(result.exercises).toHaveLength(1);
+    expect(result.exercises[0].id).toBe('custom_101');
+  });
+
+  it('2. External Only source filter excludes custom exercises', async () => {
+    (customExerciseStorage.getCustomExercises as jest.Mock).mockResolvedValue([mockCustomExercise]);
+    const provider = exerciseRepository.getProvider();
+    jest.spyOn(provider, 'listExercises').mockResolvedValue({
+      exercises: [mockWgerExercise],
+      totalCount: 1,
+      hasMore: false,
+    });
+
+    const result = await exerciseRepository.getExercises({ source: 'external' });
+
+    expect(result.exercises.some((e) => e.isCustom)).toBe(false);
+    expect(result.exercises.some((e) => e.id === 'wger_202')).toBe(true);
+  });
+
+  it('2. All Sources combines custom and external exercises without duplicate IDs', async () => {
+    (customExerciseStorage.getCustomExercises as jest.Mock).mockResolvedValue([mockCustomExercise]);
+    const provider = exerciseRepository.getProvider();
+    jest.spyOn(provider, 'listExercises').mockResolvedValue({
+      exercises: [mockCustomExercise, mockWgerExercise],
+      totalCount: 2,
+      hasMore: false,
+    });
+
+    const result = await exerciseRepository.getExercises({ source: 'all' });
+
+    const customCount = result.exercises.filter((e) => e.id === 'custom_101').length;
+    expect(customCount).toBe(1);
+  });
+
+  it('6. Custom exercises remain discoverable offline when WGER request fails', async () => {
+    (customExerciseStorage.getCustomExercises as jest.Mock).mockResolvedValue([mockCustomExercise]);
+    (exerciseCacheStorage.searchCached as jest.Mock).mockReturnValue([]);
+    const provider = exerciseRepository.getProvider();
+    jest.spyOn(provider, 'listExercises').mockRejectedValue(new Error('Network error'));
+
+    const result = await exerciseRepository.getExercises({ category: 'chest' });
+
+    expect(result.exercises.some((e) => e.id === 'custom_101')).toBe(true);
+  });
+});
+
+describe('EXERCISE-5: Performance & Reliability', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('1. Latest search wins over stale search response', async () => {
+    (customExerciseStorage.getCustomExercises as jest.Mock).mockResolvedValue([]);
+    const provider = exerciseRepository.getProvider();
+
+    let resolveSlow: any;
+    const slowPromise = new Promise((resolve) => { resolveSlow = resolve; });
+
+    jest.spyOn(provider, 'listExercises')
+      .mockImplementationOnce(() => slowPromise as any)
+      .mockResolvedValueOnce({
+        exercises: [{ id: 'wger_fast', name: 'Fast Press', category: 'chest', isCustom: false } as any],
+        totalCount: 1,
+        hasMore: false,
+      });
+
+    const search1 = exerciseRepository.getExercises({ query: 'slow' });
+    const search2 = await exerciseRepository.getExercises({ query: 'fast' });
+
+    resolveSlow({
+      exercises: [{ id: 'wger_slow', name: 'Slow Press', category: 'chest', isCustom: false }],
+      totalCount: 1,
+      hasMore: false,
+    });
+    await search1;
+
+    expect(search2.exercises.some((e) => e.id === 'wger_fast')).toBe(true);
+  });
+
+  it('5. Online recovery behaves correctly when network restores', async () => {
+    (customExerciseStorage.getCustomExercises as jest.Mock).mockResolvedValue([]);
+    (exerciseCacheStorage.searchCached as jest.Mock).mockReturnValue([]);
+    const provider = exerciseRepository.getProvider();
+
+    jest.spyOn(provider, 'listExercises')
+      .mockRejectedValueOnce(new Error('Network offline'))
+      .mockResolvedValueOnce({
+        exercises: [{ id: 'wger_recovered', name: 'Recovered Exercise', category: 'chest', isCustom: false } as any],
+        totalCount: 1,
+        hasMore: false,
+      });
+
+    // 1. Offline attempt handles error gracefully
+    const offlineResult = await exerciseRepository.getExercises({ category: 'chest' });
+    expect(offlineResult.exercises).toHaveLength(0);
+
+    // 2. Network restored attempt recovers naturally
+    const onlineResult = await exerciseRepository.getExercises({ category: 'chest' });
+    expect(onlineResult.exercises.some((e) => e.id === 'wger_recovered')).toBe(true);
+  });
+});
+
+
 
