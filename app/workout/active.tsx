@@ -1,5 +1,5 @@
 import { useAppTheme } from '../../src/features/theme';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -10,6 +10,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  AppState,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ScreenContainer, Text, Button, Card } from '../../src/components/ui';
@@ -19,6 +20,7 @@ import {
   WorkoutExercise,
   WorkoutSet,
   ActiveExerciseCard,
+  ActiveWorkoutTimer,
 } from '../../src/features/workout';
 import { ExercisePickerModal } from '../../src/features/templates/components/ExercisePickerModal';
 import { Exercise } from '../../src/features/exercises';
@@ -41,9 +43,70 @@ export default function ActiveWorkoutScreen() {
   const router = useRouter();
 
   const [session, setSession] = useState<WorkoutSession | null>(null);
+  const sessionRef = useRef<WorkoutSession | null>(null);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    sessionRef.current = session;
+  }, [session]);
+
+  const cancelDebouncedSave = () => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+  };
+
+  const flushActiveWorkout = async (targetSession?: WorkoutSession) => {
+    cancelDebouncedSave();
+    const sessionToSave = targetSession || sessionRef.current;
+    if (!sessionToSave) return;
+    try {
+      await workoutRepository.updateActiveWorkout(sessionToSave);
+    } catch {
+      // Background autosave failure caught gracefully
+    }
+  };
+
+  const updateSessionAndAutosaveImmediate = async (newSession: WorkoutSession) => {
+    setSession(newSession);
+    sessionRef.current = newSession;
+    await flushActiveWorkout(newSession);
+  };
+
+  const scheduleDebouncedSave = (newSession: WorkoutSession) => {
+    setSession(newSession);
+    sessionRef.current = newSession;
+
+    cancelDebouncedSave();
+
+    debounceTimerRef.current = setTimeout(async () => {
+      debounceTimerRef.current = null;
+      const sessionToSave = sessionRef.current;
+      if (!sessionToSave) return;
+      try {
+        await workoutRepository.updateActiveWorkout(sessionToSave);
+      } catch {
+        // Silent error during debounced save
+      }
+    }, 300);
+  };
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState.match(/inactive|background/)) {
+        void flushActiveWorkout();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+      void flushActiveWorkout();
+    };
+  }, []);
+
   const [loading, setLoading] = useState(true);
   const [isPickerVisible, setIsPickerVisible] = useState(false);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [finishing, setFinishing] = useState(false);
   const [lastPerformanceMap, setLastPerformanceMap] = useState<
     Record<string, { workoutDate?: string; sets: WorkoutSet[] }>
@@ -150,6 +213,7 @@ export default function ActiveWorkoutScreen() {
         }
 
         setSession(active);
+        sessionRef.current = active;
       } catch {
         if (isMounted) {
           Alert.alert('Error', 'Failed to load active workout session.');
@@ -167,38 +231,6 @@ export default function ActiveWorkoutScreen() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Elapsed timer ticker
-  useEffect(() => {
-    if (!session || session.status !== 'active') return;
-
-    const startMs = new Date(session.startedAt).getTime();
-    const pausedSecs = session.accumulatedPauseSeconds || 0;
-
-    const updateElapsed = () => {
-      const nowMs = Date.now();
-      const diffSec = Math.max(0, Math.floor((nowMs - startMs) / 1000) - pausedSecs);
-      setElapsedSeconds(diffSec);
-    };
-
-    updateElapsed();
-    const interval = setInterval(updateElapsed, 1000);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.startedAt, session?.status, session?.accumulatedPauseSeconds]);
-
-
-
-  // Format MM:SS or HH:MM:SS
-  const formatTime = (totalSec: number) => {
-    const hours = Math.floor(totalSec / 3600);
-    const mins = Math.floor((totalSec % 3600) / 60);
-    const secs = totalSec % 60;
-    if (hours > 0) {
-      return `${hours}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-    }
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
 
   const formatShortDate = (dateStr?: string) => {
     if (!dateStr) return '';
@@ -219,21 +251,22 @@ export default function ActiveWorkoutScreen() {
 
   // Add exercise from picker
   const handleSelectExercise = async (exercise: Exercise) => {
-    if (!session) return;
+    const current = sessionRef.current || session;
+    if (!current) return;
     setIsPickerVisible(false);
 
     // Check duplicate
-    if (session.exercises.some((e) => e.exerciseId === exercise.id)) {
+    if (current.exercises.some((e) => e.exerciseId === exercise.id)) {
       Alert.alert('Duplicate Exercise', `"${exercise.name}" is already in this workout session.`);
       return;
     }
 
-    const updated = workoutRepository.addExerciseToWorkout(session, {
+    const updated = workoutRepository.addExerciseToWorkout(current, {
       id: exercise.id,
       name: exercise.name,
       categoryName: exercise.categoryName,
     });
-    await updateSessionAndAutosave(updated);
+    await updateSessionAndAutosaveImmediate(updated);
   };
 
   // Remove exercise
@@ -247,12 +280,13 @@ export default function ActiveWorkoutScreen() {
           text: 'Remove',
           style: 'destructive',
           onPress: async () => {
-            if (!session) return;
+            const current = sessionRef.current || session;
+            if (!current) return;
             const updated = workoutRepository.removeExerciseFromWorkout(
-              session,
+              current,
               exercise.exerciseId,
             );
-            await updateSessionAndAutosave(updated);
+            await updateSessionAndAutosaveImmediate(updated);
           },
         },
       ],
@@ -261,38 +295,42 @@ export default function ActiveWorkoutScreen() {
 
   // Reorder exercise move up
   const handleMoveUpExercise = async (index: number) => {
-    if (!session || index <= 0) return;
-    const updated = [...session.exercises];
+    const current = sessionRef.current || session;
+    if (!current || index <= 0) return;
+    const updated = [...current.exercises];
     const temp = updated[index - 1];
     updated[index - 1] = updated[index];
     updated[index] = temp;
     const reindexed = updated.map((ex, idx) => ({ ...ex, order: idx }));
-    await updateSessionAndAutosave({ ...session, exercises: reindexed });
+    await updateSessionAndAutosaveImmediate({ ...current, exercises: reindexed });
   };
 
   // Reorder exercise move down
   const handleMoveDownExercise = async (index: number) => {
-    if (!session || index >= session.exercises.length - 1) return;
-    const updated = [...session.exercises];
+    const current = sessionRef.current || session;
+    if (!current || index >= current.exercises.length - 1) return;
+    const updated = [...current.exercises];
     const temp = updated[index + 1];
     updated[index + 1] = updated[index];
     updated[index] = temp;
     const reindexed = updated.map((ex, idx) => ({ ...ex, order: idx }));
-    await updateSessionAndAutosave({ ...session, exercises: reindexed });
+    await updateSessionAndAutosaveImmediate({ ...current, exercises: reindexed });
   };
 
   // Add set to exercise
   const handleAddSet = async (exerciseId: string) => {
-    if (!session) return;
-    const updated = workoutRepository.addSetToExercise(session, exerciseId);
-    await updateSessionAndAutosave(updated);
+    const current = sessionRef.current || session;
+    if (!current) return;
+    const updated = workoutRepository.addSetToExercise(current, exerciseId);
+    await updateSessionAndAutosaveImmediate(updated);
   };
 
   // Delete set
   const handleDeleteSet = async (exerciseId: string, setId: string) => {
-    if (!session) return;
-    const updated = workoutRepository.removeSetFromExercise(session, exerciseId, setId);
-    await updateSessionAndAutosave(updated);
+    const current = sessionRef.current || session;
+    if (!current) return;
+    const updated = workoutRepository.removeSetFromExercise(current, exerciseId, setId);
+    await updateSessionAndAutosaveImmediate(updated);
   };
 
   // Update set field (weight, reps, rir, notes)
@@ -302,7 +340,8 @@ export default function ActiveWorkoutScreen() {
     field: keyof WorkoutSet,
     value: string,
   ) => {
-    if (!session) return;
+    const current = sessionRef.current || session;
+    if (!current) return;
 
     let partial: Partial<WorkoutSet> = {};
     if (field === 'weight') {
@@ -319,8 +358,8 @@ export default function ActiveWorkoutScreen() {
     }
 
     try {
-      const updated = workoutRepository.updateSet(session, exerciseId, setId, partial);
-      await updateSessionAndAutosave(updated);
+      const updated = workoutRepository.updateSet(current, exerciseId, setId, partial);
+      scheduleDebouncedSave(updated);
     } catch {
       // Silent error during active typing
     }
@@ -332,7 +371,8 @@ export default function ActiveWorkoutScreen() {
     set: WorkoutSet,
     pendingUpdates?: Partial<WorkoutSet>,
   ) => {
-    if (!session) return;
+    const current = sessionRef.current || session;
+    if (!current) return;
 
     const effectiveSet = { ...set, ...pendingUpdates };
 
@@ -355,7 +395,7 @@ export default function ActiveWorkoutScreen() {
       }
 
       // Complete set and trigger rest timer
-      let updated = workoutRepository.updateSet(session, exercise.exerciseId, set.id, {
+      let updated = workoutRepository.updateSet(current, exercise.exerciseId, set.id, {
         ...pendingUpdates,
         completed: true,
         completedAt: new Date().toISOString(),
@@ -371,29 +411,31 @@ export default function ActiveWorkoutScreen() {
         exercise.exerciseName,
       );
 
-      await updateSessionAndAutosave(updated);
+      await updateSessionAndAutosaveImmediate(updated);
     } else {
       // Un-complete set
-      const updated = workoutRepository.updateSet(session, exercise.exerciseId, set.id, {
+      const updated = workoutRepository.updateSet(current, exercise.exerciseId, set.id, {
         completed: false,
         completedAt: undefined,
       });
-      await updateSessionAndAutosave(updated);
+      await updateSessionAndAutosaveImmediate(updated);
     }
   };
 
   // Extend active rest timer
   const handleExtendRest = async (addedSeconds: number) => {
-    if (!session || !session.activeRestTimer) return;
-    const updated = workoutRepository.extendRestTimer(session, addedSeconds);
-    await updateSessionAndAutosave(updated);
+    const current = sessionRef.current || session;
+    if (!current || !current.activeRestTimer) return;
+    const updated = workoutRepository.extendRestTimer(current, addedSeconds);
+    await updateSessionAndAutosaveImmediate(updated);
   };
 
   // Skip or dismiss rest timer
   const handleClearRest = async () => {
-    if (!session) return;
-    const updated = workoutRepository.clearRestTimer(session);
-    await updateSessionAndAutosave(updated);
+    const current = sessionRef.current || session;
+    if (!current) return;
+    const updated = workoutRepository.clearRestTimer(current);
+    await updateSessionAndAutosaveImmediate(updated);
   };
   // Discard workout
   const handleDiscard = () => {
@@ -406,6 +448,7 @@ export default function ActiveWorkoutScreen() {
           text: 'Discard Workout',
           style: 'destructive',
           onPress: async () => {
+            cancelDebouncedSave();
             await workoutRepository.discardActiveWorkout();
             router.replace('/home' as any);
           },
@@ -416,9 +459,10 @@ export default function ActiveWorkoutScreen() {
 
   // Finish workout
   const handleFinish = () => {
-    if (!session) return;
+    const current = sessionRef.current || session;
+    if (!current) return;
 
-    const completedCount = workoutRepository.countCompletedSets(session);
+    const completedCount = workoutRepository.countCompletedSets(current);
     if (completedCount === 0) {
       Alert.alert(
         'No Sets Completed',
@@ -438,7 +482,9 @@ export default function ActiveWorkoutScreen() {
           onPress: async () => {
             try {
               setFinishing(true);
-              const completed = await workoutRepository.completeActiveWorkout(session);
+              const latest = sessionRef.current || current;
+              await flushActiveWorkout(latest);
+              const completed = await workoutRepository.completeActiveWorkout(latest);
               router.replace(`/workout/summary?id=${completed.id}` as any);
             } catch (err: any) {
               Alert.alert('Error', err?.message || 'Failed to complete workout.');
@@ -452,10 +498,10 @@ export default function ActiveWorkoutScreen() {
   };
 
   const handleMinimize = async () => {
-    if (session) {
-      const updatedSession = { ...session, pausedAt: new Date().toISOString() };
-      setSession(updatedSession);
-      await workoutRepository.updateActiveWorkout(updatedSession);
+    const current = sessionRef.current || session;
+    if (current) {
+      const updatedSession = { ...current, pausedAt: new Date().toISOString() };
+      await updateSessionAndAutosaveImmediate(updatedSession);
     }
     router.push('/home' as any);
   };
@@ -510,11 +556,12 @@ export default function ActiveWorkoutScreen() {
               >
                 {session.name}
               </Text>
-              <View style={styles.timerBadge}>
-                <Text variant="caption" color="accent" style={styles.timerText}>
-                  ⏱ {formatTime(elapsedSeconds)}
-                </Text>
-              </View>
+              <ActiveWorkoutTimer
+                startedAt={session.startedAt}
+                accumulatedPauseSeconds={session.accumulatedPauseSeconds}
+                pausedAt={session.pausedAt}
+                status={session.status}
+              />
             </View>
 
             <View style={styles.headerRightSpacer} />
@@ -660,15 +707,6 @@ const createStyles = (colors: any, insets: { bottom: number }) => StyleSheet.cre
     fontSize: 18,
     fontWeight: '700',
     textAlign: 'center',
-  },
-  timerBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  timerText: {
-    fontWeight: '700',
   },
   minimizeButton: {
     padding: spacing.xs,

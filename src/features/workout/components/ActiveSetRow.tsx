@@ -57,6 +57,26 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
     setLocalNotes(set.notes || '');
   }, [set.weight, set.reps, set.rir, set.notes]);
 
+  const handleWeightChange = useCallback((val: string) => {
+    setLocalWeight(val);
+    onUpdateSetField(exercise.exerciseId, set.id, 'weight', val);
+  }, [exercise.exerciseId, set.id, onUpdateSetField]);
+
+  const handleRepsChange = useCallback((val: string) => {
+    setLocalReps(val);
+    onUpdateSetField(exercise.exerciseId, set.id, 'reps', val);
+  }, [exercise.exerciseId, set.id, onUpdateSetField]);
+
+  const handleRirChange = useCallback((val: string) => {
+    setLocalRir(val);
+    onUpdateSetField(exercise.exerciseId, set.id, 'rir', val);
+  }, [exercise.exerciseId, set.id, onUpdateSetField]);
+
+  const handleNotesChange = useCallback((val: string) => {
+    setLocalNotes(val);
+    onUpdateSetField(exercise.exerciseId, set.id, 'notes', val);
+  }, [exercise.exerciseId, set.id, onUpdateSetField]);
+
   const commitWeight = useCallback(() => {
     onUpdateSetField(exercise.exerciseId, set.id, 'weight', localWeight);
   }, [exercise.exerciseId, set.id, localWeight, onUpdateSetField]);
@@ -148,7 +168,7 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
             placeholder="0"
             placeholderTextColor={colors.textMuted}
             keyboardType="decimal-pad"
-            onChangeText={setLocalWeight}
+            onChangeText={handleWeightChange}
             onBlur={commitWeight}
             onSubmitEditing={commitWeight}
             style={[
@@ -169,7 +189,7 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
             placeholder="10"
             placeholderTextColor={colors.textMuted}
             keyboardType="number-pad"
-            onChangeText={setLocalReps}
+            onChangeText={handleRepsChange}
             onBlur={commitReps}
             onSubmitEditing={commitReps}
             style={[
@@ -190,7 +210,7 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
             placeholder="2"
             placeholderTextColor={colors.textMuted}
             keyboardType="decimal-pad"
-            onChangeText={setLocalRir}
+            onChangeText={handleRirChange}
             onBlur={commitRir}
             onSubmitEditing={commitRir}
             style={[
@@ -212,7 +232,7 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
             value={localNotes}
             placeholder="Form cues, tempo, notes..."
             placeholderTextColor={colors.textMuted}
-            onChangeText={setLocalNotes}
+            onChangeText={handleNotesChange}
             onBlur={commitNotes}
             onSubmitEditing={commitNotes}
             style={styles.notesInput}
