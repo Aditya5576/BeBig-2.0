@@ -8,3 +8,5 @@ export * from './syncEngine';
 export * from './networkMonitor';
 export * from './syncLifecycleManager';
 export * from './useSyncLifecycle';
+export * from './syncStatusResolver';
+export * from './useEntitySyncStatus';

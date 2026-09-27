@@ -16,11 +16,12 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useAppTheme } from '../../theme';
-import { Text, Button, Icon, Card } from '../../../components/ui';
+import { Text, Button, Icon, Card, SyncStatusChip } from '../../../components/ui';
 import { ScheduledWorkout } from '../types';
 import { templateRepository, WorkoutTemplate } from '../../templates';
 import { radii, spacing } from '../../../constants/theme';
 import { formatReadableDate } from '../utils/dateUtils';
+import { useEntitySyncStatus } from '../../../services/sync';
 
 interface ScheduledWorkoutPreviewModalProps {
   visible: boolean;
@@ -40,6 +41,8 @@ export function ScheduledWorkoutPreviewModal({
 
   const [template, setTemplate] = useState<WorkoutTemplate | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const syncStatus = useEntitySyncStatus('scheduled_workout', scheduledWorkout?.id);
 
   useEffect(() => {
     if (visible && scheduledWorkout?.templateId) {
@@ -99,6 +102,9 @@ export function ScheduledWorkoutPreviewModal({
                 {formatReadableDate(scheduledWorkout.scheduledDate)}
                 {scheduledWorkout.scheduledTime ? ` • ${scheduledWorkout.scheduledTime}` : ''}
               </Text>
+              <View style={{ marginLeft: 26, marginTop: 6 }}>
+                <SyncStatusChip status={syncStatus} />
+              </View>
             </View>
 
             <View style={[styles.badge, { backgroundColor: badge.bg, borderColor: badge.color }]}>
