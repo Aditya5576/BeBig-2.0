@@ -1,6 +1,6 @@
 import { useAppTheme } from '../../src/features/theme';
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Image, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ScrollView, Image, ActivityIndicator, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ScreenContainer, Text, Button, Card } from '../../src/components/ui';
 import { exerciseRepository, Exercise } from '../../src/features/exercises';
@@ -14,7 +14,6 @@ function CustomExerciseSyncStatus({ exerciseId, isCustom }: { exerciseId: string
   return <SyncStatusChip status={status} />;
 }
 
-
 export default function ExerciseDetailScreen() {
   const { colors } = useAppTheme();
   const styles = createStyles(colors);
@@ -24,6 +23,7 @@ export default function ExerciseDetailScreen() {
 
   const [exercise, setExercise] = useState<Exercise | null>(null);
   const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -57,6 +57,36 @@ export default function ExerciseDetailScreen() {
     };
   }, [id]);
 
+  const handleDeletePrompt = () => {
+    Alert.alert(
+      'Delete Custom Exercise?',
+      'Are you sure you want to delete this custom exercise? This action cannot be undone.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: handleDelete,
+        },
+      ]
+    );
+  };
+
+  const handleDelete = async () => {
+    if (!exercise || !exercise.isCustom) return;
+    setDeleting(true);
+    try {
+      await exerciseRepository.deleteCustomExercise(exercise.id);
+      router.back();
+    } catch (err: any) {
+      setDeleting(false);
+      Alert.alert('Delete Failed', err?.message || 'Failed to delete custom exercise.');
+    }
+  };
+
   if (loading) {
     return (
       <ScreenContainer style={styles.centerContainer}>
@@ -88,19 +118,27 @@ export default function ExerciseDetailScreen() {
     );
   }
 
-  const mainImage = exercise.images.find((img) => img.isMain) || exercise.images[0];
+  const mainImage = exercise.images && exercise.images.length > 0
+    ? exercise.images.find((img) => img.isMain) || exercise.images[0]
+    : null;
+
   const primaryMusclesText =
-    exercise.primaryMuscles.length > 0
+    exercise.primaryMuscles && exercise.primaryMuscles.length > 0
       ? exercise.primaryMuscles.map((m) => m.name).join(', ')
-      : 'General';
+      : null;
+
   const secondaryMusclesText =
-    exercise.secondaryMuscles.length > 0
+    exercise.secondaryMuscles && exercise.secondaryMuscles.length > 0
       ? exercise.secondaryMuscles.map((m) => m.name).join(', ')
       : null;
+
   const equipmentText =
-    exercise.equipment.length > 0
+    exercise.equipment && exercise.equipment.length > 0
       ? exercise.equipment.map((e) => e.name).join(', ')
-      : 'Bodyweight (no equipment)';
+      : null;
+
+  const hasInfoRows = primaryMusclesText || secondaryMusclesText || equipmentText;
+  const hasDescription = Boolean(exercise.description && exercise.description.trim().length > 0);
 
   return (
     <ScreenContainer>
@@ -132,28 +170,24 @@ export default function ExerciseDetailScreen() {
         {/* Title & Metadata */}
         <View style={styles.headerSection}>
           <View style={styles.badgeRow}>
-            <View style={styles.categoryBadge}>
-              <Text variant="caption" color="accent" style={styles.badgeText}>
-                {exercise.categoryName.toUpperCase()}
-              </Text>
-            </View>
-
-            {exercise.isCustom ? (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <View style={styles.customBadge} testID="detail-custom-badge">
-                    <Text variant="caption" color="accent" style={styles.badgeText}>
-                      CUSTOM EXERCISE
-                    </Text>
-                  </View>
-                  <CustomExerciseSyncStatus exerciseId={exercise.id} isCustom={exercise.isCustom} />
-                  </View>
-              ) : (
-              <View style={styles.sourceBadge}>
-                <Text variant="caption" color="muted" style={styles.badgeText}>
-                  WGER CATALOG
+            {exercise.categoryName ? (
+              <View style={styles.categoryBadge}>
+                <Text variant="caption" color="accent" style={styles.badgeText}>
+                  {exercise.categoryName.toUpperCase()}
                 </Text>
               </View>
-            )}
+            ) : null}
+
+            {exercise.isCustom ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <View style={styles.customBadge} testID="detail-custom-badge">
+                  <Text variant="caption" color="accent" style={styles.badgeText}>
+                    Source: Custom
+                  </Text>
+                </View>
+                <CustomExerciseSyncStatus exerciseId={exercise.id} isCustom={exercise.isCustom} />
+              </View>
+            ) : null}
           </View>
 
           <Text variant="display" color="primary" testID="exercise-detail-name">
@@ -162,53 +196,75 @@ export default function ExerciseDetailScreen() {
         </View>
 
         {/* Anatomy & Equipment Card */}
-        <Card style={styles.infoCard}>
-          <View style={styles.infoRow}>
-            <Text variant="label" color="muted">
-              PRIMARY MUSCLES
+        {hasInfoRows ? (
+          <Card style={styles.infoCard}>
+            {primaryMusclesText ? (
+              <View style={[styles.infoRow, (!secondaryMusclesText && !equipmentText) && styles.noBorder]}>
+                <Text variant="label" color="muted">
+                  PRIMARY MUSCLES
+                </Text>
+                <Text variant="bodyBold" color="primary" testID="detail-primary-muscles">
+                  {primaryMusclesText}
+                </Text>
+              </View>
+            ) : null}
+
+            {secondaryMusclesText ? (
+              <View style={[styles.infoRow, !equipmentText && styles.noBorder]}>
+                <Text variant="label" color="muted">
+                  SECONDARY MUSCLES
+                </Text>
+                <Text variant="body" color="secondary" testID="detail-secondary-muscles">
+                  {secondaryMusclesText}
+                </Text>
+              </View>
+            ) : null}
+
+            {equipmentText ? (
+              <View style={[styles.infoRow, styles.noBorder]}>
+                <Text variant="label" color="muted">
+                  EQUIPMENT
+                </Text>
+                <Text variant="bodyBold" color="accent" testID="detail-equipment">
+                  {equipmentText}
+                </Text>
+              </View>
+            ) : null}
+          </Card>
+        ) : null}
+
+        {/* Notes & Form / Instructions Card */}
+        {hasDescription ? (
+          <Card style={styles.instructionsCard}>
+            <Text variant="titleMedium" color="primary" style={styles.instructionsTitle}>
+              {exercise.isCustom ? 'Notes & Form' : 'Instructions & Form'}
             </Text>
-            <Text variant="bodyBold" color="primary" testID="detail-primary-muscles">
-              {primaryMusclesText}
+            <Text
+              variant="body"
+              color="secondary"
+              style={styles.instructionsText}
+              testID="exercise-detail-instructions"
+            >
+              {exercise.description}
             </Text>
+          </Card>
+        ) : null}
+
+        {/* Delete Action for Custom Exercises */}
+        {exercise.isCustom ? (
+          <View style={styles.actionSection}>
+            <Button
+              testID="delete-custom-exercise-button"
+              title="Delete Custom Exercise"
+              onPress={handleDeletePrompt}
+              variant="outline"
+              size="md"
+              loading={deleting}
+              disabled={deleting}
+              style={styles.deleteButton}
+            />
           </View>
-
-          {secondaryMusclesText ? (
-            <View style={styles.infoRow}>
-              <Text variant="label" color="muted">
-                SECONDARY MUSCLES
-              </Text>
-              <Text variant="body" color="secondary" testID="detail-secondary-muscles">
-                {secondaryMusclesText}
-              </Text>
-            </View>
-          ) : null}
-
-          <View style={[styles.infoRow, styles.noBorder]}>
-            <Text variant="label" color="muted">
-              EQUIPMENT
-            </Text>
-            <Text variant="bodyBold" color="accent" testID="detail-equipment">
-              {equipmentText}
-            </Text>
-          </View>
-        </Card>
-
-        {/* Instructions Card */}
-        <Card style={styles.instructionsCard}>
-          <Text variant="titleMedium" color="primary" style={styles.instructionsTitle}>
-            Instructions & Form
-          </Text>
-          <Text
-            variant="body"
-            color="secondary"
-            style={styles.instructionsText}
-            testID="exercise-detail-instructions"
-          >
-            {exercise.description && exercise.description.trim().length > 0
-              ? exercise.description
-              : 'No written instructions available for this exercise.'}
-          </Text>
-        </Card>
+        ) : null}
       </ScrollView>
     </ScreenContainer>
   );
@@ -268,14 +324,6 @@ const createStyles = (colors: any) => StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  sourceBadge: {
-    backgroundColor: colors.surface,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-    borderRadius: radii.sm,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-  },
   customBadge: {
     backgroundColor: '#1E2C1A',
     paddingHorizontal: spacing.sm,
@@ -314,5 +362,11 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   instructionsText: {
     lineHeight: 22,
+  },
+  actionSection: {
+    marginTop: spacing.md,
+  },
+  deleteButton: {
+    borderColor: colors.error || '#EF4444',
   },
 });

@@ -472,33 +472,50 @@ export class ExerciseRepository {
    */
   async deleteCustomExercise(id: string, scope?: UserScope | null): Promise<void> {
     const resolvedScope = scope !== undefined ? scope : getCurrentUserScope();
-    if (resolvedScope && resolvedScope.ownerType === 'authenticated') {
-      const existingMeta = await syncMetadataStore.getRecord('custom_exercise', id, resolvedScope);
-      const isUnsyncedLocalCreate =
-        (!existingMeta || existingMeta.syncStatus === 'pending_upload') &&
-        !existingMeta?.lastSyncedServerUpdatedAt;
+    try {
+      if (resolvedScope && resolvedScope.ownerType === 'authenticated') {
+        const existingMeta = await syncMetadataStore.getRecord('custom_exercise', id, resolvedScope);
+        const isUnsyncedLocalCreate =
+          (!existingMeta || existingMeta.syncStatus === 'pending_upload') &&
+          !existingMeta?.lastSyncedServerUpdatedAt;
 
-      if (isUnsyncedLocalCreate) {
-        // Unsynced local create -> delete: remove local entity and clear pending upload record
-        await customExerciseStorage.deleteCustomExercise(id, resolvedScope);
-        if (existingMeta) {
-          await syncMetadataStore.removeRecord('custom_exercise', id, resolvedScope);
+        if (isUnsyncedLocalCreate) {
+          // Unsynced local create -> delete: remove local entity and clear pending upload record
+          await customExerciseStorage.deleteCustomExercise(id, resolvedScope);
+          if (existingMeta) {
+            await syncMetadataStore.removeRecord('custom_exercise', id, resolvedScope);
+          }
+          return;
         }
-        return;
+
+        // Durable tombstone first to prevent ID/sync loss on crash
+        const now = new Date().toISOString();
+        await syncMetadataStore.markPendingDelete('custom_exercise', id, now, now, resolvedScope);
+        await customExerciseStorage.deleteCustomExercise(id, resolvedScope);
+
+        // Fire-and-forget sync trigger (asynchronous, non-blocking)
+        void syncLifecycleManager.triggerSync({ reason: 'local_delete', scope: resolvedScope }).catch(() => {
+          // Silently caught; sync failure cannot throw or affect caller
+        });
+      } else {
+        // Guest or unauthenticated: strictly local-only delete
+        await customExerciseStorage.deleteCustomExercise(id, resolvedScope);
       }
+    } finally {
+      this.invalidateCandidateCache(id);
+    }
+  }
 
-      // Durable tombstone first to prevent ID/sync loss on crash
-      const now = new Date().toISOString();
-      await syncMetadataStore.markPendingDelete('custom_exercise', id, now, now, resolvedScope);
-      await customExerciseStorage.deleteCustomExercise(id, resolvedScope);
-
-      // Fire-and-forget sync trigger (asynchronous, non-blocking)
-      void syncLifecycleManager.triggerSync({ reason: 'local_delete', scope: resolvedScope }).catch(() => {
-        // Silently caught; sync failure cannot throw or affect caller
+  private invalidateCandidateCache(id?: string): void {
+    if (id) {
+      this.candidateCache.forEach((list, key) => {
+        this.candidateCache.set(
+          key,
+          list.filter((e) => e.id !== id),
+        );
       });
     } else {
-      // Guest or unauthenticated: strictly local-only delete
-      await customExerciseStorage.deleteCustomExercise(id, resolvedScope);
+      this.candidateCache.clear();
     }
   }
 

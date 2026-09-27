@@ -1,5 +1,5 @@
 import { useAppTheme } from '../../src/features/theme';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
   ScrollView,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { ScreenContainer, ScreenScrollView, ScreenFlatList, Text, Button, Card } from '../../src/components/ui';
 import { exerciseRepository, Exercise, STANDARD_CATEGORIES } from '../../src/features/exercises';
 import { spacing, radii } from '../../src/constants/theme';
@@ -52,6 +52,35 @@ export default function ExerciseListScreen() {
   const [hasMore, setHasMore] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [isCachedOnly, setIsCachedOnly] = useState(false);
+
+  // 0. Refresh list whenever screen comes into focus (e.g. returning after deleting a custom exercise)
+  useFocusEffect(
+    useCallback(() => {
+      let isMounted = true;
+      async function refreshOnFocus() {
+        try {
+          const result = await exerciseRepository.getExercises({
+            query: searchQuery.trim() || undefined,
+            category: selectedCategory !== 'all' ? selectedCategory : undefined,
+            limit: 20,
+            offset: 0,
+            source: selectedSource,
+          });
+          if (isMounted) {
+            setExercises(result.exercises);
+            setHasMore(result.hasMore);
+            setNextOffset(result.nextOffset);
+          }
+        } catch {
+          // Ignore focus refresh failures
+        }
+      }
+      void refreshOnFocus();
+      return () => {
+        isMounted = false;
+      };
+    }, [searchQuery, selectedCategory, selectedSource])
+  );
 
   // 1. Instant local search against cache whenever query or category changes
   useEffect(() => {
