@@ -208,23 +208,27 @@ describe('EXERCISE-2: Exercise Details & Deletion', () => {
   it('1. Custom detail shows Delete Custom Exercise button', async () => {
     jest.spyOn(exerciseRepository, 'getExerciseById').mockResolvedValue(mockCustomExercise);
 
-    render(<ExerciseDetailScreen />);
+    const view = await render(<ExerciseDetailScreen />);
 
     await waitFor(() => {
       expect(screen.getByTestId('delete-custom-exercise-button')).toBeTruthy();
     });
+
+    view.unmount();
   });
 
   it('2. External / WGER detail does NOT show Delete button', async () => {
     jest.spyOn(exerciseRepository, 'getExerciseById').mockResolvedValue(mockWgerExercise);
 
-    render(<ExerciseDetailScreen />);
+    const view = await render(<ExerciseDetailScreen />);
 
     await waitFor(() => {
       expect(screen.getByTestId('exercise-detail-name').props.children).toBe('Wger Bench Press');
     });
 
     expect(screen.queryByTestId('delete-custom-exercise-button')).toBeNull();
+
+    view.unmount();
   });
 
   it('3, 4. Delete requires confirmation; Cancel leaves custom exercise intact', async () => {
