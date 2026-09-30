@@ -2,42 +2,23 @@
 
 ## Production
 - **URL**: https://be-big-2-0.vercel.app
-- **Version**: v1.0.1
+- **Version**: v1.0.4
 - **Production Commit**: Pending commit
-- **Deployment**: Pending Vercel deployment
+- **Deployment**: Automatic Vercel deployment on main branch push
 
-## Completed
+## Completed in v1.0.4
+- Rest Timer UI polish and responsive alignment
+- Improved timer controls and edge spacing
+- Versioned What's New modal (`ReleaseNotesModal`)
+- Release acknowledgement stored locally per version (`releaseNotesService`)
 - Exercise Library milestone (EXERCISE-1 through EXERCISE-5)
 - PERF-1 Timer Isolation
 - PERF-2 Storage Write Debouncing
-
-## Physically Passed
-- Exercise Library
-- PERF-1
-- PERF-2
-
-## Not Yet Completed
-- PERF-3
-- PERF-4
-- Final Performance Audit
-
-## Resume Point
-Resume at:
-**PERF-3 — Active Workout Last Performance Single-Pass Lookup**
-
-## Important Deferred Work
-- AI Coach UX remains paused
-- Coach → Client remains deferred
-- Admin remains deferred
-- No production work beyond PERF-2 has been approved yet
+- CSP update for WGER exercise integration
 
 ## Release Rule
-Tomorrow's first activity is **NOT** to start PERF-3.
-
-First:
-1. Test production end-to-end on physical iPhone during gym usage.
+1. Test production end-to-end on physical device during gym usage.
 2. Record any production issues.
 3. Fix production issues if discovered.
-4. Only after production validation continue from PERF-3.
 
 > **Important**: Do not delete or overwrite this state file during normal development.

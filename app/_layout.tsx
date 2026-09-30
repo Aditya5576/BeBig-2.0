@@ -6,7 +6,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { colors } from '../src/constants/theme';
 import { useSyncLifecycle } from '../src/services/sync';
 import { useAuthStore, resolveAuthenticatedUserRoute } from '../src/features/auth';
-import { WebAlertModal } from '../src/components/ui';
+import { WebAlertModal, ReleaseNotesModal } from '../src/components/ui';
 import { BottomNavBar } from '../src/components/navigation';
 import { initErrorMonitoring } from '../src/services/monitoring/errorMonitoring';
 import { useThemeStore, useWebThemeSync, useAppTheme } from '../src/features/theme';
@@ -118,6 +118,7 @@ export default function RootLayout() {
         <BottomNavBar />
       </View>
       <WebAlertModal />
+      <ReleaseNotesModal />
     </SafeAreaProvider>
   );
 }

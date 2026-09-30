@@ -6,4 +6,5 @@ export * from './StartupSplash';
 export * from './Input';
 export * from './Icon';
 export * from './WebAlertModal';
+export * from './ReleaseNotesModal';
 export * from './SyncStatusChip';

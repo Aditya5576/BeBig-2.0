@@ -1,87 +1,239 @@
 # BeBig 2.0 🏋️‍♂️
 
-A production-ready public gym workout tracker built with Expo, React Native, TypeScript, Supabase, and local-first offline architecture.
+A production-grade, local-first gym workout tracking Progressive Web Application (PWA) and mobile platform engineered for serious lifters, strength athletes, and fitness enthusiasts. Built with Expo, React Native, TypeScript, Supabase, and resilient offline-first storage.
 
-## Production
-
-Production app:
-https://be-big-2-0.vercel.app
-
-> **Note**: Do not use `https://bebig.vercel.app` as the production link. That domain belongs to another account and is not the working production alias.
+[![Production App](https://img.shields.io/badge/Production-Live-success?style=for-the-badge&logo=vercel)](https://be-big-2-0.vercel.app)
+[![Version](https://img.shields.io/badge/Version-v1.0.4-blue?style=for-the-badge)](https://github.com/Aditya5576/BeBig-2.0)
+[![TypeScript](https://img.shields.io/badge/TypeScript-Strict-3178C6?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org/)
+[![Expo](https://img.shields.io/badge/Expo-SDK_57-000020?style=for-the-badge&logo=expo)](https://expo.dev/)
 
 ---
 
-## Current Features
+## 🌐 Production Deployment
 
-- **Onboarding**: Comprehensive multi-step onboarding tailored for beginner, intermediate, and advanced lifters.
-- **Authentication**: Email/password authentication, Apple Sign-In on iOS, secure hardware session storage, and persistent profile state.
-- **Guest Mode**: Full workout tracking experience without an account, with seamless migration when authenticating.
-- **Workout Execution**: Live workout tracker with set logging, automated rest timer countdowns, continuous autosave, and exercise reordering.
-- **Templates**: Full template management with creation, editing, scheduling, and starting empty or template-based workouts.
-- **Workout History**: Detailed log of past workouts, tonnage volume calculations, duration tracking, and workout inspection.
-- **Analytics & PR Tracking**: Automatic personal record (PR) tracking, volume analytics, frequency charts, and progress curves.
-- **Scheduling & Calendar**: Weekly calendar planner for scheduled sessions with one-tap start and auto-completion linkage.
-- **Offline / Local-First Workout Recovery**: Fully offline capable with crash-safe recovery, durable SQLite/SecureStore persistence, and automatic session restoration.
-- **Cloud Sync & Status Indicators**: Differential sync with Supabase, sync outbox, conflict resolution, tombstone deletion, and live sync status chips (`synced`, `syncing`, `offline`, `error`).
-- **Exercise Library**: Rich catalog of exercises with WGER/external provider integration, muscle grouping, and category filtering.
-- **Custom Exercises**: User-defined custom exercise creation, editing, notes, deletion, and immediate selection across active workouts and templates.
-- **Search & Filtering UX**: High-performance client-side search, instant filtering by category and source (`All`, `Custom`, `WGER`), and smooth selection flows.
-- **PWA & Web Support**: Progressive Web App capabilities, responsive layouts, web alert modals, and keyboard accessibility.
-- **Sentry Monitoring**: Integrated client and server error reporting with breadcrumbs and release tracking.
-- **Performance Optimizations (PERF-1 & PERF-2)**: High-speed rendering and reduced storage I/O during heavy workout sessions.
+- **Live Production URL**: [https://be-big-2-0.vercel.app](https://be-big-2-0.vercel.app)
+- **Deployment Platform**: Vercel (Edge-cached Progressive Web App)
+
+> **Important**: Always use `https://be-big-2-0.vercel.app`. Do not use `https://bebig.vercel.app` (an unassociated legacy domain).
 
 ---
 
-## Current Production Release
+## 🚀 Latest Release — v1.0.4
 
-- **Version**: `v1.0.1`
-- **Release Scope**:
-  - Exercise Library milestone completion (EXERCISE-1 through EXERCISE-5)
-  - PERF-1: Active Workout Timer Isolation
-  - PERF-2: Active Workout Storage Write Debouncing
-
----
-
-## Performance Improvements
-
-- **Isolated Elapsed Workout Timer (PERF-1)**: The 1-second workout timer tick is decoupled from the active workout component tree into an isolated `ActiveWorkoutTimer` component. It renders authoritative elapsed time from `startedAt` and `accumulatedPauseSeconds` without triggering re-renders across exercise cards, set rows, or inputs.
-- **Storage Write Debouncing (PERF-2)**: High-frequency user typing into Weight, Reps, RIR, and Notes updates in-memory React state immediately for instantaneous responsiveness, while disk persistence (`workoutRepository.updateActiveWorkout`) is debounced with a 300ms trailing delay.
-- **Guaranteed Flush Semantics**: Critical workout actions (set completion toggle, adding/removing/reordering sets and exercises, finishing, discarding, pausing, backgrounding via `AppState`, and component unmount) bypass debounce and immediately flush pending in-memory state to disk to prevent data loss.
+### What's New in v1.0.4
+- **Rest Timer UI Polish & Responsive Alignment**: Enhanced rest timer controls with symmetric button placement, centered timer countdown, and fluid spacing adapted for all screen widths and device aspect ratios.
+- **Improved Timer Controls & Edge Spacing**: Prevented touch target clipping on curved mobile screens and high-density displays; polished increment/decrement controls (`+30s` / `-30s`).
+- **Versioned "What's New" Release Modal**: Built-in interactive release modal (`ReleaseNotesModal`) automatically highlighting key updates and features upon app startup.
+- **Local Release Acknowledgement**: Version-specific acknowledgement persistence (`releaseNotesService`) ensuring users view updates once per release without recurring dialog interruptions.
+- **WGER Exercise Library Connectivity**: Allowed external exercise provider domains through production Content Security Policy (CSP) for uninterrupted asset resolution.
+- **Native Status & Theme Consistency**: Unified dark mode status bar styling and native safe area insets.
 
 ---
 
-## Screenshots
+## ✨ Key Features & Capabilities
 
-Production screenshots will be added after the next physical gym validation session.
+### 1. Workout Tracking & Live Logging
+- **Real-Time Set Logging**: Track weight, reps, RPE (Rate of Perceived Exertion) / RIR (Reps in Reserve), set completion checks, and per-set notes.
+- **Dynamic Set & Exercise Management**: Add, duplicate, delete, and reorder exercises and sets on the fly.
+- **Auto-Calculated Volume & Tonnage**: Real-time aggregation of session volume, completed sets, and active workout duration.
+- **Authoritative Isolated Timer (PERF-1)**: Elapsed workout timer decoupled from the active workout tree, maintaining a 1-second cadence without re-rendering active exercise inputs or cards.
+- **Storage Write Debouncing (PERF-2)**: High-speed typing into weight/rep fields updates in-memory React state instantly, with local storage writes debounced by 300ms.
+- **Guaranteed Flush Semantics**: Critical lifecycle events (set completion toggling, set additions, workout finish/discard, and app backgrounding) bypass debounce and flush immediately to durable storage.
+
+### 2. Intelligent Rest Timer
+- **Automatic Countdown Triggering**: Starts immediately when a set is checked off, keeping lifters focused and on schedule.
+- **Interactive Controls**: Dedicated rest timer overlay and compact floating banner with quick adjustments (`+30s`, `-30s`, skip, pause, resume).
+- **Audio & Haptic Alerts**: Sound and vibration notifications upon timer expiration for hands-free training.
+
+### 3. Exercise Library & Custom Exercises
+- **Extensive Exercise Catalog**: Curated directory organized by muscle group (Chest, Back, Legs, Shoulders, Arms, Core, Full Body) and equipment type.
+- **WGER & External Provider Ingestion**: Decoupled integration layer caching standard exercise definitions with media assets.
+- **Custom Exercise Builder**: Lifters can create, edit, categorize, and delete custom exercises with custom instructions and target muscle groups.
+- **Instant Client-Side Filtering**: High-speed search with instant category chips (`All`, `Custom`, `WGER`).
+
+### 4. Reusable Workout Templates
+- **Template Creator & Editor**: Build reusable workout splits (Push/Pull/Legs, Upper/Lower, Full Body) with preset exercises, target sets, and target reps.
+- **Quick-Start Sessions**: Launch an empty workout or start directly from any saved template with a single tap.
+- **Template Reordering**: Customize exercise sequence within templates for streamlined execution.
+
+### 5. Scheduling & Calendar Planner
+- **Interactive Workout Calendar**: Plan workouts on a weekly schedule.
+- **Scheduled Session Linkage**: Start scheduled workouts directly from the calendar, automatically linking completion records back to the scheduled routine.
+
+### 6. Analytics & Personal Records (PRs)
+- **Automatic PR Tracking**: Detects and highlights personal records for 1RM estimations, highest weight lifted, and single-session tonnage.
+- **Volume & Frequency Progression**: Historical graphs and metrics showing weekly volume, set consistency, and workout duration.
+- **Muscle Distribution**: Visual breakdown of targeted muscle groups to detect training imbalances.
+
+### 7. Workout History & Log Inspection
+- **Chronological History Feed**: Detailed cards summarizing completed workouts with duration, total volume (kg/lbs), completed sets, and exercise breakdown.
+- **Detailed Session Review**: Inspect historical sets, weights, reps, and workout notes anytime.
+
+### 8. Local-First & Offline Architecture
+- **Complete Offline Independence**: Log entire workouts in gyms with zero cellular reception or Wi-Fi without degradation.
+- **Crash-Resilient Session Recovery**: Active workout sessions are continuously persisted to local storage; reopening the app after process termination immediately resumes the active session.
+- **Differential Sync Outbox**: Mutations are staged locally in a sync queue and pushed to Supabase PostgreSQL once network connectivity is restored.
+- **Tombstone Deletion & Conflict Resolution**: Clean data synchronization across multiple devices without data loss.
+- **Live Sync Status Indicators**: Header status badge reflecting real-time sync states (`synced`, `syncing`, `offline`, `error`).
+
+### 9. Authentication & Frictionless Guest Mode
+- **Guest-First Experience**: Lifters can jump directly into logging workouts without creating an account.
+- **Seamless Account Migration**: Upgrading from guest mode to an authenticated account automatically merges local workouts, history, templates, and PRs.
+- **Secure Authentication**: Supabase Auth supporting Email/Password and native Apple Sign-In on iOS, protected by hardware-backed SecureStore.
+
+### 10. Progressive Web App (PWA) & Web Support
+- **Cross-Platform Parity**: Runs smoothly on mobile browsers and desktop displays with responsive touch controls and accessible keyboard navigation.
+- **Installable PWA**: Configured with web application manifest, icons, and standalone display support for a native-like experience.
 
 ---
 
-## Development Resume Point
+## 📸 Screenshots & UI Surfaces
 
-- **Production Release**: `v1.0.1`
-- **Release Commit**: Pending commit
-- **Production Deployment**: Pending deployment
-- **Last Completed Work**: PERF-2 — Active Workout Storage Write Debouncing
-- **Completed Before Release**:
-  - Exercise Library Milestone
-  - PERF-1 — Active Workout Timer Isolation
-  - PERF-2 — Active Workout Storage Write Debouncing
-- **Next Task**: PERF-3 — Active Workout Last Performance Single-Pass Lookup
-- **Not Started**:
-  - PERF-3
-  - PERF-4
-  - Final Performance Audit
-- **Tomorrow's Task**: Full end-to-end physical gym validation on production.
+<p align="center">
+  <img src="assets/bebig-emblem.png" alt="BeBig 2.0 Emblem" width="160" />
+</p>
+
+The BeBig 2.0 interface is crafted with a high-contrast athletic dark theme (`#0D0D12` / `#16161F` / `#00E599` accent) optimized for gym environments:
+
+| Screen / Feature | Description | Status |
+| :--- | :--- | :---: |
+| **Onboarding** | Multi-step lifter profiling (experience level, goals, equipment) | ✅ Live |
+| **Home Dashboard** | Quick start, scheduled routines, recent workouts, and sync status | ✅ Live |
+| **Active Workout** | Live tracker with set logging, weight/reps, RPE, and elapsed timer | ✅ Live |
+| **Rest Timer** | Centered countdown, quick `+30s` / `-30s` adjustments, and audio cues | ✅ Live (Polished in v1.0.4) |
+| **Exercise Library** | Muscle-based filtering, instant search, and custom exercise creation | ✅ Live |
+| **Exercise Details** | Target muscle breakdown, equipment specs, and execution instructions | ✅ Live |
+| **Templates** | Routine designer for Push/Pull/Legs and custom training splits | ✅ Live |
+| **Calendar / Planner** | Weekly workout scheduler with one-tap start linkage | ✅ Live |
+| **Workout History** | Chronological log of past sessions, tonnage volume, and duration | ✅ Live |
+| **Analytics & PRs** | Personal records, tonnage progression, and muscle group distribution | ✅ Live |
+| **What's New Modal** | In-app versioned release notes with local acknowledgement | ✅ Live (Added in v1.0.4) |
+
+> *Note: Production device snapshots from physical gym validation cycles are updated directly from validated mobile devices to maintain authentic representation.*
 
 ---
 
-## Tech Stack
+## 🛠 Tech Stack
 
-- **Framework**: [React Native](https://reactnative.dev/) with [Expo](https://expo.dev/) (SDK 57)
-- **Routing**: [Expo Router](https://docs.expo.dev/router/introduction/) (File-based navigation)
-- **Language**: [TypeScript](https://www.typescriptlang.org/) (Strict Mode)
-- **Backend / DB**: [Supabase](https://supabase.com/) (PostgreSQL, Row Level Security, Storage)
-- **State Management**: [Zustand](https://github.com/pmndrs/zustand)
-- **Design System**: High-contrast athletic dark theme design tokens & UI primitives
-- **Testing**: [Jest](https://jestjs.io/) & [React Native Testing Library](https://callstack.github.io/react-native-testing-library/)
-- **Monitoring**: [Sentry](https://sentry.io/)
+| Layer | Technology |
+| :--- | :--- |
+| **Framework** | [React Native 0.86](https://reactnative.dev/) with [Expo SDK 57](https://expo.dev/) |
+| **Routing** | [Expo Router ~57.0](https://docs.expo.dev/router/introduction/) (File-based navigation) |
+| **Language** | [TypeScript 6.0](https://www.typescriptlang.org/) (Strict Mode) |
+| **State Management** | [Zustand 5.0](https://github.com/pmndrs/zustand) |
+| **Backend & Database** | [Supabase](https://supabase.com/) (PostgreSQL with Row Level Security) |
+| **Local Persistence** | Durable Storage Adapter (SQLite / Expo SecureStore / LocalStorage) |
+| **Web & PWA** | React Native Web (`react-native-web`) with PWA Manifest |
+| **Testing** | [Jest 29](https://jestjs.io/) & [React Native Testing Library 14](https://callstack.github.io/react-native-testing-library/) |
+| **Monitoring** | [Sentry](https://sentry.io/) (Client & Edge error tracking) |
+| **Deployment** | [Vercel](https://vercel.com/) (Edge PWA Hosting) |
+
+---
+
+## 🏗 Architecture Overview
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                   BeBig Client (React Native / PWA)              │
+│                                                                  │
+│  [Expo Router Navigation]  ──►  [Dark Theme Tokens & UI Primitives]│
+│            │                                    │                │
+│            ▼                                    ▼                │
+│  [Feature Modules: Workouts, Exercises, History, Templates, PRs] │
+│            │                                                     │
+│            ▼                                                     │
+│  [Zustand Stores & Local-First Storage Cache]                    │
+│            │                                                     │
+│            ▼                                                     │
+│  [Sync Outbox & Supabase Data Service Adapter]                   │
+└───────────────────────────────┬──────────────────────────────────┘
+                                │ HTTPS / WSS
+                                ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                 Supabase Cloud & Data Services                   │
+│                                                                  │
+│  - Supabase PostgreSQL (Row Level Security enabled)              │
+│  - Supabase Authentication (JWT, Apple OAuth, Guest Migration)   │
+│  - Normalized Exercise Catalog & Third-party Ingestion           │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### Directory Structure
+```
+BeBig 2.0/
+├── app/                  # Expo Router file-based routes and screen layouts
+│   ├── (tabs)/           # Core tab screens (Home, Exercises, Templates, History, Profile)
+│   ├── workout/          # Active workout execution & finish workflows
+│   ├── exercise/         # Exercise details and custom exercise builder
+│   └── _layout.tsx       # Root provider layout, theme setup, & release modal
+├── assets/               # Branding emblems, splash screens, and application icons
+├── public/               # PWA icons, manifest.json, and web assets
+├── src/
+│   ├── components/       # Design system primitives (Button, Text, Card, Modals)
+│   ├── constants/        # Design tokens (Colors, Spacing, Typography)
+│   ├── features/         # Domain-isolated modules (workouts, exercises, auth, analytics)
+│   ├── lib/              # Integrations & utilities (storage, releaseNotes, sync)
+│   ├── services/         # Supabase client and external provider adapters
+│   ├── store/            # Zustand global state slices
+│   └── types/            # Shared TypeScript type definitions
+└── tests/                # Automated unit & integration tests
+```
+
+---
+
+## 💻 Getting Started / Development
+
+### Prerequisites
+- [Node.js](https://nodejs.org/) (v18.x or later)
+- [npm](https://www.npmjs.com/) or [bun](https://bun.sh/)
+- [Expo Go](https://expo.dev/go) app on your mobile device (optional, for physical device preview)
+
+### Installation
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/Aditya5576/BeBig-2.0.git
+   cd "BeBig 2.0"
+   ```
+
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+3. Set up environment variables:
+   ```bash
+   cp .env.example .env.local
+   ```
+   Configure your Supabase credentials:
+   ```env
+   EXPO_PUBLIC_SUPABASE_URL=https://your-supabase-project.supabase.co
+   EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+   ```
+
+### Development Commands
+```bash
+# Start local development server
+npm run web           # Run in web browser
+npm run ios           # Run on iOS simulator
+npm run android       # Run on Android emulator
+
+# Quality & Validation
+npm run typecheck     # TypeScript strict type checking
+npm run lint          # ESLint inspection
+npm test              # Run automated Jest test suite
+npm run build:web     # Export static production web bundle
+```
+
+---
+
+## 🚢 Production & Deployment
+
+- **Hosting**: Deployed automatically on [Vercel](https://vercel.com/) via GitHub integration on `main`.
+- **Web Export**: Handled via `npm run build:web` with automatic commit SHA stamping (`EXPO_PUBLIC_GIT_SHA=${VERCEL_GIT_COMMIT_SHA}`).
+- **Security Headers**: Production Content Security Policy (CSP), permissions policies, and cache-control headers are defined in `vercel.json`.
+
+---
+
+## 📄 License
+
+Proprietary — All rights reserved. Built with pride for serious lifters.
