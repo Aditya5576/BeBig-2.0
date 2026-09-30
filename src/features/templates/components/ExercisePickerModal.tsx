@@ -1,5 +1,5 @@
 import { useAppTheme } from '../../theme';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Modal,
   View,
@@ -9,6 +9,7 @@ import {
   Pressable,
   ActivityIndicator,
   ScrollView,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScreenContainer, Text, Button, Card } from '../../../components/ui';
@@ -36,7 +37,7 @@ export function ExercisePickerModal({
   selectedExerciseIds = [],
 }: ExercisePickerModalProps) {
   const { colors } = useAppTheme();
-  const styles = createStyles(colors);
+  const styles = useMemo(() => createStyles(colors), [colors]);
   let insets = { top: 0, bottom: 0, left: 0, right: 0 };
   try {
     // eslint-disable-next-line react-hooks/rules-of-hooks
@@ -457,6 +458,10 @@ export function ExercisePickerModal({
                 contentContainerStyle={styles.listContent}
                 keyboardDismissMode="on-drag"
                 keyboardShouldPersistTaps="handled"
+                initialNumToRender={15}
+                maxToRenderPerBatch={15}
+                windowSize={5}
+                removeClippedSubviews={Platform.OS !== 'web'}
               />
             )}
           </>

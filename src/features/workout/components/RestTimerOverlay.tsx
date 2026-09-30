@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, Button, Card } from '../../../components/ui';
@@ -94,7 +94,7 @@ export function RestTimerOverlay({
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const styles = createStyles(colors, insets);
+  const styles = useMemo(() => createStyles(colors, insets), [colors, insets.bottom]);
 
   if (isFinished) {
     return (
@@ -184,7 +184,7 @@ export function RestTimerOverlay({
                 onPress={onTogglePause}
                 variant="outline"
                 size="sm"
-                style={styles.adjustButton}
+                style={styles.actionButton}
               />
             )}
             <Button
@@ -193,7 +193,7 @@ export function RestTimerOverlay({
               onPress={onClear}
               variant="secondary"
               size="sm"
-              style={styles.skipButton}
+              style={styles.actionButton}
             />
             <Button
               testID="extend-rest-plus-15-button"
@@ -216,7 +216,7 @@ const createStyles = (colors: any, insets: { bottom: number }) => StyleSheet.cre
     bottom: 0,
     left: 0,
     right: 0,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.sm,
     paddingTop: spacing.xs,
     paddingBottom: Math.max(insets.bottom, 12),
     backgroundColor: colors.background,
@@ -233,7 +233,8 @@ const createStyles = (colors: any, insets: { bottom: number }) => StyleSheet.cre
     backgroundColor: colors.surfaceElevated,
     borderColor: colors.primary,
     borderWidth: 1.5,
-    padding: spacing.md,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.md,
     overflow: 'hidden',
   },
   restCompleteCard: {
@@ -269,19 +270,27 @@ const createStyles = (colors: any, insets: { bottom: number }) => StyleSheet.cre
   controlsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.md,
+    justifyContent: 'space-between',
+    gap: spacing.xs,
     width: '100%',
   },
   adjustButton: {
-    minHeight: 36,
-    minWidth: 70,
-    paddingHorizontal: spacing.sm,
+    flex: 1,
+    minHeight: 38,
+    minWidth: 0,
+    paddingHorizontal: 2,
+  },
+  actionButton: {
+    flex: 1.3,
+    minHeight: 38,
+    minWidth: 0,
+    paddingHorizontal: 2,
   },
   skipButton: {
-    minHeight: 36,
-    minWidth: 100,
-    paddingHorizontal: spacing.md,
+    flex: 1.3,
+    minHeight: 38,
+    minWidth: 0,
+    paddingHorizontal: 2,
   },
   restBannerContent: {
     flexDirection: 'row',

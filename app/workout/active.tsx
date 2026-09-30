@@ -1,5 +1,5 @@
 import { useAppTheme } from '../../src/features/theme';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -38,7 +38,7 @@ export default function ActiveWorkoutScreen() {
   } catch {
     insets = { bottom: 0 };
   }
-  const styles = createStyles(colors, insets as any);
+  const styles = useMemo(() => createStyles(colors, insets as any), [colors, insets.bottom]);
 
   const router = useRouter();
 

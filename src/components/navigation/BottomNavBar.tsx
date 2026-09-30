@@ -1,5 +1,5 @@
 import { useAppTheme } from '../../features/theme';
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import { useRouter, useSegments } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,7 +9,7 @@ import { radii } from '../../constants/theme';
 
 export function BottomNavBar() {
   const { colors } = useAppTheme();
-  const styles = createStyles(colors);
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const router = typeof useRouter === 'function' ? useRouter() : null;
   let segments: string[] = [];
@@ -65,10 +65,9 @@ export function BottomNavBar() {
   const isExercisesActive = firstSegment === 'exercises';
   const isProfileActive = firstSegment === 'settings';
 
-  const navigateTo = (path: string) => {
-    if (router) {
-      router.push(path as any);
-    }
+  const navigateTo = (path: string, isActive: boolean) => {
+    if (!router || isActive) return;
+    router.replace(path as any);
   };
 
   return (
@@ -84,7 +83,7 @@ export function BottomNavBar() {
       {/* 1. Home Tab */}
       <Pressable
         testID="tab-home"
-        onPress={() => navigateTo('/home')}
+        onPress={() => navigateTo('/home', isHomeActive)}
         accessibilityLabel="Home"
         accessibilityRole="tab"
         accessibilityState={{ selected: isHomeActive }}
@@ -103,7 +102,7 @@ export function BottomNavBar() {
       {/* 2. History Tab */}
       <Pressable
         testID="tab-history"
-        onPress={() => navigateTo('/workout/history')}
+        onPress={() => navigateTo('/workout/history', isHistoryActive)}
         accessibilityLabel="History"
         accessibilityRole="tab"
         accessibilityState={{ selected: isHistoryActive }}
@@ -122,7 +121,7 @@ export function BottomNavBar() {
       {/* 3. Center Workout Tab (Elevated Action) */}
       <Pressable
         testID="tab-workout"
-        onPress={() => navigateTo('/workout/start')}
+        onPress={() => navigateTo('/workout/start', isWorkoutActive)}
         accessibilityLabel="Start Workout"
         accessibilityRole="button"
         accessibilityState={{ selected: isWorkoutActive }}
@@ -143,7 +142,7 @@ export function BottomNavBar() {
       {/* 4. Exercises Tab */}
       <Pressable
         testID="tab-exercises"
-        onPress={() => navigateTo('/exercises')}
+        onPress={() => navigateTo('/exercises', isExercisesActive)}
         accessibilityLabel="Exercises"
         accessibilityRole="tab"
         accessibilityState={{ selected: isExercisesActive }}
@@ -162,7 +161,7 @@ export function BottomNavBar() {
       {/* 5. Profile / Settings Tab */}
       <Pressable
         testID="tab-profile"
-        onPress={() => navigateTo('/settings')}
+        onPress={() => navigateTo('/settings', isProfileActive)}
         accessibilityLabel="Profile"
         accessibilityRole="tab"
         accessibilityState={{ selected: isProfileActive }}
