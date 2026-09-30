@@ -36,9 +36,14 @@ export async function resolveAuthenticatedUserRoute(
 ): Promise<AuthRouteResolution | null> {
   if (!userId) return null;
 
-  // 1. Initial Account Isolation Check
-  const currentUserId = useAuthStore.getState().user?.id;
-  if (!currentUserId || currentUserId !== userId) {
+  // 1. Initial Account Isolation & Active Session Check
+  const initialAuthState = useAuthStore.getState();
+  if (
+    initialAuthState.status !== 'authenticated' ||
+    !initialAuthState.user ||
+    initialAuthState.user.id !== userId ||
+    !initialAuthState.session
+  ) {
     return null;
   }
 
@@ -50,10 +55,15 @@ export async function resolveAuthenticatedUserRoute(
     profile = null;
   }
 
-  // 3. Post-Async Account Isolation Check
-  // Verify the currently authenticated user ID still matches at this async boundary
-  const postAsyncUser = useAuthStore.getState().user;
-  if (!postAsyncUser || postAsyncUser.id !== userId) {
+  // 3. Post-Async Account Isolation & Active Session Check
+  // Verify the currently authenticated user session still matches at this async boundary
+  const postAsyncState = useAuthStore.getState();
+  if (
+    postAsyncState.status !== 'authenticated' ||
+    !postAsyncState.user ||
+    postAsyncState.user.id !== userId ||
+    !postAsyncState.session
+  ) {
     return null;
   }
 
@@ -80,9 +90,9 @@ export async function resolveAuthenticatedUserRoute(
   }
 
   // 4b. Cloud Metadata Fallback: Check if user_metadata confirms onboarding was completed
-  const metaProfile = postAsyncUser.user_metadata?.profile as UserProfile | undefined;
+  const metaProfile = postAsyncState.user?.user_metadata?.profile as UserProfile | undefined;
   const isMetaCompleted =
-    postAsyncUser.user_metadata?.onboarding_completed === true ||
+    postAsyncState.user?.user_metadata?.onboarding_completed === true ||
     metaProfile?.onboarding_completed === true;
 
   if (isMetaCompleted) {

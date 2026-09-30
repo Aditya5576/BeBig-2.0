@@ -43,6 +43,7 @@ export default function ActiveWorkoutScreen() {
   const router = useRouter();
 
   const [session, setSession] = useState<WorkoutSession | null>(null);
+  const [restOverlayHeight, setRestOverlayHeight] = useState<number>(0);
   const sessionRef = useRef<WorkoutSession | null>(null);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -437,6 +438,16 @@ export default function ActiveWorkoutScreen() {
     const updated = workoutRepository.clearRestTimer(current);
     await updateSessionAndAutosaveImmediate(updated);
   };
+
+  // Pause or resume rest timer
+  const handleTogglePauseRest = async () => {
+    const current = sessionRef.current || session;
+    if (!current || !current.activeRestTimer) return;
+    const updated = current.activeRestTimer.isPaused
+      ? workoutRepository.resumeRestTimer(current)
+      : workoutRepository.pauseRestTimer(current);
+    await updateSessionAndAutosaveImmediate(updated);
+  };
   // Discard workout
   const handleDiscard = () => {
     Alert.alert(
@@ -518,6 +529,11 @@ export default function ActiveWorkoutScreen() {
 
   const completedSetsCount = workoutRepository.countCompletedSets(session);
 
+  const baseBottomPadding = 80 + Math.max(insets.bottom, 12);
+  const dynamicBottomPadding = !!session?.activeRestTimer
+    ? Math.max(baseBottomPadding, (restOverlayHeight > 0 ? restOverlayHeight : 240) + 32)
+    : baseBottomPadding;
+
   return (
     <ScreenContainer>
       <KeyboardAvoidingView
@@ -528,7 +544,7 @@ export default function ActiveWorkoutScreen() {
         <ScrollView
           contentContainerStyle={[
             styles.scrollContent,
-            !!session?.activeRestTimer && styles.scrollContentRestActive
+            { paddingBottom: dynamicBottomPadding },
           ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
@@ -639,6 +655,8 @@ export default function ActiveWorkoutScreen() {
           activeRestTimer={session.activeRestTimer}
           onExtend={handleExtendRest}
           onClear={handleClearRest}
+          onTogglePause={handleTogglePauseRest}
+          onHeightChange={setRestOverlayHeight}
         />
       )}
 
@@ -657,24 +675,6 @@ const createStyles = (colors: any, insets: { bottom: number }) => StyleSheet.cre
   keyboardContainer: {
     flex: 1,
   },
-  persistentRestOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.xs,
-    paddingBottom: Math.max(insets.bottom, 12),
-    backgroundColor: colors.background,
-    borderTopWidth: 1,
-    borderTopColor: colors.borderLight,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    elevation: 10,
-    zIndex: 100,
-  },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -683,11 +683,7 @@ const createStyles = (colors: any, insets: { bottom: number }) => StyleSheet.cre
   scrollContent: {
     flexGrow: 1,
     paddingVertical: spacing.md,
-    paddingBottom: 160,
     gap: spacing.md,
-  },
-  scrollContentRestActive: {
-    paddingBottom: 240 + Math.max(insets.bottom, 12),
   },
   topBar: {
     flexDirection: 'row',

@@ -11,6 +11,7 @@ import { workoutStorage } from '../storage/workoutStorage';
 import { getCurrentUserScope, UserScope } from '../../auth/utils/userScope';
 import { syncMetadataStore, syncLifecycleManager } from '../../../services/sync';
 import { scheduledWorkoutRepository } from '../../scheduling/services/scheduledWorkoutRepository';
+import { nativeRestTimerService } from './nativeRestTimerService';
 
 export class WorkoutRepository {
   /**
@@ -334,7 +335,11 @@ export class WorkoutRepository {
       setNumber,
       targetEndTime,
       durationSeconds,
+      isPaused: false,
+      pausedRemainingSeconds: undefined,
     };
+
+    void nativeRestTimerService.syncRestTimer(activeRestTimer);
 
     return {
       ...workout,
@@ -346,9 +351,62 @@ export class WorkoutRepository {
    * Skips or clears the active rest countdown timer.
    */
   clearRestTimer(workout: WorkoutSession): WorkoutSession {
+    void nativeRestTimerService.cancelRestTimer();
+
     return {
       ...workout,
       activeRestTimer: null,
+    };
+  }
+
+  /**
+   * Pauses the active rest countdown timer.
+   */
+  pauseRestTimer(workout: WorkoutSession): WorkoutSession {
+    if (!workout.activeRestTimer || workout.activeRestTimer.isPaused) {
+      return workout;
+    }
+
+    const now = Date.now();
+    const remaining = Math.max(0, Math.ceil((workout.activeRestTimer.targetEndTime - now) / 1000));
+
+    const activeRestTimer: ActiveRestTimer = {
+      ...workout.activeRestTimer,
+      isPaused: true,
+      pausedRemainingSeconds: remaining,
+    };
+
+    void nativeRestTimerService.syncRestTimer(activeRestTimer);
+
+    return {
+      ...workout,
+      activeRestTimer,
+    };
+  }
+
+  /**
+   * Resumes a paused rest countdown timer.
+   */
+  resumeRestTimer(workout: WorkoutSession): WorkoutSession {
+    if (!workout.activeRestTimer || !workout.activeRestTimer.isPaused) {
+      return workout;
+    }
+
+    const remaining = workout.activeRestTimer.pausedRemainingSeconds ?? 0;
+    const targetEndTime = Date.now() + remaining * 1000;
+
+    const activeRestTimer: ActiveRestTimer = {
+      ...workout.activeRestTimer,
+      isPaused: false,
+      targetEndTime,
+      pausedRemainingSeconds: undefined,
+    };
+
+    void nativeRestTimerService.syncRestTimer(activeRestTimer);
+
+    return {
+      ...workout,
+      activeRestTimer,
     };
   }
 
@@ -361,6 +419,25 @@ export class WorkoutRepository {
       return workout;
     }
 
+    if (workout.activeRestTimer.isPaused) {
+      const currentRemaining = workout.activeRestTimer.pausedRemainingSeconds ?? 0;
+      const newRemaining = Math.max(0, currentRemaining + additionalSeconds);
+      const durationSeconds = Math.max(0, workout.activeRestTimer.durationSeconds + additionalSeconds);
+
+      const activeRestTimer: ActiveRestTimer = {
+        ...workout.activeRestTimer,
+        pausedRemainingSeconds: newRemaining,
+        durationSeconds,
+      };
+
+      void nativeRestTimerService.syncRestTimer(activeRestTimer);
+
+      return {
+        ...workout,
+        activeRestTimer,
+      };
+    }
+
     const now = Date.now();
     if (workout.activeRestTimer.targetEndTime <= now) {
       return workout;
@@ -369,13 +446,17 @@ export class WorkoutRepository {
     const targetEndTime = workout.activeRestTimer.targetEndTime + additionalSeconds * 1000;
     const durationSeconds = workout.activeRestTimer.durationSeconds + additionalSeconds;
 
+    const activeRestTimer: ActiveRestTimer = {
+      ...workout.activeRestTimer,
+      targetEndTime,
+      durationSeconds,
+    };
+
+    void nativeRestTimerService.syncRestTimer(activeRestTimer);
+
     return {
       ...workout,
-      activeRestTimer: {
-        ...workout.activeRestTimer,
-        targetEndTime,
-        durationSeconds,
-      },
+      activeRestTimer,
     };
   }
 
@@ -443,6 +524,7 @@ export class WorkoutRepository {
     }
 
     // 2. Clear active in-progress draft (Immunity preserved)
+    void nativeRestTimerService.cancelRestTimer();
     await workoutStorage.clearActiveWorkout();
 
     // 3. Mark pending metadata (wrapped in try/catch to protect durability)
@@ -476,6 +558,7 @@ export class WorkoutRepository {
    * Discards the active workout draft without saving to history.
    */
   async discardActiveWorkout(): Promise<void> {
+    void nativeRestTimerService.cancelRestTimer();
     await workoutStorage.clearActiveWorkout();
   }
 
@@ -574,6 +657,85 @@ export class WorkoutRepository {
     }
 
     return updated;
+  }
+
+  /**
+   * Updates the name of the currently active workout session draft.
+   */
+  async updateActiveWorkoutName(newName: string, scope?: UserScope | null): Promise<WorkoutSession | null> {
+    const resolvedScope = scope !== undefined ? scope : getCurrentUserScope();
+    const active = await workoutStorage.getActiveWorkout(resolvedScope);
+    if (!active) return null;
+    const trimmed = newName.trim();
+    if (!trimmed) throw new Error('Workout name cannot be empty.');
+    const updated: WorkoutSession = { ...active, name: trimmed };
+    await workoutStorage.saveActiveWorkout(updated, resolvedScope);
+    return updated;
+  }
+
+  /**
+   * Starts a new active workout session by repeating a previously completed WorkoutSession.
+   * Generates a brand new session ID and deep-copies exercises and sets with new set IDs
+   * and reset completion flags, preserving the original completed workout completely untouched.
+   */
+  async startWorkoutFromCompleted(
+    completedWorkout: WorkoutSession,
+    customName?: string,
+    scope?: UserScope | null,
+  ): Promise<WorkoutSession> {
+    if (!completedWorkout || !completedWorkout.id) {
+      throw new Error('Valid completed workout session is required to repeat a workout.');
+    }
+
+    const sessionId = `workout_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    const now = new Date().toISOString();
+    const resolvedScope = scope !== undefined ? scope : getCurrentUserScope();
+
+    const exercises: WorkoutExercise[] = (completedWorkout.exercises || []).map((ex, exIndex) => {
+      const sourceSets = ex.actualSets || [];
+      const completedSets = sourceSets.filter((s) => s.completed);
+      const setsToCopy = completedSets.length > 0 ? completedSets : sourceSets;
+
+      const newSets: WorkoutSet[] = (
+        setsToCopy.length > 0
+          ? setsToCopy
+          : [{ weight: 0, reps: 10, rir: 2, completed: false } as WorkoutSet]
+      ).map((s, sIndex) => ({
+        id: `set_${Date.now()}_${Math.random().toString(36).substring(2, 8)}_${sIndex + 1}`,
+        setNumber: sIndex + 1,
+        weight: typeof s.weight === 'number' && s.weight >= 0 ? s.weight : 0,
+        reps: typeof s.reps === 'number' && s.reps > 0 ? s.reps : 10,
+        rir: typeof s.rir === 'number' ? s.rir : 2,
+        notes: s.notes ? s.notes : undefined,
+        completed: false,
+      }));
+
+      return {
+        exerciseId: ex.exerciseId,
+        exerciseName: ex.exerciseName,
+        categoryName: ex.categoryName,
+        order: ex.order !== undefined ? ex.order : exIndex,
+        plannedSets: ex.plannedSets || newSets.length,
+        plannedTargetReps: ex.plannedTargetReps,
+        plannedRestTime: ex.plannedRestTime || 90,
+        plannedTargetWeight: ex.plannedTargetWeight,
+        actualSets: newSets,
+      };
+    });
+
+    const session: WorkoutSession = {
+      id: sessionId,
+      ownerId: resolvedScope?.ownerId,
+      ownerType: resolvedScope?.ownerType,
+      name: customName?.trim() || completedWorkout.name || 'Repeated Workout',
+      startedAt: now,
+      status: 'active',
+      exercises,
+      activeRestTimer: null,
+    };
+
+    await workoutStorage.saveActiveWorkout(session, resolvedScope);
+    return session;
   }
 
   /**

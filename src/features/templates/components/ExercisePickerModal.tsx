@@ -49,6 +49,7 @@ export function ExercisePickerModal({
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedSource, setSelectedSource] = useState<'all' | 'custom' | 'external'>('all');
 
   // Custom exercise creation state inside picker
   const [isCreatingCustom, setIsCreatingCustom] = useState(false);
@@ -70,9 +71,10 @@ export function ExercisePickerModal({
 
     async function loadExercises() {
       // Instant local cache check first to avoid blocking user during weak network / offline
-      const cachedInitial = exerciseCacheStorage.searchCached({
+      const cachedInitial = exerciseRepository.getCachedExercises({
         query: searchQuery.trim() || undefined,
         category: selectedCategory !== 'all' ? selectedCategory : undefined,
+        source: selectedSource,
         limit: 30,
       });
 
@@ -87,6 +89,7 @@ export function ExercisePickerModal({
         const result = await exerciseRepository.getExercises({
           query: searchQuery.trim() || undefined,
           category: selectedCategory !== 'all' ? selectedCategory : undefined,
+          source: selectedSource,
           limit: 30,
         });
 
@@ -95,9 +98,10 @@ export function ExercisePickerModal({
         }
       } catch {
         if (isMounted && cachedInitial.length === 0) {
-          const cachedFallback = exerciseCacheStorage.searchCached({
+          const cachedFallback = exerciseRepository.getCachedExercises({
             query: searchQuery.trim() || undefined,
             category: selectedCategory !== 'all' ? selectedCategory : undefined,
+            source: selectedSource,
             limit: 30,
           });
           setExercises(cachedFallback);
@@ -114,7 +118,7 @@ export function ExercisePickerModal({
     return () => {
       isMounted = false;
     };
-  }, [visible, searchQuery, selectedCategory]);
+  }, [visible, searchQuery, selectedCategory, selectedSource]);
 
   const handleCreateCustomExercise = async () => {
     const trimmed = customName.trim();
@@ -360,6 +364,30 @@ export function ExercisePickerModal({
                 clearButtonMode="while-editing"
               />
 
+              {/* Source Filter Chips */}
+              <View style={styles.sourceRow} testID="picker-source-filter-row">
+                {(['all', 'custom', 'external'] as const).map((src) => {
+                  const isActive = selectedSource === src;
+                  const label = src === 'all' ? 'All' : src === 'custom' ? 'Custom' : 'External';
+                  return (
+                    <Pressable
+                      key={src}
+                      testID={`picker-source-filter-${src}`}
+                      onPress={() => setSelectedSource(src)}
+                      style={[styles.sourceChip, isActive && styles.sourceChipActive]}
+                    >
+                      <Text
+                        variant="caption"
+                        color={isActive ? 'accent' : 'secondary'}
+                        style={styles.chipText}
+                      >
+                        {label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
               {/* Category Chips */}
               <ScrollView
                 horizontal
@@ -367,6 +395,7 @@ export function ExercisePickerModal({
                 contentContainerStyle={styles.categoryScroll}
               >
                 <Pressable
+                  testID="picker-category-filter-all"
                   onPress={() => setSelectedCategory('all')}
                   style={[styles.categoryChip, selectedCategory === 'all' && styles.categoryChipActive]}
                 >
@@ -384,6 +413,7 @@ export function ExercisePickerModal({
                   return (
                     <Pressable
                       key={cat.id}
+                      testID={`picker-category-filter-${cat.id}`}
                       onPress={() => setSelectedCategory(cat.id)}
                       style={[styles.categoryChip, isActive && styles.categoryChipActive]}
                     >
@@ -475,6 +505,24 @@ const createStyles = (colors: any) =>
       paddingVertical: spacing.sm + 2,
       color: colors.textPrimary,
       fontSize: 16,
+    },
+    sourceRow: {
+      flexDirection: 'row',
+      gap: spacing.xs,
+    },
+    sourceChip: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: spacing.xs + 2,
+      borderRadius: radii.md,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.borderLight,
+    },
+    sourceChipActive: {
+      backgroundColor: colors.surfaceElevated,
+      borderColor: colors.primary,
     },
     categoryScroll: {
       gap: spacing.xs,

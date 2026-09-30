@@ -73,16 +73,14 @@ export const useAuthStore = create<AuthState & AuthActions>((set) => ({
               authSubscription.unsubscribe();
             }
 
-            authSubscription = authService.onAuthStateChange(async (event, session) => {
+            authSubscription = authService.onAuthStateChange((event, session) => {
               if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
                 if (session) {
-                  try {
-                    await import('../services/guestMigrationService').then((m) =>
-                      m.guestMigrationService.runMigrationIfPending(session.user)
-                    );
-                  } catch (err) {
-                    console.error('Guest migration failed, will retry next launch:', err);
-                  }
+                  void import('../services/guestMigrationService')
+                    .then((m) => m.guestMigrationService.runMigrationIfPending(session.user))
+                    .catch((err) => {
+                      console.error('Guest migration failed, will retry next launch:', err);
+                    });
                 }
               }
 

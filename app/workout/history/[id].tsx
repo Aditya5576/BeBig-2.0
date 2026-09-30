@@ -1,6 +1,6 @@
 import { useAppTheme } from '../../../src/features/theme';
 import React, { useEffect, useState, useRef } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, TextInput } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, TextInput, Alert } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ScreenContainer, Text, Button, Card } from '../../../src/components/ui';
 import { workoutRepository, WorkoutSession } from '../../../src/features/workout';
@@ -52,7 +52,8 @@ export default function WorkoutHistoryDetailScreen() {
   const handleConfirmSaveTemplate = async () => {
     if (!workout) return;
     const nameToUse = templateNameInputRef.current !== undefined ? templateNameInputRef.current : templateNameInput;
-    if (!nameToUse || !nameToUse.trim()) {
+    const trimmedName = nameToUse ? nameToUse.trim() : '';
+    if (!trimmedName) {
       setSaveError('Template name is required.');
       return;
     }
@@ -61,14 +62,31 @@ export default function WorkoutHistoryDetailScreen() {
     setSaveError(null);
 
     try {
-      const input = convertWorkoutToTemplateInput(workout, nameToUse);
+      const input = convertWorkoutToTemplateInput(workout, trimmedName);
       await templateRepository.createTemplate(input);
+
+      // Also propagate the new template name to the completed workout history
+      if (workout.id) {
+        const updated = await workoutRepository.updateCompletedWorkoutName(workout.id, trimmedName);
+        setWorkout(updated);
+      }
+
       setTemplateSaved(true);
       setShowSaveModal(false);
     } catch (err: any) {
       setSaveError(err?.message || 'Failed to save template. Please try again.');
     } finally {
       setSavingTemplate(false);
+    }
+  };
+
+  const handleRepeatWorkout = async () => {
+    if (!workout) return;
+    try {
+      await workoutRepository.startWorkoutFromCompleted(workout);
+      router.replace('/workout/active' as any);
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Failed to repeat workout.');
     }
   };
 
@@ -275,8 +293,16 @@ export default function WorkoutHistoryDetailScreen() {
           })}
         </View>
 
-        {/* Save as Template Section */}
+        {/* Action Buttons Section */}
         <View style={styles.templateSection}>
+          <Button
+            testID="repeat-workout-button"
+            title="Repeat Workout"
+            onPress={handleRepeatWorkout}
+            variant="primary"
+            size="lg"
+            style={styles.saveTemplateButton}
+          />
           {templateSaved ? (
             <View testID="save-template-success" style={styles.successBox}>
               <Text variant="bodyBold" color="accent">

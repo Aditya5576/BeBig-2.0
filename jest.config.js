@@ -5,6 +5,7 @@ module.exports = {
   ],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
+    '^expo-modules-core(.*)$': '<rootDir>/node_modules/expo/node_modules/expo-modules-core$1',
   },
   testMatch: ['**/tests/**/*.test.[jt]s?(x)'],
   testTimeout: 20000,

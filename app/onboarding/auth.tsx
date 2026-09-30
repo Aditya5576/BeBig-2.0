@@ -11,7 +11,7 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ScreenContainer, Text, Button, Card, Input } from '../../src/components/ui';
 import { useOnboardingStore } from '../../src/features/onboarding';
-import { authService, useAuthStore, resolveAuthenticatedUserRoute } from '../../src/features/auth';
+import { authService, useAuthStore, resolveAuthenticatedUserRoute, mapAuthError } from '../../src/features/auth';
 import { profileService } from '../../src/features/profile';
 import { supabase, isSupabaseConfigured } from '../../src/lib/supabase';
 import { getAuthRedirectUrl } from '../../src/features/auth/utils/redirect';
@@ -162,104 +162,98 @@ export default function AuthScreen({
   };
 
   const handleEmailSubmit = async () => {
-    if (!email.trim()) {
-      setStatusMessage({ text: 'Please enter your email address.', type: 'error' });
+    const sanitizedEmail = email.trim();
+    if (!sanitizedEmail || !sanitizedEmail.includes('@')) {
+      const mapped = mapAuthError('Enter a valid email address.', 'validation');
+      setStatusMessage({ title: mapped.title, text: mapped.message, type: mapped.type });
       return;
     }
     if (!password) {
-      setStatusMessage({ text: 'Please enter your password.', type: 'error' });
+      const mapped = mapAuthError('Please enter your password.', 'validation');
+      setStatusMessage({ title: mapped.title, text: mapped.message, type: mapped.type });
       return;
     }
     if (emailMode === 'sign_up' && password.length < 6) {
-      setStatusMessage({ text: 'Password must be at least 6 characters.', type: 'error' });
+      const mapped = mapAuthError('Password must be at least 6 characters.', 'validation');
+      setStatusMessage({ title: mapped.title, text: mapped.message, type: mapped.type });
       return;
     }
     if (emailMode === 'sign_up' && confirmPassword && password !== confirmPassword) {
-      setStatusMessage({ text: 'Passwords do not match.', type: 'error' });
+      const mapped = mapAuthError("Passwords don't match.", 'validation');
+      setStatusMessage({ title: mapped.title, text: mapped.message, type: mapped.type });
       return;
     }
 
     setLoading(true);
     setStatusMessage(null);
 
+    // Security invariant: ensure any stale session or guest state is cleared before submitting new credentials
+    if (useAuthStore.getState().status !== 'unauthenticated') {
+      try {
+        await useAuthStore.getState().signOut();
+      } catch {
+        // Ignore signout cleanup errors
+      }
+    }
+
     if (emailMode === 'sign_up') {
-      const result = await authService.signUpWithEmail(email, password);
+      const result = await authService.signUpWithEmail(sanitizedEmail, password);
 
       if (result.success) {
         if (result.session) {
           await handlePostAuthSuccess(result.session);
         } else if (result.requiresEmailConfirmation) {
           setLoading(false);
+          const mapped = mapAuthError('Verify your email', 'sign_up');
           setStatusMessage({
-            text: result.message,
-            type: 'success',
+            title: mapped.title,
+            text: mapped.message,
+            type: 'info',
           });
         }
       } else {
         setLoading(false);
-        const isAlreadyRegistered =
-          result.isUserAlreadyRegistered ||
-          /already exists|already registered/i.test(result.message);
-
-        if (isAlreadyRegistered) {
-          setStatusMessage({
-            title: 'Account already exists',
-            text: 'An account with this email already exists. Please log in instead.',
-            type: 'error',
-            action: {
-              label: 'Log In',
-              onPress: () => {
-                setEmailMode('sign_in');
-                setPassword('');
-                setConfirmPassword('');
-                setStatusMessage(null);
-              },
-            },
-          });
-        } else {
-          setStatusMessage({ text: result.message, type: 'error' });
-        }
+        const mapped = mapAuthError(result.message, 'sign_up');
+        setStatusMessage({
+          title: mapped.title,
+          text: mapped.message,
+          type: mapped.type,
+          action:
+            mapped.title === 'Account already exists'
+              ? {
+                  label: 'Log In',
+                  onPress: () => {
+                    setEmailMode('sign_in');
+                    setPassword('');
+                    setConfirmPassword('');
+                    setStatusMessage(null);
+                  },
+                }
+              : undefined,
+        });
       }
     } else {
-      const result = await authService.signInWithEmail(email, password);
+      const result = await authService.signInWithEmail(sanitizedEmail, password);
 
       if (result.success && result.session) {
         await handlePostAuthSuccess(result.session);
       } else {
         setLoading(false);
-        if (result.isNonExistentUser) {
-          setStatusMessage({
-            title: 'No account found',
-            text: "We couldn't find an account with this email. Create an account to get started.",
-            type: 'error',
-            action: {
-              label: 'Create Account',
-              onPress: () => {
-                setEmailMode('sign_up');
-                setPassword('');
-                setConfirmPassword('');
-                setStatusMessage(null);
-              },
+        const mapped = mapAuthError(result.message, 'sign_in');
+        setStatusMessage({
+          title: mapped.title,
+          text: mapped.message,
+          type: mapped.type,
+          action: {
+            label: 'Create Account',
+            onPress: () => {
+              setEmailMode('sign_up');
+              setPassword('');
+              setConfirmPassword('');
+              setStatusMessage(null);
             },
-          });
-        } else if (result.isInvalidCredentials) {
-          setStatusMessage({
-            title: 'Unable to sign in',
-            text: "We couldn't sign you in with those credentials. Please check your password or create a new account.",
-            type: 'error',
-            action: {
-              label: 'Create Account',
-              onPress: () => {
-                setEmailMode('sign_up');
-                setPassword('');
-                setConfirmPassword('');
-                setStatusMessage(null);
-              },
-            },
-          });
-        } else {
-          setStatusMessage({ text: result.message, type: 'error' });
-        }
+          },
+        });
       }
     }
   };

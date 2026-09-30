@@ -10,48 +10,79 @@ interface RestTimerOverlayProps {
   activeRestTimer: ActiveRestTimer;
   onExtend: (seconds: number) => void;
   onClear: () => void;
+  onTogglePause?: () => void;
+  onHeightChange?: (height: number) => void;
 }
 
 export function RestTimerOverlay({
   activeRestTimer,
   onExtend,
   onClear,
+  onTogglePause,
+  onHeightChange,
 }: RestTimerOverlayProps) {
   const { colors } = useAppTheme();
-  const insets = useSafeAreaInsets();
+  let insets = { bottom: 0, top: 0, left: 0, right: 0 };
+  try {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    insets = useSafeAreaInsets();
+  } catch {
+    insets = { bottom: 0, top: 0, left: 0, right: 0 };
+  }
   
-  const [restRemaining, setRestRemaining] = useState<number>(0);
-  const [isFinished, setIsFinished] = useState<boolean>(false);
+  const initialDiff = Math.ceil((activeRestTimer.targetEndTime - Date.now()) / 1000);
+  const [restRemaining, setRestRemaining] = useState<number>(
+    activeRestTimer.isPaused
+      ? (activeRestTimer.pausedRemainingSeconds ?? 0)
+      : Math.max(0, initialDiff),
+  );
+  const [isFinished, setIsFinished] = useState<boolean>(!activeRestTimer.isPaused && initialDiff <= 0);
   const [progressPercent, setProgressPercent] = useState<number>(0);
 
   useEffect(() => {
     const checkRest = () => {
+      if (activeRestTimer.isPaused) {
+        const remaining = activeRestTimer.pausedRemainingSeconds ?? 0;
+        setRestRemaining((prev) => (prev !== remaining ? remaining : prev));
+        setIsFinished((prev) => (prev !== false ? false : prev));
+        const totalSec = activeRestTimer.durationSeconds || 1;
+        const progress = Math.min(100, Math.max(0, ((totalSec - remaining) / totalSec) * 100));
+        setProgressPercent((prev) => (prev !== progress ? progress : prev));
+        return;
+      }
+
       const now = Date.now();
       const diff = Math.ceil((activeRestTimer.targetEndTime - now) / 1000);
       
       const totalMs = activeRestTimer.durationSeconds * 1000;
+      let progress = 100;
       if (totalMs > 0) {
         const startMs = activeRestTimer.targetEndTime - totalMs;
         const elapsedMs = now - startMs;
-        const progress = Math.min(100, Math.max(0, (elapsedMs / totalMs) * 100));
-        setProgressPercent(progress);
-      } else {
-        setProgressPercent(100);
+        progress = Math.min(100, Math.max(0, (elapsedMs / totalMs) * 100));
       }
+      setProgressPercent((prev) => (prev !== progress ? progress : prev));
 
       if (diff <= 0) {
-        setRestRemaining(0);
-        setIsFinished(true);
+        setRestRemaining((prev) => (prev !== 0 ? 0 : prev));
+        setIsFinished((prev) => (prev !== true ? true : prev));
       } else {
-        setRestRemaining(diff);
-        setIsFinished(false);
+        setRestRemaining((prev) => (prev !== diff ? diff : prev));
+        setIsFinished((prev) => (prev !== false ? false : prev));
       }
     };
 
     checkRest();
+    if (activeRestTimer.isPaused) return;
+
     const interval = setInterval(checkRest, 1000);
     return () => clearInterval(interval);
-  }, [activeRestTimer.targetEndTime, activeRestTimer.durationSeconds]);
+  }, [
+    activeRestTimer.targetEndTime,
+    activeRestTimer.durationSeconds,
+    activeRestTimer.isPaused,
+    activeRestTimer.pausedRemainingSeconds,
+  ]);
 
   const formatTime = (totalSec: number) => {
     const hours = Math.floor(totalSec / 3600);
@@ -67,7 +98,14 @@ export function RestTimerOverlay({
 
   if (isFinished) {
     return (
-      <View style={styles.persistentRestOverlay}>
+      <View
+        testID="persistent-rest-overlay"
+        style={styles.persistentRestOverlay}
+        onLayout={(e) => {
+          const h = e.nativeEvent.layout.height;
+          if (h > 0) onHeightChange?.(h);
+        }}
+      >
         <Card style={styles.restCompleteCard} testID="rest-complete-banner">
           <View style={styles.restBannerContent}>
             <View style={styles.restInfo}>
@@ -98,7 +136,14 @@ export function RestTimerOverlay({
   }
 
   return (
-    <View style={styles.persistentRestOverlay}>
+    <View
+      testID="persistent-rest-overlay"
+      style={styles.persistentRestOverlay}
+      onLayout={(e) => {
+        const h = e.nativeEvent.layout.height;
+        if (h > 0) onHeightChange?.(h);
+      }}
+    >
       <Card style={styles.restBannerCard} testID="rest-timer-banner">
         {/* Progress Bar Background */}
         <View style={styles.progressBarContainer}>
@@ -107,8 +152,14 @@ export function RestTimerOverlay({
 
         <View style={styles.restBannerContentCenter}>
           <View style={styles.timerHeader}>
-            <Text variant="display" color="primary" tabularNums style={styles.restCountdownText}>
-              {formatTime(restRemaining)}
+            <Text
+              testID="rest-countdown-text"
+              variant="display"
+              color="primary"
+              tabularNums
+              style={styles.restCountdownText}
+            >
+              {activeRestTimer.isPaused ? `PAUSED (${formatTime(restRemaining)})` : formatTime(restRemaining)}
             </Text>
             {activeRestTimer.exerciseName ? (
               <Text variant="body" color="secondary" numberOfLines={1}>
@@ -126,6 +177,16 @@ export function RestTimerOverlay({
               size="sm"
               style={styles.adjustButton}
             />
+            {onTogglePause && (
+              <Button
+                testID="toggle-pause-rest-timer-button"
+                title={activeRestTimer.isPaused ? 'RESUME' : 'PAUSE'}
+                onPress={onTogglePause}
+                variant="outline"
+                size="sm"
+                style={styles.adjustButton}
+              />
+            )}
             <Button
               testID="skip-rest-timer-button"
               title="SKIP"
@@ -166,7 +227,7 @@ const createStyles = (colors: any, insets: { bottom: number }) => StyleSheet.cre
     shadowOpacity: 0.12,
     shadowRadius: 6,
     elevation: 10,
-    zIndex: 50,
+    zIndex: 100,
   },
   restBannerCard: {
     backgroundColor: colors.surfaceElevated,

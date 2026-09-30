@@ -39,6 +39,8 @@ export interface ActiveRestTimer {
   setNumber: number;
   targetEndTime: number; // Epoch milliseconds (Date.now() + restSeconds * 1000)
   durationSeconds: number;
+  isPaused?: boolean;
+  pausedRemainingSeconds?: number;
 }
 
 export interface WorkoutSession {

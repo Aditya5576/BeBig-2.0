@@ -2,7 +2,7 @@
   "expo": {
     "name": "BeBig",
     "slug": "bebig",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "bebig",
@@ -11,11 +11,17 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.aditya.bebig",
       "userInterfaceStyle": "automatic",
-      "usesAppleSignIn": true
+      "usesAppleSignIn": true,
+      "infoPlist": {
+        "NSSupportsLiveActivities": true
+      }
     },
     "android": {
       "package": "com.aditya.bebig",
       "userInterfaceStyle": "automatic",
+      "permissions": [
+        "android.permission.POST_NOTIFICATIONS"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#090D16",
         "foregroundImage": "./assets/android-icon-foreground.png",

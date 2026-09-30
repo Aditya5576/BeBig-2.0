@@ -73,69 +73,49 @@ export const profileService: IProfileService = {
   getProfile: async (userId: string): Promise<UserProfile | null> => {
     if (!userId) return null;
 
-    // Fast memory return if completed
-    const mem = memoryProfiles.get(userId);
-    if (mem && mem.onboarding_completed) {
-      return mem;
+    // 1. Fast local storage & memory check first
+    const local = await readLocalProfile(userId);
+    if (local && local.onboarding_completed) {
+      return local;
     }
 
-    if (isSupabaseConfigured()) {
-      for (let attempt = 0; attempt < 2; attempt++) {
-        try {
-          const { data, error } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', userId)
-            .maybeSingle();
-
-          if (!error && data) {
-            const profile = data as UserProfile;
-            await writeLocalProfile(userId, profile);
-            return profile;
-          }
-          if (!error && !data) {
-            // Profile genuinely does not exist in DB yet
-            break;
-          }
-          if (error && (error.code === '42501' || error.code === 'PGRST116' || (error as any).status === 403 || error.code === '403')) {
-            // RLS blocks access, profile does not exist or user isn't authorized to view it (typical for new users)
-            break;
-          }
-        } catch {
-          // Network or client blip; retry once
-        }
-        if (attempt === 0 && process.env.NODE_ENV !== 'test') {
-          await new Promise((resolve) => setTimeout(resolve, 150));
-        }
-      }
-
-      // Cloud Metadata Fallback: Check auth user metadata across devices
-      try {
-        const { data: userData } = await supabase.auth.getUser();
-        if (userData?.user?.id === userId && userData.user.user_metadata?.profile) {
-          const metaProfile = userData.user.user_metadata.profile as UserProfile;
-          await writeLocalProfile(userId, metaProfile);
-          return metaProfile;
-        }
-      } catch {
-        // Silently handled
-      }
-    }
-
-    // Check currently active in-memory auth store user metadata if available
+    // 2. Check active in-memory auth store user metadata if available
+    let currentUserMeta: any = null;
     try {
       const { useAuthStore } = require('../../auth/store/useAuthStore');
       const currentUser = useAuthStore.getState().user;
-      if (currentUser?.id === userId && currentUser.user_metadata?.profile) {
-        const metaProfile = currentUser.user_metadata.profile as UserProfile;
-        await writeLocalProfile(userId, metaProfile);
-        return metaProfile;
+      if (currentUser?.id === userId) {
+        currentUserMeta = currentUser.user_metadata;
+        if (currentUserMeta?.profile) {
+          const metaProfile = currentUserMeta.profile as UserProfile;
+          await writeLocalProfile(userId, metaProfile);
+          return metaProfile;
+        }
       }
     } catch {
       // Silently handled
     }
 
-    return readLocalProfile(userId);
+    // 3. Query authoritative public.profiles single attempt
+    if (isSupabaseConfigured()) {
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .maybeSingle();
+
+        if (!error && data) {
+          const profile = data as UserProfile;
+          await writeLocalProfile(userId, profile);
+          return profile;
+        }
+      } catch {
+        // Silently handled network or DB blip
+      }
+    }
+
+    return local;
   },
 
   upsertProfile: async (

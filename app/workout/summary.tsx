@@ -114,7 +114,8 @@ export default function WorkoutSummaryScreen() {
   const handleConfirmSaveTemplate = async () => {
     if (!workout) return;
     const nameToUse = templateNameInputRef.current !== undefined ? templateNameInputRef.current : templateNameInput;
-    if (!nameToUse || !nameToUse.trim()) {
+    const trimmedName = nameToUse ? nameToUse.trim() : '';
+    if (!trimmedName) {
       setSaveError('Template name is required.');
       return;
     }
@@ -123,8 +124,16 @@ export default function WorkoutSummaryScreen() {
     setSaveError(null);
 
     try {
-      const input = convertWorkoutToTemplateInput(workout, nameToUse);
+      const input = convertWorkoutToTemplateInput(workout, trimmedName);
       await templateRepository.createTemplate(input);
+
+      // Also propagate the new template name to the active workout / completed history session
+      if (workout.id) {
+        const updated = await workoutRepository.updateCompletedWorkoutName(workout.id, trimmedName);
+        setWorkout(updated);
+      }
+      await workoutRepository.updateActiveWorkoutName(trimmedName).catch(() => {});
+
       setTemplateSaved(true);
       setShowSaveModal(false);
     } catch (err: any) {
