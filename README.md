@@ -3,7 +3,7 @@
 A production-grade, local-first gym workout tracking Progressive Web Application (PWA) and mobile platform engineered for serious lifters, strength athletes, and fitness enthusiasts. Built with Expo, React Native, TypeScript, Supabase, and resilient offline-first storage.
 
 [![Production App](https://img.shields.io/badge/Production-Live-success?style=for-the-badge&logo=vercel)](https://be-big-2-0.vercel.app)
-[![Version](https://img.shields.io/badge/Version-v1.0.4-blue?style=for-the-badge)](https://github.com/Aditya5576/BeBig-2.0)
+[![Version](https://img.shields.io/badge/Version-v1.0.5-blue?style=for-the-badge)](https://github.com/Aditya5576/BeBig-2.0)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Strict-3178C6?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org/)
 [![Expo](https://img.shields.io/badge/Expo-SDK_57-000020?style=for-the-badge&logo=expo)](https://expo.dev/)
 
@@ -18,9 +18,12 @@ A production-grade, local-first gym workout tracking Progressive Web Application
 
 ---
 
-## 🚀 Latest Release — v1.0.4
+## 🚀 Latest Release — v1.0.5
 
-### What's New in v1.0.4
+### What's New in v1.0.5
+- **Release Notes Popup Startup Timing Hotfix**: Defer "What's New" release notes modal dialog rendering until the authoritative 5-second BeBig startup splash gatekeeper completes and transitions to the main app interface.
+- **Flawless Transition & Zero Flash**: Eliminates any visual flash or behind-splash modal rendering on app launch.
+- **Versioned Acknowledgement Preserved**: Preserved local version acknowledgement lifecycle (`releaseNotesService`) ensuring updates are presented once per version.
 - **Rest Timer UI Polish & Responsive Alignment**: Enhanced rest timer controls with symmetric button placement, centered timer countdown, and fluid spacing adapted for all screen widths and device aspect ratios.
 - **Improved Timer Controls & Edge Spacing**: Prevented touch target clipping on curved mobile screens and high-density displays; polished increment/decrement controls (`+30s` / `-30s`).
 - **Versioned "What's New" Release Modal**: Built-in interactive release modal (`ReleaseNotesModal`) automatically highlighting key updates and features upon app startup.

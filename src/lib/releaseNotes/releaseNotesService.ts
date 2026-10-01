@@ -17,6 +17,16 @@ export interface ReleaseNoteItem {
 }
 
 export const CURRENT_RELEASE_NOTES: Record<string, ReleaseNoteItem> = {
+  '1.0.5': {
+    version: '1.0.5',
+    title: "What's New in BeBig",
+    highlights: [
+      'Release Notes popup timing polished (appears after startup splash)',
+      'Rest Timer UI is smoother and better aligned',
+      'Navigation feels faster and smoother',
+      'Exercise Picker performance improved',
+    ],
+  },
   '1.0.4': {
     version: '1.0.4',
     title: "What's New in BeBig",

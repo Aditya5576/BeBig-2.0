@@ -38,9 +38,11 @@ jest.mock('../src/lib/storage/platformStorage', () => ({
   },
 }));
 
+let mockSegments = ['home'];
+
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn(), replace: jest.fn(), back: jest.fn() }),
-  useSegments: () => ['home'],
+  useSegments: () => mockSegments,
   useLocalSearchParams: () => ({}),
 }));
 
@@ -62,6 +64,7 @@ const createMockRestTimer = (overrides?: Partial<ActiveRestTimer>): ActiveRestTi
 
 describe('BeBig 2.0 — Release Notes & Rest Timer UI Polish', () => {
   beforeEach(() => {
+    mockSegments = ['home'];
     jest.spyOn(globalThis, 'setInterval').mockImplementation((() => 123 as any) as any);
     jest.clearAllMocks();
     mockStorageMap.clear();
@@ -154,6 +157,16 @@ describe('BeBig 2.0 — Release Notes & Rest Timer UI Polish', () => {
 
       await releaseNotesService.acknowledgeReleaseNotes('1.0.4');
       expect(await releaseNotesService.shouldShowReleaseNotes('1.0.4')).toBe(false);
+    });
+
+    it('6. Does NOT render while splash screen route (index) is active', async () => {
+      mockSegments = ['index'];
+      const { queryByTestId } = await render(
+        <ReleaseNotesModal forcedVersion="1.0.4" />,
+      );
+
+      // Modal must stay hidden (null) while on root index splash route
+      expect(queryByTestId('release-notes-modal')).toBeNull();
     });
   });
 

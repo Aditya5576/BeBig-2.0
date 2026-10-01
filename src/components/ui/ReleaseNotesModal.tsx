@@ -14,6 +14,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSegments } from 'expo-router';
 import { Text } from './Text';
 import { Button } from './Button';
 import { useAppTheme } from '../../features/theme';
@@ -41,6 +42,22 @@ export function ReleaseNotesModal({
     insets = { top: 0, bottom: 0, left: 0, right: 0 };
   }
 
+  let segments: string[] = [];
+  try {
+    if (typeof useSegments === 'function') {
+      const segs = useSegments();
+      if (Array.isArray(segs)) {
+        segments = segs;
+      }
+    }
+  } catch {
+    segments = [];
+  }
+
+  const firstSegment = segments[0];
+  // Active splash screen conditions: app/index gatekeeper screen active or initializing
+  const isSplashActive = firstSegment === 'index' || firstSegment === '(index)' || !firstSegment;
+
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   const appVersion = forcedVersion || getAppVersionInfo().version;
@@ -52,7 +69,7 @@ export function ReleaseNotesModal({
   useEffect(() => {
     setNotes(releaseNotesService.getReleaseNotesForVersion(appVersion));
 
-    if (!autoCheck) {
+    if (!autoCheck || isSplashActive) {
       return;
     }
 
@@ -71,7 +88,7 @@ export function ReleaseNotesModal({
     return () => {
       isMounted = false;
     };
-  }, [appVersion, autoCheck]);
+  }, [appVersion, autoCheck, isSplashActive]);
 
   const handleDismiss = async () => {
     setVisible(false);
@@ -83,7 +100,7 @@ export function ReleaseNotesModal({
     onDismiss?.();
   };
 
-  if (!visible) {
+  if (!visible || isSplashActive) {
     return null;
   }
 
