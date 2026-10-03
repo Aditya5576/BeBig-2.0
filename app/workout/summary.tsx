@@ -1,11 +1,17 @@
 import { useAppTheme } from '../../src/features/theme';
-import React, { useEffect, useState, useRef } from 'react';
-import { View, StyleSheet, ScrollView, ActivityIndicator, TextInput } from 'react-native';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
+import { View, StyleSheet, ScrollView, ActivityIndicator, TextInput, Pressable } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ScreenContainer, Text, Button, Card } from '../../src/components/ui';
 import { workoutRepository, WorkoutSession } from '../../src/features/workout';
 import { templateRepository, CreateTemplateInput } from '../../src/features/templates';
 import { spacing, radii } from '../../src/constants/theme';
+import {
+  ExercisePerformanceSnapshot,
+  extractExercisePerformances,
+  findPreviousPerformance,
+  compareExerciseSets,
+} from '../../src/features/performance';
 
 export function convertWorkoutToTemplateInput(workout: WorkoutSession, customName?: string): CreateTemplateInput {
   const templateName = customName && customName.trim() ? customName.trim() : workout.name || 'Quick Workout';
@@ -71,6 +77,7 @@ export default function WorkoutSummaryScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
 
   const [workout, setWorkout] = useState<WorkoutSession | null>(null);
+  const [allWorkouts, setAllWorkouts] = useState<WorkoutSession[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Save as Template state
@@ -94,13 +101,15 @@ export default function WorkoutSummaryScreen() {
           const found = await workoutRepository.getCompletedWorkoutById(id);
           if (found) {
             setWorkout(found);
-            return;
+          }
+        } else {
+          const completed = await workoutRepository.getCompletedWorkouts();
+          if (completed.length > 0) {
+            setWorkout(completed[0]);
           }
         }
-        const completed = await workoutRepository.getCompletedWorkouts();
-        if (completed.length > 0) {
-          setWorkout(completed[0]);
-        }
+        const allCompleted = await workoutRepository.getCompletedWorkouts();
+        setAllWorkouts(allCompleted);
       } catch {
         setWorkout(null);
       } finally {
@@ -110,6 +119,65 @@ export default function WorkoutSummaryScreen() {
 
     void loadSummary();
   }, [id]);
+
+  // Group exercise snapshots from all completed workouts (excluding current workout)
+  const exerciseSnapshotsMap = useMemo(() => {
+    const map = new Map<string, ExercisePerformanceSnapshot[]>();
+    for (const w of allWorkouts) {
+      const exSnaps = extractExercisePerformances(w);
+      for (const s of exSnaps) {
+        const existing = map.get(s.exerciseId) || [];
+        existing.push(s);
+        map.set(s.exerciseId, existing);
+      }
+    }
+    return map;
+  }, [allWorkouts]);
+
+  // Current workout exercise snapshots
+  const currentWorkoutSnapshots = useMemo(() => {
+    if (!workout) return [];
+    return extractExercisePerformances(workout);
+  }, [workout]);
+
+  // Insights summary counts
+  const insightsSummary = useMemo(() => {
+    if (!workout) return { progressed: 0, maintained: 0, decreased: 0, totalCompared: 0, hasHistory: false };
+
+    let progressed = 0;
+    let maintained = 0;
+    let decreased = 0;
+    let totalCompared = 0;
+
+    const currentSnaps = extractExercisePerformances(workout);
+
+    for (const currSnap of currentSnaps) {
+      const historySnaps = exerciseSnapshotsMap.get(currSnap.exerciseId) || [];
+      const prevSnap = findPreviousPerformance(currSnap, historySnaps);
+      if (prevSnap) {
+        totalCompared++;
+        const comps = compareExerciseSets(currSnap.sets, prevSnap.sets);
+        const hasIncrease = comps.some((c) => c.status === 'increased' || c.status === 'new_set');
+        const hasDecrease = comps.some((c) => c.status === 'decreased' || c.status === 'removed_set');
+
+        if (hasDecrease) {
+          decreased++;
+        } else if (hasIncrease) {
+          progressed++;
+        } else {
+          maintained++;
+        }
+      }
+    }
+
+    return {
+      progressed,
+      maintained,
+      decreased,
+      totalCompared,
+      hasHistory: totalCompared > 0,
+    };
+  }, [workout, exerciseSnapshotsMap]);
 
   const handleConfirmSaveTemplate = async () => {
     if (!workout) return;
@@ -127,7 +195,6 @@ export default function WorkoutSummaryScreen() {
       const input = convertWorkoutToTemplateInput(workout, trimmedName);
       await templateRepository.createTemplate(input);
 
-      // Also propagate the new template name to the active workout / completed history session
       if (workout.id) {
         const updated = await workoutRepository.updateCompletedWorkoutName(workout.id, trimmedName);
         setWorkout(updated);
@@ -258,7 +325,187 @@ export default function WorkoutSummaryScreen() {
           </Card>
         </View>
 
-        {/* Exercise Breakdown */}
+        {/* WORKOUT INSIGHTS SECTION (PERF-5F) */}
+        <View style={styles.insightsSection} testID="workout-insights-section">
+          <View style={styles.insightsHeaderBlock}>
+            <Text variant="titleMedium" color="primary" style={styles.insightsTitle}>
+              Workout Insights
+            </Text>
+            <Text variant="caption" color="muted" style={styles.insightsSubtitle}>
+              Compared with your last workout
+            </Text>
+          </View>
+
+          {/* Factual Summary Counts Card */}
+          <Card style={styles.insightsSummaryCard} testID="insights-summary-header">
+            {!insightsSummary.hasHistory ? (
+              <Text variant="caption" color="secondary" testID="insights-first-workout-notice">
+                First recorded workout — no previous workout to compare.
+              </Text>
+            ) : insightsSummary.progressed === 0 && insightsSummary.decreased === 0 ? (
+              <Text variant="caption" color="secondary" testID="insights-no-changes-notice">
+                No changes from your previous recorded workout.
+              </Text>
+            ) : (
+              <View style={styles.summaryPillsRow}>
+                {insightsSummary.progressed > 0 && (
+                  <View style={styles.summaryPillGreen} testID="insights-count-progressed">
+                    <Text variant="caption" style={{ color: '#10B981', fontWeight: '800' }}>
+                      {insightsSummary.progressed} {insightsSummary.progressed === 1 ? 'exercise' : 'exercises'} progressed
+                    </Text>
+                  </View>
+                )}
+                {insightsSummary.maintained > 0 && (
+                  <View style={styles.summaryPillNeutral} testID="insights-count-maintained">
+                    <Text variant="caption" color="primary" style={{ fontWeight: '800' }}>
+                      {insightsSummary.maintained} {insightsSummary.maintained === 1 ? 'exercise' : 'exercises'} maintained
+                    </Text>
+                  </View>
+                )}
+                {insightsSummary.decreased > 0 && (
+                  <View style={styles.summaryPillRed} testID="insights-count-decreased">
+                    <Text variant="caption" style={{ color: '#EF4444', fontWeight: '800' }}>
+                      {insightsSummary.decreased} {insightsSummary.decreased === 1 ? 'exercise' : 'exercises'} decreased
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+          </Card>
+
+          {/* Exercise-by-Exercise Factual Insights List */}
+          {completedExercises.map((ex) => {
+            const currSnap = currentWorkoutSnapshots.find((s) => s.exerciseId === ex.exerciseId) || null;
+            const historySnaps = exerciseSnapshotsMap.get(ex.exerciseId) || [];
+            const prevSnap = currSnap ? findPreviousPerformance(currSnap, historySnaps) : null;
+            const setComps = currSnap ? compareExerciseSets(currSnap.sets, prevSnap?.sets || []) : [];
+
+            return (
+              <Card key={ex.exerciseId} style={styles.exerciseInsightCard} testID={`insights-exercise-${ex.exerciseId}`}>
+                <View style={styles.exerciseInsightHeader}>
+                  <Text variant="titleMedium" color="primary" style={styles.exInsightName}>
+                    {ex.exerciseName}
+                  </Text>
+
+                  <Pressable
+                    testID={`insights-view-progression-${ex.exerciseId}`}
+                    onPress={() =>
+                      router.push({
+                        pathname: '/workout/progress/exercise/[id]',
+                        params: { id: ex.exerciseId, name: ex.exerciseName },
+                      } as any)
+                    }
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    style={styles.viewProgressionButton}
+                  >
+                    <Text variant="caption" color="accent" style={styles.viewProgressionText}>
+                      View Full Progression →
+                    </Text>
+                  </Pressable>
+                </View>
+
+                {prevSnap && setComps.length > 0 ? (
+                  <View style={styles.setCompsList}>
+                    {setComps.map((comp) => (
+                      <View key={comp.setNumber} style={styles.setCompCard} testID={`insights-set-row-${ex.exerciseId}-${comp.setNumber}`}>
+                        <View style={styles.setCompTopRow}>
+                          <View style={styles.setCompBadge}>
+                            <Text variant="caption" color="primary" style={styles.setCompBadgeText}>
+                              SET {comp.setNumber}
+                            </Text>
+                          </View>
+
+                          {/* Delta Badge */}
+                          <View
+                            style={[
+                              styles.insightDeltaBadge,
+                              comp.status === 'increased' && styles.deltaGreen,
+                              comp.status === 'decreased' && styles.deltaRed,
+                              comp.status === 'new_set' && styles.deltaBlue,
+                              comp.status === 'removed_set' && styles.deltaMuted,
+                            ]}
+                          >
+                            <Text
+                              variant="caption"
+                              style={[
+                                styles.insightDeltaText,
+                                comp.status === 'increased' && { color: '#10B981' },
+                                comp.status === 'decreased' && { color: '#EF4444' },
+                                comp.status === 'new_set' && { color: '#3B82F6' },
+                                comp.status === 'removed_set' && { color: '#9CA3AF' },
+                                comp.status === 'no_change' && { color: colors.textMuted },
+                              ]}
+                              testID={`insights-set-delta-${ex.exerciseId}-${comp.setNumber}`}
+                            >
+                              {comp.displayText}
+                            </Text>
+                          </View>
+                        </View>
+
+                        <View style={styles.setCompValuesRow}>
+                          {comp.status === 'new_set' ? (
+                            <View style={styles.setValBlock}>
+                              <Text variant="caption" color="muted" style={styles.valLabel}>
+                                CURRENT
+                              </Text>
+                              <Text variant="bodyBold" color="primary" style={styles.valTextCurrent}>
+                                {comp.currentSet ? `${comp.currentSet.weight} kg × ${comp.currentSet.reps}` : '—'}
+                              </Text>
+                            </View>
+                          ) : comp.status === 'removed_set' ? (
+                            <View style={styles.setValBlock}>
+                              <Text variant="caption" color="muted" style={styles.valLabel}>
+                                PREVIOUS
+                              </Text>
+                              <Text variant="body" color="muted" style={[styles.valTextPrev, { textDecorationLine: 'line-through' }]}>
+                                {comp.previousSet ? `${comp.previousSet.weight} kg × ${comp.previousSet.reps}` : '—'}
+                              </Text>
+                            </View>
+                          ) : (
+                            <View style={styles.setComparisonFlex}>
+                              <View style={styles.setValBlock}>
+                                <Text variant="caption" color="muted" style={styles.valLabel}>
+                                  PREVIOUS
+                                </Text>
+                                <Text variant="body" color="secondary" style={styles.valTextPrev}>
+                                  {comp.previousSet ? `${comp.previousSet.weight} kg × ${comp.previousSet.reps}` : '—'}
+                                </Text>
+                              </View>
+
+                              <Text variant="body" color="muted" style={styles.arrowText}>
+                                →
+                              </Text>
+
+                              <View style={styles.setValBlock}>
+                                <Text variant="caption" color="muted" style={styles.valLabel}>
+                                  CURRENT
+                                </Text>
+                                <Text variant="bodyBold" color="primary" style={styles.valTextCurrent}>
+                                  {comp.currentSet ? `${comp.currentSet.weight} kg × ${comp.currentSet.reps}` : '—'}
+                                </Text>
+                              </View>
+                            </View>
+                          )}
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                ) : (
+                  <Text
+                    variant="caption"
+                    color="secondary"
+                    style={{ marginVertical: spacing.xs }}
+                    testID={`insights-first-record-${ex.exerciseId}`}
+                  >
+                    First recorded workout for this exercise
+                  </Text>
+                )}
+              </Card>
+            );
+          })}
+        </View>
+
+        {/* Session Details Breakdown */}
         <View style={styles.breakdownSection}>
           <Text variant="titleMedium" color="primary" style={styles.breakdownTitle}>
             Session Details
@@ -405,6 +652,7 @@ const createStyles = (colors: any) => StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingVertical: spacing.md,
+    paddingBottom: spacing.xxl + 48,
     gap: spacing.lg,
   },
   header: {
@@ -443,6 +691,154 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   metricValue: {
     fontSize: 22,
+    fontWeight: '800',
+  },
+  insightsSection: {
+    gap: spacing.sm,
+  },
+  insightsHeaderBlock: {
+    gap: 2,
+    marginBottom: 2,
+  },
+  insightsTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  insightsSubtitle: {
+    fontSize: 12,
+  },
+  insightsSummaryCard: {
+    padding: spacing.sm + 2,
+  },
+  summaryPillsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  summaryPillGreen: {
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 4,
+    borderRadius: radii.full,
+  },
+  summaryPillNeutral: {
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 4,
+    borderRadius: radii.full,
+  },
+  summaryPillRed: {
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 4,
+    borderRadius: radii.full,
+  },
+  exerciseInsightCard: {
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  exerciseInsightHeader: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: spacing.xs - 2,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+    paddingBottom: spacing.xs + 2,
+  },
+  exInsightName: {
+    fontSize: 15,
+    fontWeight: '800',
+    width: '100%',
+  },
+  viewProgressionButton: {
+    alignSelf: 'flex-start',
+  },
+  viewProgressionText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  setCompsList: {
+    gap: spacing.xs + 2,
+    marginTop: 2,
+  },
+  setCompCard: {
+    gap: spacing.xs,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: radii.xs || 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  setCompTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  setCompBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 3,
+  },
+  setCompBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  setCompValuesRow: {
+    paddingTop: 2,
+  },
+  setComparisonFlex: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  setValBlock: {
+    gap: 2,
+  },
+  valLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  valTextPrev: {
+    fontSize: 13,
+    fontWeight: '600',
+    opacity: 0.75,
+  },
+  valTextCurrent: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  arrowText: {
+    fontSize: 14,
+    fontWeight: '700',
+    opacity: 0.5,
+    marginHorizontal: 2,
+  },
+  insightDeltaBadge: {
+    paddingHorizontal: spacing.xs + 4,
+    paddingVertical: 3,
+    borderRadius: radii.full,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  deltaGreen: {
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+  },
+  deltaRed: {
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+  },
+  deltaBlue: {
+    backgroundColor: 'rgba(59, 130, 246, 0.15)',
+  },
+  deltaMuted: {
+    backgroundColor: 'rgba(156, 163, 175, 0.15)',
+  },
+  insightDeltaText: {
+    fontSize: 11,
     fontWeight: '800',
   },
   breakdownSection: {
