@@ -40,7 +40,7 @@ const useFocusEffect =
 
 export default function CalendarScreen() {
   const { colors } = useAppTheme();
-  const styles = createStyles(colors);
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const router = useRouter();
 
   const [selectedDate, setSelectedDate] = useState<string>(getTodayIsoDate());

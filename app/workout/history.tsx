@@ -29,7 +29,7 @@ interface MonthGroup {
 
 export default function WorkoutHistoryScreen() {
   const { colors } = useAppTheme();
-  const styles = createStyles(colors);
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const router = useRouter();
 

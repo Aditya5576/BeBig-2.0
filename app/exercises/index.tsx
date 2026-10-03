@@ -1,5 +1,5 @@
 import { useAppTheme } from '../../src/features/theme';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -25,7 +25,7 @@ function CustomExerciseSyncStatus({ exerciseId, isCustom }: { exerciseId: string
 
 export default function ExerciseListScreen() {
   const { colors } = useAppTheme();
-  const styles = createStyles(colors);
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const router = useRouter();
 
@@ -176,7 +176,7 @@ export default function ExerciseListScreen() {
     }
   };
 
-  const renderItem = ({ item }: { item: Exercise }) => {
+  const renderItem = useCallback(({ item }: { item: Exercise }) => {
     const equipmentText =
       item.equipment.length > 0 ? item.equipment.map((e) => e.name).join(', ') : 'Bodyweight';
     const muscleText =
@@ -224,7 +224,7 @@ export default function ExerciseListScreen() {
         </Card>
       </Pressable>
     );
-  };
+  }, [router, styles]);
 
   return (
     <ScreenContainer>
@@ -392,6 +392,9 @@ export default function ExerciseListScreen() {
           data={exercises}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={5}
           contentContainerStyle={styles.listContent}
           onEndReached={handleLoadMore}
           onEndReachedThreshold={0.5}

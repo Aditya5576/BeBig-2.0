@@ -31,7 +31,7 @@ const useFocusEffect =
 
 export default function HomeScreen() {
   const { colors } = useAppTheme();
-  const styles = createStyles(colors);
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const router = useRouter();
 

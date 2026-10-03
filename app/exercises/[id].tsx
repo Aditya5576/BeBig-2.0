@@ -193,6 +193,20 @@ export default function ExerciseDetailScreen() {
           <Text variant="display" color="primary" testID="exercise-detail-name">
             {exercise.name}
           </Text>
+
+          <Button
+            testID="exercise-detail-view-progression-button"
+            title="📊 View Performance Progression"
+            onPress={() =>
+              router.push({
+                pathname: '/workout/progress/exercise/[id]',
+                params: { id: exercise.id, name: exercise.name },
+              } as any)
+            }
+            variant="primary"
+            size="md"
+            style={{ marginTop: spacing.sm }}
+          />
         </View>
 
         {/* Anatomy & Equipment Card */}

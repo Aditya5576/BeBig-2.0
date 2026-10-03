@@ -1,5 +1,5 @@
 import { useAppTheme } from '../../src/features/theme';
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { View, StyleSheet, FlatList, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { ScreenContainer, ScreenFlatList, Text, Button, Card } from '../../src/components/ui';
@@ -16,7 +16,7 @@ function TemplateSyncStatus({ templateId }: { templateId: string }) {
 
 export default function TemplatesListScreen() {
   const { colors } = useAppTheme();
-  const styles = createStyles(colors);
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const router = useRouter();
 
@@ -41,7 +41,7 @@ export default function TemplatesListScreen() {
     }, [loadTemplates]),
   );
 
-  const handleDeleteTemplate = (template: WorkoutTemplate) => {
+  const handleDeleteTemplate = useCallback((template: WorkoutTemplate) => {
     Alert.alert(
       'Delete Template',
       `Are you sure you want to delete "${template.name}"? This action cannot be undone.`,
@@ -57,9 +57,9 @@ export default function TemplatesListScreen() {
         },
       ],
     );
-  };
+  }, [loadTemplates]);
 
-  const renderItem = ({ item }: { item: WorkoutTemplate }) => {
+  const renderItem = useCallback(({ item }: { item: WorkoutTemplate }) => {
     const exerciseSummary = item.exercises.map((e) => e.exerciseName).join(' • ');
 
     return (
@@ -116,7 +116,7 @@ export default function TemplatesListScreen() {
         </View>
       </Card>
     );
-  };
+  }, [router, styles, handleDeleteTemplate]);
 
   return (
     <ScreenContainer>
@@ -187,6 +187,9 @@ export default function TemplatesListScreen() {
           data={templates}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
+          initialNumToRender={8}
+          maxToRenderPerBatch={8}
+          windowSize={5}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
         />

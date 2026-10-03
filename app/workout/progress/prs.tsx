@@ -15,7 +15,7 @@ const useFocusEffect = routerFocusEffect || React.useEffect;
 
 export default function PersonalRecordsScreen() {
   const { colors } = useAppTheme();
-  const styles = createStyles(colors);
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const router = useRouter();
 
@@ -25,7 +25,9 @@ export default function PersonalRecordsScreen() {
   useFocusEffect(
     useCallback(() => {
       let isMounted = true;
-      setLoading(true);
+      if (records.length === 0) {
+        setLoading(true);
+      }
       void (async () => {
         try {
           const workouts = await workoutRepository.getCompletedWorkouts();
@@ -122,22 +124,22 @@ export default function PersonalRecordsScreen() {
             {/* Summary Highlights */}
             <View style={styles.summaryGrid}>
               <Card style={styles.summaryCard} testID="prs-summary-total">
-                <Text variant="caption" color="muted" style={styles.summaryLabel}>
+                <Text variant="caption" color="muted" style={styles.summaryLabel} numberOfLines={1}>
                   TOTAL RECORDS
                 </Text>
                 <Text variant="titleLarge" color="primary" style={styles.summaryValue}>
                   🏆 {records.length}
                 </Text>
-                <Text variant="caption" color="secondary">
+                <Text variant="caption" color="secondary" numberOfLines={1}>
                   Unique exercises
                 </Text>
               </Card>
 
               <Card style={styles.summaryCard} testID="prs-summary-heaviest">
-                <Text variant="caption" color="muted" style={styles.summaryLabel}>
+                <Text variant="caption" color="muted" style={styles.summaryLabel} numberOfLines={1}>
                   HEAVIEST LIFT
                 </Text>
-                <Text variant="titleLarge" color="accent" style={styles.summaryValue}>
+                <Text variant="titleLarge" color="accent" style={styles.summaryValue} numberOfLines={1}>
                   {heaviestLift ? `${heaviestLift.maxWeight} kg` : '—'}
                 </Text>
                 <Text variant="caption" color="secondary" numberOfLines={1}>
@@ -146,7 +148,7 @@ export default function PersonalRecordsScreen() {
               </Card>
 
               <Card style={styles.summaryCard} testID="prs-summary-recent">
-                <Text variant="caption" color="muted" style={styles.summaryLabel}>
+                <Text variant="caption" color="muted" style={styles.summaryLabel} numberOfLines={1}>
                   LATEST RECORD
                 </Text>
                 <Text variant="titleMedium" color="primary" style={styles.summaryValue} numberOfLines={1}>
@@ -340,8 +342,9 @@ const createStyles = (colors: any) => StyleSheet.create({
     gap: spacing.xs,
   },
   summaryLabel: {
+    fontSize: 10,
     fontWeight: '700',
-    letterSpacing: 0.6,
+    letterSpacing: 0.3,
     textTransform: 'uppercase',
   },
   summaryValue: {
@@ -380,6 +383,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: spacing.xs + 2,
+    flexShrink: 0,
   },
   rankText: {
     fontWeight: '700',
@@ -399,11 +403,13 @@ const createStyles = (colors: any) => StyleSheet.create({
   weightContainer: {
     alignItems: 'flex-end',
     marginRight: spacing.xs,
+    flexShrink: 0,
   },
   weightValue: {
     fontWeight: '700',
   },
   chevron: {
     marginLeft: spacing.xs,
+    flexShrink: 0,
   },
 });

@@ -1,5 +1,5 @@
 import { useAppTheme } from '../../../src/features/theme';
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, TextInput, Alert } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ScreenContainer, Text, Button, Card } from '../../../src/components/ui';
@@ -7,6 +7,12 @@ import { workoutRepository, WorkoutSession } from '../../../src/features/workout
 import { templateRepository } from '../../../src/features/templates';
 import { convertWorkoutToTemplateInput } from '../summary';
 import { spacing, radii } from '../../../src/constants/theme';
+import {
+  ExercisePerformanceSnapshot,
+  extractExercisePerformances,
+  findPreviousPerformance,
+  compareExerciseSets,
+} from '../../../src/features/performance';
 
 export default function WorkoutHistoryDetailScreen() {
   const { colors } = useAppTheme();
@@ -16,6 +22,7 @@ export default function WorkoutHistoryDetailScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
 
   const [workout, setWorkout] = useState<WorkoutSession | null>(null);
+  const [allWorkouts, setAllWorkouts] = useState<WorkoutSession[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Save as Template state
@@ -39,6 +46,8 @@ export default function WorkoutHistoryDetailScreen() {
           const found = await workoutRepository.getCompletedWorkoutById(id);
           setWorkout(found);
         }
+        const completed = await workoutRepository.getCompletedWorkouts();
+        setAllWorkouts(completed);
       } catch {
         setWorkout(null);
       } finally {
@@ -48,6 +57,20 @@ export default function WorkoutHistoryDetailScreen() {
 
     void loadWorkoutDetail();
   }, [id]);
+
+  // Group performance snapshots across all completed workouts by exerciseId
+  const exerciseSnapshotsMap = useMemo(() => {
+    const map = new Map<string, ExercisePerformanceSnapshot[]>();
+    for (const w of allWorkouts) {
+      const exSnaps = extractExercisePerformances(w);
+      for (const s of exSnaps) {
+        const existing = map.get(s.exerciseId) || [];
+        existing.push(s);
+        map.set(s.exerciseId, existing);
+      }
+    }
+    return map;
+  }, [allWorkouts]);
 
   const handleConfirmSaveTemplate = async () => {
     if (!workout) return;
@@ -65,7 +88,6 @@ export default function WorkoutHistoryDetailScreen() {
       const input = convertWorkoutToTemplateInput(workout, trimmedName);
       await templateRepository.createTemplate(input);
 
-      // Also propagate the new template name to the completed workout history
       if (workout.id) {
         const updated = await workoutRepository.updateCompletedWorkoutName(workout.id, trimmedName);
         setWorkout(updated);
@@ -145,6 +167,9 @@ export default function WorkoutHistoryDetailScreen() {
   const displayExercises = [...workout.exercises]
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
     .filter((ex) => ex.actualSets && ex.actualSets.length > 0);
+
+  // Current session performance snapshots
+  const currentWorkoutSnapshots = extractExercisePerformances(workout);
 
   return (
     <ScreenContainer>
@@ -230,13 +255,29 @@ export default function WorkoutHistoryDetailScreen() {
             const finishedSets = ex.actualSets.filter((s) => s.completed);
             const setsToRender = finishedSets.length > 0 ? finishedSets : ex.actualSets;
 
+            // Progression logic for this exercise in history
+            const currSnap = currentWorkoutSnapshots.find((s) => s.exerciseId === ex.exerciseId) || null;
+            const historySnaps = exerciseSnapshotsMap.get(ex.exerciseId) || [];
+            const prevSnap = currSnap ? findPreviousPerformance(currSnap, historySnaps) : null;
+            const setComps = currSnap ? compareExerciseSets(currSnap.sets, prevSnap?.sets || []) : [];
+
             return (
               <Card
                 key={ex.exerciseId}
                 style={styles.exerciseCard}
                 testID={`history-exercise-${ex.exerciseId}`}
               >
-                <View style={styles.exerciseHeader}>
+                {/* Exercise Title Header */}
+                <Pressable
+                  onPress={() =>
+                    router.push({
+                      pathname: '/workout/progress/exercise/[id]',
+                      params: { id: ex.exerciseId, name: ex.exerciseName },
+                    } as any)
+                  }
+                  style={styles.exerciseHeader}
+                  testID={`history-exercise-header-${ex.exerciseId}`}
+                >
                   <View style={styles.exerciseTitleGroup}>
                     <Text variant="titleMedium" color="primary" style={styles.exerciseName}>
                       {ex.exerciseName || 'Exercise'}
@@ -247,14 +288,19 @@ export default function WorkoutHistoryDetailScreen() {
                       </Text>
                     ) : null}
                   </View>
-                  <View style={styles.setsBadge}>
-                    <Text variant="caption" color="primary" style={styles.setsBadgeText}>
-                      {finishedSets.length} sets
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <View style={styles.setsBadge}>
+                      <Text variant="caption" color="primary" style={styles.setsBadgeText}>
+                        {finishedSets.length} sets
+                      </Text>
+                    </View>
+                    <Text variant="caption" color="accent" style={{ fontSize: 16, fontWeight: '700' }}>
+                      ›
                     </Text>
                   </View>
-                </View>
+                </Pressable>
 
-                {/* Read-Only Sets List */}
+                {/* Read-Only Current Sets List */}
                 <View style={styles.setsList}>
                   {setsToRender.map((s, index) => {
                     const isLastSet = index === setsToRender.length - 1;
@@ -274,9 +320,11 @@ export default function WorkoutHistoryDetailScreen() {
                           <Text variant="bodyBold" color="primary">
                             {s.weight > 0 ? `${s.weight} kg` : 'Bodyweight'} × {s.reps} reps
                           </Text>
-                          <Text variant="caption" color="muted">
-                            RIR {s.rir}
-                          </Text>
+                          {typeof s.rir === 'number' ? (
+                            <Text variant="caption" color="muted">
+                              RIR {s.rir}
+                            </Text>
+                          ) : null}
                         </View>
 
                         {s.notes ? (
@@ -287,6 +335,77 @@ export default function WorkoutHistoryDetailScreen() {
                       </View>
                     );
                   })}
+                </View>
+
+                {/* Progression Context: Since Last Workout */}
+                <View style={styles.progressionSection} testID={`history-progression-${ex.exerciseId}`}>
+                  <Text variant="caption" color="muted" style={styles.subSectionTitle}>
+                    SINCE LAST WORKOUT
+                  </Text>
+
+                  {prevSnap && setComps.length > 0 ? (
+                    <View style={styles.historySetComparisons}>
+                      {setComps.map((comp) => (
+                        <View
+                          key={comp.setNumber}
+                          style={styles.historySetCompRow}
+                          testID={`history-comp-set-${ex.exerciseId}-${comp.setNumber}`}
+                        >
+                          <View style={styles.compSetBadge}>
+                            <Text variant="caption" color="primary" style={styles.compSetBadgeText}>
+                              SET {comp.setNumber}
+                            </Text>
+                          </View>
+                          <Text variant="caption" color="muted" style={styles.historyCompPrevText}>
+                            {comp.previousSet ? `${comp.previousSet.weight} kg × ${comp.previousSet.reps}` : '—'}
+                          </Text>
+                          <Text variant="caption" color="muted">
+                            →
+                          </Text>
+                          <Text
+                            variant="caption"
+                            style={[
+                              styles.historyCompDeltaText,
+                              comp.status === 'increased' && { color: '#10B981' },
+                              comp.status === 'decreased' && { color: '#EF4444' },
+                              comp.status === 'new_set' && { color: '#3B82F6' },
+                              comp.status === 'removed_set' && { color: '#9CA3AF' },
+                              comp.status === 'no_change' && { color: colors.textMuted },
+                            ]}
+                            testID={`history-comp-delta-${ex.exerciseId}-${comp.setNumber}`}
+                          >
+                            {comp.displayText}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : (
+                    <Text
+                      variant="caption"
+                      color="secondary"
+                      style={styles.firstRecordText}
+                      testID={`history-first-record-${ex.exerciseId}`}
+                    >
+                      First recorded workout for this exercise
+                    </Text>
+                  )}
+
+                  {/* View Full Progression Action */}
+                  <Pressable
+                    testID={`history-view-full-progression-${ex.exerciseId}`}
+                    onPress={() =>
+                      router.push({
+                        pathname: '/workout/progress/exercise/[id]',
+                        params: { id: ex.exerciseId, name: ex.exerciseName },
+                      } as any)
+                    }
+                    style={styles.viewFullProgressionBtn}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Text variant="caption" color="accent" style={styles.viewFullProgressionText}>
+                      View Full Progression →
+                    </Text>
+                  </Pressable>
                 </View>
               </Card>
             );
@@ -304,254 +423,311 @@ export default function WorkoutHistoryDetailScreen() {
             style={styles.saveTemplateButton}
           />
           {templateSaved ? (
-            <View testID="save-template-success" style={styles.successBox}>
-              <Text variant="bodyBold" color="accent">
-                ✓ Saved to My Templates!
+            <View style={styles.savedNotice}>
+              <Text variant="bodyBold" color="accent" testID="template-saved-badge">
+                ✓ Saved as Template
               </Text>
-              <Button
-                testID="view-my-templates-button"
-                title="View My Templates"
-                onPress={() => router.push('/templates' as any)}
-                variant="ghost"
-                size="sm"
-              />
             </View>
-          ) : !showSaveModal ? (
+          ) : (
             <Button
-              testID="history-save-template-button"
+              testID="save-as-template-button"
               title="Save as Template"
               onPress={() => {
-                const defaultName = workout.name || 'Quick Workout';
-                updateTemplateName(defaultName);
-                setSaveError(null);
+                const initialName = workout.name || '';
+                templateNameInputRef.current = initialName;
+                setTemplateNameInput(initialName);
                 setShowSaveModal(true);
               }}
               variant="outline"
               size="lg"
               style={styles.saveTemplateButton}
             />
-          ) : (
-            <Card style={styles.saveModalCard} testID="template-save-modal">
-              <Text variant="titleMedium" color="primary">
-                Save as Template
-              </Text>
-              <Text variant="caption" color="secondary">
-                Convert this historical workout into a reusable template plan.
-              </Text>
-
-              {saveError ? (
-                <Text testID="save-template-error" variant="caption" style={styles.errorText}>
-                  ⚠ {saveError}
-                </Text>
-              ) : null}
-
-              <TextInput
-                testID="input-template-name"
-                value={templateNameInput}
-                onChangeText={updateTemplateName}
-                placeholder="e.g. Historical Workout Template"
-                placeholderTextColor={colors.textMuted}
-                style={styles.textInput}
-              />
-
-              <View style={styles.modalActionsRow}>
-                <Button
-                  testID="confirm-save-template-button"
-                  title={savingTemplate ? 'Saving...' : 'Save Template'}
-                  onPress={handleConfirmSaveTemplate}
-                  variant="primary"
-                  size="md"
-                  disabled={savingTemplate}
-                  style={styles.confirmSaveButton}
-                />
-                <Button
-                  testID="cancel-save-template-button"
-                  title="Cancel"
-                  onPress={() => {
-                    setShowSaveModal(false);
-                    setSaveError(null);
-                  }}
-                  variant="ghost"
-                  size="md"
-                  disabled={savingTemplate}
-                />
-              </View>
-            </Card>
           )}
         </View>
       </ScrollView>
+
+      {/* Save Template Modal */}
+      {showSaveModal ? (
+        <View style={styles.modalOverlay} testID="save-template-modal">
+          <Card style={styles.modalCard}>
+            <Text variant="titleLarge" color="primary" style={styles.modalTitle}>
+              Save as Template
+            </Text>
+            <Text variant="body" color="secondary" style={styles.modalSubtitle}>
+              Give this template a clear name so you can start it anytime.
+            </Text>
+
+            <TextInput
+              testID="template-name-input"
+              style={styles.textInput}
+              value={templateNameInput}
+              onChangeText={updateTemplateName}
+              placeholder="e.g. Upper Body Hypertrophy"
+              placeholderTextColor={colors.textMuted}
+              autoFocus
+            />
+
+            {saveError ? (
+              <Text variant="caption" style={[styles.errorText, { color: '#EF4444' }]}>
+                {saveError}
+              </Text>
+            ) : null}
+
+            <View style={styles.modalActions}>
+              <Button
+                testID="cancel-save-template-button"
+                title="Cancel"
+                onPress={() => setShowSaveModal(false)}
+                variant="ghost"
+                size="md"
+              />
+              <Button
+                testID="confirm-save-template-button"
+                title="Save Template"
+                onPress={handleConfirmSaveTemplate}
+                variant="primary"
+                size="md"
+                loading={savingTemplate}
+              />
+            </View>
+          </Card>
+        </View>
+      ) : null}
     </ScreenContainer>
   );
 }
 
-const createStyles = (colors: any) => StyleSheet.create({
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: spacing.lg,
-    gap: spacing.md,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.xxl + spacing.lg,
-    gap: spacing.lg,
-  },
-  header: {
-    gap: spacing.xs,
-  },
-  backButton: {
-    minHeight: 40,
-    justifyContent: 'center',
-    marginBottom: spacing.xs,
-    alignSelf: 'flex-start',
-  },
-  titleArea: {
-    gap: spacing.xs,
-  },
-  historyBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: radii.xs,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
-  },
-  historyBadgeText: {
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  metricsGrid: {
-    gap: spacing.sm,
-  },
-  metricsRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  metricCard: {
-    flex: 1,
-    padding: spacing.md,
-    gap: 4,
-    backgroundColor: colors.surfaceElevated,
-  },
-  metricLabel: {
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  breakdownSection: {
-    gap: spacing.sm,
-  },
-  sectionHeader: {
-    marginBottom: spacing.xs,
-  },
-  exerciseCard: {
-    backgroundColor: colors.surfaceElevated,
-    padding: spacing.md,
-    gap: spacing.sm,
-  },
-  exerciseHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
-    paddingBottom: spacing.xs,
-  },
-  exerciseTitleGroup: {
-    flex: 1,
-    gap: 2,
-  },
-  exerciseName: {
-    fontWeight: '700',
-  },
-  setsBadge: {
-    backgroundColor: colors.surface,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    borderRadius: radii.xs,
-  },
-  setsBadgeText: {
-    fontWeight: '700',
-  },
-  setsList: {
-    gap: spacing.xs,
-  },
-  setRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingVertical: spacing.xs + 2,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    flexWrap: 'wrap',
-  },
-  lastSetRow: {
-    borderBottomWidth: 0,
-  },
-  setIndexBadge: {
-    minWidth: 44,
-  },
-  setIndexText: {
-    fontWeight: '800',
-  },
-  setMetricsGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  setNotesText: {
-    fontStyle: 'italic',
-    flexBasis: '100%',
-    marginTop: 2,
-    paddingLeft: 44,
-  },
-  notFoundButton: {
-    minWidth: 160,
-  },
-  templateSection: {
-    marginTop: spacing.xs,
-  },
-  saveTemplateButton: {
-    minHeight: 48,
-  },
-  saveModalCard: {
-    padding: spacing.md,
-    gap: spacing.sm,
-    backgroundColor: colors.surfaceElevated,
-    borderColor: colors.border,
-  },
-  textInput: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    color: colors.textPrimary,
-    fontSize: 15,
-  },
-  modalActionsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginTop: spacing.xs,
-  },
-  confirmSaveButton: {
-    flex: 1,
-  },
-  successBox: {
-    backgroundColor: 'rgba(34, 197, 94, 0.12)',
-    borderColor: 'rgba(34, 197, 94, 0.4)',
-    borderWidth: 1,
-    borderRadius: radii.md,
-    padding: spacing.md,
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  errorText: {
-    color: colors.error,
-    fontWeight: '700',
-  },
-});
+const createStyles = (colors: any) =>
+  StyleSheet.create({
+    scrollContent: {
+      paddingBottom: 140, // Ensure bottom content is scrollable well above bottom navigation
+    },
+    header: {
+      paddingTop: spacing.md,
+      paddingBottom: spacing.sm,
+    },
+    backButton: {
+      alignSelf: 'flex-start',
+      paddingVertical: spacing.xs,
+      paddingRight: spacing.md,
+      marginBottom: spacing.xs,
+    },
+    titleArea: {
+      gap: 2,
+    },
+    historyBadge: {
+      alignSelf: 'flex-start',
+      backgroundColor: 'rgba(59, 130, 246, 0.12)',
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 2,
+      borderRadius: radii.full,
+      marginBottom: spacing.xs,
+    },
+    historyBadgeText: {
+      fontSize: 10,
+      fontWeight: '700',
+    },
+    centerContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: spacing.xl,
+      gap: spacing.md,
+    },
+    notFoundButton: {
+      marginTop: spacing.md,
+    },
+    metricsGrid: {
+      gap: spacing.sm,
+      marginBottom: spacing.md,
+    },
+    metricsRow: {
+      flexDirection: 'row',
+      gap: spacing.sm,
+    },
+    metricCard: {
+      flex: 1,
+      padding: spacing.sm,
+      alignItems: 'center',
+    },
+    metricLabel: {
+      fontSize: 10,
+      fontWeight: '700',
+      letterSpacing: 0.5,
+      marginBottom: 2,
+    },
+    breakdownSection: {
+      gap: spacing.md,
+    },
+    sectionHeader: {
+      marginBottom: spacing.xs,
+    },
+    exerciseCard: {
+      padding: spacing.md,
+      gap: spacing.sm,
+    },
+    exerciseHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+      paddingBottom: spacing.xs,
+    },
+    exerciseTitleGroup: {
+      flex: 1,
+      gap: 2,
+    },
+    exerciseName: {
+      fontWeight: '700',
+    },
+    setsBadge: {
+      backgroundColor: 'rgba(255, 255, 255, 0.08)',
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 2,
+      borderRadius: radii.full,
+    },
+    setsBadgeText: {
+      fontSize: 11,
+    },
+    setsList: {
+      gap: spacing.xs,
+    },
+    subSectionTitle: {
+      fontSize: 10,
+      fontWeight: '800',
+      letterSpacing: 0.8,
+      marginBottom: spacing.xs,
+    },
+    setRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingVertical: spacing.xs,
+      borderBottomWidth: 1,
+      borderBottomColor: 'rgba(255, 255, 255, 0.05)',
+    },
+    lastSetRow: {
+      borderBottomWidth: 0,
+    },
+    setIndexBadge: {
+      backgroundColor: 'rgba(255, 255, 255, 0.06)',
+      paddingHorizontal: spacing.xs,
+      paddingVertical: 2,
+      borderRadius: radii.xs || 4,
+    },
+    setIndexText: {
+      fontSize: 10,
+      fontWeight: '700',
+    },
+    setMetricsGroup: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+    },
+    setNotesText: {
+      fontStyle: 'italic',
+    },
+    progressionSection: {
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+      paddingTop: spacing.sm,
+      marginTop: spacing.xs,
+    },
+    historySetComparisons: {
+      gap: spacing.xs,
+      marginVertical: spacing.xs,
+    },
+    historySetCompRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+      backgroundColor: 'rgba(255, 255, 255, 0.03)',
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 4,
+      borderRadius: radii.xs || 4,
+    },
+    compSetBadge: {
+      backgroundColor: 'rgba(255, 255, 255, 0.08)',
+      paddingHorizontal: 4,
+      paddingVertical: 1,
+      borderRadius: 2,
+    },
+    compSetBadgeText: {
+      fontSize: 9,
+      fontWeight: '700',
+    },
+    historyCompPrevText: {
+      fontSize: 12,
+      textDecorationLine: 'line-through',
+      opacity: 0.7,
+    },
+    historyCompDeltaText: {
+      fontSize: 12,
+      fontWeight: '700',
+    },
+    firstRecordText: {
+      fontSize: 12,
+      marginVertical: spacing.xs,
+    },
+    viewFullProgressionBtn: {
+      marginTop: spacing.xs,
+      alignSelf: 'flex-start',
+    },
+    viewFullProgressionText: {
+      fontSize: 12,
+      fontWeight: '700',
+    },
+    templateSection: {
+      marginTop: spacing.xl,
+      gap: spacing.sm,
+      alignItems: 'center',
+    },
+    saveTemplateButton: {
+      width: '100%',
+    },
+    savedNotice: {
+      paddingVertical: spacing.xs,
+    },
+    modalOverlay: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.7)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: spacing.md,
+      zIndex: 100,
+    },
+    modalCard: {
+      width: '100%',
+      padding: spacing.lg,
+      gap: spacing.md,
+    },
+    modalTitle: {
+      textAlign: 'center',
+    },
+    modalSubtitle: {
+      textAlign: 'center',
+    },
+    textInput: {
+      backgroundColor: 'rgba(255, 255, 255, 0.08)',
+      color: colors.textPrimary,
+      borderRadius: radii.md,
+      padding: spacing.md,
+      fontSize: 16,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    errorText: {
+      textAlign: 'center',
+    },
+    modalActions: {
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      gap: spacing.sm,
+      marginTop: spacing.xs,
+    },
+  });
