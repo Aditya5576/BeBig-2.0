@@ -4,7 +4,8 @@ import { useRouter, useFocusEffect as routerFocusEffect } from 'expo-router';
 import { useAppTheme } from '../../../src/features/theme';
 import { ScreenContainer, ScreenScrollView, Text } from '../../../src/components/ui';
 import { workoutRepository, WorkoutSession } from '../../../src/features/workout';
-import { calculateWeeklyPerformance, WeeklyPerformanceCard } from '../../../src/features/performance';
+import { calculateWeeklyPerformance } from '../../../src/features/performance';
+import { WeeklyPerformanceCard } from '../../../src/features/performance/WeeklyPerformanceCard';
 import { spacing } from '../../../src/constants/theme';
 
 const useFocusEffect =

@@ -11,7 +11,6 @@ export * from './comparison';
 export * from './prDetection';
 export * from './classification';
 export * from './weekly';
-export * from './WeeklyPerformanceCard';
 
 
 

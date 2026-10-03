@@ -4,8 +4,8 @@ import { WorkoutSession } from '../src/features/workout';
 import {
   calculateWeeklyPerformance,
   getCalendarWeekRange,
-  WeeklyPerformanceCard,
 } from '../src/features/performance';
+import { WeeklyPerformanceCard } from '../src/features/performance/WeeklyPerformanceCard';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
