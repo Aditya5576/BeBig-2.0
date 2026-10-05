@@ -124,11 +124,7 @@ export const workoutStorage = {
       throw new Error('Cannot save active workout without an active user session.');
     }
 
-    try {
-      await writeStorage(key, JSON.stringify(workout));
-    } catch {
-      // Handled
-    }
+    await writeStorage(key, JSON.stringify(workout));
   },
 
   clearActiveWorkout: async (scope?: UserScope | null): Promise<void> => {
@@ -143,13 +139,9 @@ export const workoutStorage = {
     const key = getUserScopedKey(BASE_ACTIVE_WORKOUT_KEY, resolvedScope);
     if (!key) return;
 
-    try {
-      await deleteStorage(key);
-      if (process.env.NODE_ENV === 'test') {
-        await deleteStorage('bebig.active.workout');
-      }
-    } catch {
-      // Handled
+    await deleteStorage(key);
+    if (process.env.NODE_ENV === 'test') {
+      await deleteStorage('bebig.active.workout');
     }
   },
 
@@ -212,14 +204,10 @@ export const workoutStorage = {
       throw new Error('Cannot save completed workout without an active user session.');
     }
 
-    try {
-      const current = await workoutStorage.getCompletedWorkouts(targetScope);
-      const filtered = current.filter((w) => w.id !== workout.id);
-      const updated = [workout, ...filtered];
-      await writeStorage(key, JSON.stringify(updated));
-    } catch {
-      // Handled
-    }
+    const current = await workoutStorage.getCompletedWorkouts(targetScope);
+    const filtered = current.filter((w) => w.id !== workout.id);
+    const updated = [workout, ...filtered];
+    await writeStorage(key, JSON.stringify(updated));
   },
 
   deleteCompletedWorkout: async (id: string, scope?: UserScope | null): Promise<void> => {
@@ -234,31 +222,24 @@ export const workoutStorage = {
     const key = getUserScopedKey(BASE_COMPLETED_WORKOUTS_KEY, resolvedScope);
     if (!key) return;
 
-    try {
-      const current = await workoutStorage.getCompletedWorkouts(resolvedScope);
-      const updated = current.filter((w) => w.id !== id);
-      await writeStorage(key, JSON.stringify(updated));
-    } catch {
-      // Handled
-    }
+    const current = await workoutStorage.getCompletedWorkouts(resolvedScope);
+    const updated = current.filter((w) => w.id !== id);
+    await writeStorage(key, JSON.stringify(updated));
   },
 
   clearAllWorkouts: async (scope?: UserScope | null): Promise<void> => {
     const activeKey = getUserScopedKey(BASE_ACTIVE_WORKOUT_KEY, scope);
     const completedKey = getUserScopedKey(BASE_COMPLETED_WORKOUTS_KEY, scope);
 
-    try {
-      if (activeKey) await deleteStorage(activeKey);
-      if (completedKey) await deleteStorage(completedKey);
+    if (activeKey) await deleteStorage(activeKey);
+    if (completedKey) await deleteStorage(completedKey);
 
-      // In test runs without scope, also clear all memoryStorage and legacy keys
-      if (!scope && process.env.NODE_ENV === 'test') {
-        platformStorage.clearMemoryCache();
-        await deleteStorage('bebig.active.workout');
-        await deleteStorage('bebig.completed.workouts');
-      }
-    } catch {
-      // Handled
+    // In test runs without scope, also clear all memoryStorage and legacy keys
+    if (!scope && process.env.NODE_ENV === 'test') {
+      platformStorage.clearMemoryCache();
+      await deleteStorage('bebig.active.workout');
+      await deleteStorage('bebig.completed.workouts');
     }
   },
 };
+

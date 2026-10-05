@@ -119,14 +119,10 @@ export const templateStorage = {
       throw new Error('Cannot save template without an active user session.');
     }
 
-    try {
-      const current = await templateStorage.getTemplates(targetScope);
-      const filtered = current.filter((t) => t.id !== template.id);
-      const updated = [template, ...filtered];
-      await writeStorage(key, JSON.stringify(updated));
-    } catch {
-      // Handled
-    }
+    const current = await templateStorage.getTemplates(targetScope);
+    const filtered = current.filter((t) => t.id !== template.id);
+    const updated = [template, ...filtered];
+    await writeStorage(key, JSON.stringify(updated));
   },
 
   deleteTemplate: async (id: string, scope?: UserScope | null): Promise<void> => {
@@ -141,25 +137,17 @@ export const templateStorage = {
     const key = getUserScopedKey(BASE_TEMPLATES_STORAGE_KEY, resolvedScope);
     if (!key) return;
 
-    try {
-      const current = await templateStorage.getTemplates(resolvedScope);
-      const updated = current.filter((t) => t.id !== id);
-      await writeStorage(key, JSON.stringify(updated));
-    } catch {
-      // Handled
-    }
+    const current = await templateStorage.getTemplates(resolvedScope);
+    const updated = current.filter((t) => t.id !== id);
+    await writeStorage(key, JSON.stringify(updated));
   },
 
   clearTemplates: async (scope?: UserScope | null): Promise<void> => {
     const key = getUserScopedKey(BASE_TEMPLATES_STORAGE_KEY, scope);
-    try {
-      if (key) await deleteStorage(key);
-      if (!scope && process.env.NODE_ENV === 'test') {
-        platformStorage.clearMemoryCache();
-        await deleteStorage('bebig.workout.templates');
-      }
-    } catch {
-      // Handled
+    if (key) await deleteStorage(key);
+    if (!scope && process.env.NODE_ENV === 'test') {
+      platformStorage.clearMemoryCache();
+      await deleteStorage('bebig.workout.templates');
     }
   },
 };

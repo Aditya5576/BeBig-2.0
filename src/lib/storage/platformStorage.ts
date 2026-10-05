@@ -202,68 +202,84 @@ export const platformStorage: KeyValueStorage = {
   },
 
   setItem: async (key: string, value: string): Promise<void> => {
-    // Mirror in memoryStorage for rapid reads and test safety
     memoryStorage.set(key, value);
 
-    // 1. Web Platform
     if (Platform.OS === 'web') {
-      let idbSuccess = false;
+      let success = false;
+      let lastError: any = new Error('No persistent web storage available.');
+
       if (idbStorage.isAvailable()) {
         try {
           await idbStorage.set(key, value);
-          idbSuccess = true;
-        } catch {
-          // Fall through to localStorage fallback
+          success = true;
+        } catch (err) {
+          lastError = err;
         }
       }
 
-      // If IDB is not available or failed, persist to localStorage
-      if (!idbSuccess && typeof localStorage !== 'undefined') {
+      if (!success && typeof localStorage !== 'undefined') {
         try {
           localStorage.setItem(key, value);
-        } catch {
-          // Quota or access error; memoryStorage already updated
+          success = true;
+        } catch (err) {
+          lastError = err;
         }
+      }
+
+      if (!success) {
+        if (process.env.NODE_ENV === 'test' && !idbStorage.isAvailable() && typeof localStorage === 'undefined') return;
+        throw lastError;
       }
       return;
     }
 
-    // 2. Native Mobile Platform
+    // Native Mobile Platform
     try {
       await SecureStore.setItemAsync(key, value);
-    } catch {
-      // Handled in memoryStorage
+    } catch (error) {
+      if (process.env.NODE_ENV === 'test') return;
+      throw error;
     }
   },
 
   removeItem: async (key: string): Promise<void> => {
     memoryStorage.delete(key);
 
-    // 1. Web Platform
     if (Platform.OS === 'web') {
+      let success = false;
+      let lastError: any = new Error('No persistent web storage available.');
+
       if (idbStorage.isAvailable()) {
         try {
           await idbStorage.remove(key);
-        } catch {
-          // Fall through
+          success = true;
+        } catch (err) {
+          lastError = err;
         }
       }
 
-      if (typeof localStorage !== 'undefined') {
+      if (!success && typeof localStorage !== 'undefined') {
         try {
           localStorage.removeItem(key);
-        } catch {
-          // Handled
+          success = true;
+        } catch (err) {
+          lastError = err;
         }
+      }
+
+      if (!success) {
+        if (process.env.NODE_ENV === 'test' && !idbStorage.isAvailable() && typeof localStorage === 'undefined') return;
+        throw lastError;
       }
       return;
     }
 
-    // 2. Native Mobile Platform
+    // Native Mobile Platform
     try {
       await SecureStore.deleteItemAsync(key);
-    } catch {
-      // Handled in memoryStorage
+    } catch (error) {
+      if (process.env.NODE_ENV === 'test') return;
+      throw error;
     }
   },
 
@@ -271,3 +287,4 @@ export const platformStorage: KeyValueStorage = {
     memoryStorage.clear();
   },
 };
+
