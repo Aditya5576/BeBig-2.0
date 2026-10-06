@@ -168,15 +168,8 @@ export const profileService: IProfileService = {
       onboarding_completed: resolvedOnboardingCompleted,
     };
 
-    // 1. Save local and auth_metadata first (recovery/fallback)
-    await writeLocalProfile(userId, merged);
-    try {
-      const { useAuthStore } = require('../../auth/store/useAuthStore');
-      useAuthStore.getState().updateUserProfile(merged);
-    } catch {}
-
     if (isSupabaseConfigured()) {
-      // 2. Write to public.profiles (AUTHORITATIVE)
+      // 1. Write to public.profiles (AUTHORITATIVE) FIRST
       const { data: updated, error } = await supabase
         .from('profiles')
         .upsert(merged)
@@ -194,7 +187,7 @@ export const profileService: IProfileService = {
           onboarding_completed: resolvedOnboardingCompleted,
         };
 
-        // 3. Keep auth metadata updated for cross-device fallback compatibility AFTER DB success
+        // 2. Keep auth metadata updated for cross-device fallback compatibility AFTER DB success
         try {
           await supabase.auth.updateUser({
             data: {
@@ -204,14 +197,22 @@ export const profileService: IProfileService = {
           });
         } catch {}
 
-        // Re-write local with confirmed cloud data
+        // 3. Write local with confirmed cloud data
         await writeLocalProfile(userId, cloudProfile);
         try {
           const { useAuthStore } = require('../../auth/store/useAuthStore');
           useAuthStore.getState().updateUserProfile(cloudProfile);
         } catch {}
+        
         return cloudProfile;
       }
+    } else {
+      // Offline / guest / mock mode fallback
+      await writeLocalProfile(userId, merged);
+      try {
+        const { useAuthStore } = require('../../auth/store/useAuthStore');
+        useAuthStore.getState().updateUserProfile(merged);
+      } catch {}
     }
 
     return merged;
