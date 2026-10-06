@@ -71,6 +71,8 @@ function isValidSession(item: any): item is WorkoutSession {
   return item.exercises.every(isValidExercise);
 }
 
+let activeWorkoutQueue: Promise<void> = Promise.resolve();
+
 export const workoutStorage = {
   /**
    * Clears the volatile memoryStorage map (called on sign out or user switch).
@@ -124,7 +126,11 @@ export const workoutStorage = {
       throw new Error('Cannot save active workout without an active user session.');
     }
 
-    await writeStorage(key, JSON.stringify(workout));
+    const currentTask = activeWorkoutQueue.then(async () => {
+      await writeStorage(key, JSON.stringify(workout));
+    });
+    activeWorkoutQueue = currentTask.catch(() => {});
+    return currentTask;
   },
 
   clearActiveWorkout: async (scope?: UserScope | null): Promise<void> => {
@@ -139,10 +145,14 @@ export const workoutStorage = {
     const key = getUserScopedKey(BASE_ACTIVE_WORKOUT_KEY, resolvedScope);
     if (!key) return;
 
-    await deleteStorage(key);
-    if (process.env.NODE_ENV === 'test') {
-      await deleteStorage('bebig.active.workout');
-    }
+    const currentTask = activeWorkoutQueue.then(async () => {
+      await deleteStorage(key);
+      if (process.env.NODE_ENV === 'test') {
+        await deleteStorage('bebig.active.workout');
+      }
+    });
+    activeWorkoutQueue = currentTask.catch(() => {});
+    return currentTask;
   },
 
   getCompletedWorkouts: async (scope?: UserScope | null): Promise<WorkoutSession[]> => {
