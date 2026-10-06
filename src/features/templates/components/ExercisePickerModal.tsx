@@ -48,6 +48,9 @@ export function ExercisePickerModal({
 
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [nextOffset, setNextOffset] = useState<number | undefined>(undefined);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedSource, setSelectedSource] = useState<'all' | 'custom' | 'external'>('all');
@@ -65,61 +68,95 @@ export function ExercisePickerModal({
       setIsCreatingCustom(false);
       setCustomName('');
       setCustomError(null);
+      setHasMore(false);
+      setNextOffset(undefined);
       return;
     }
 
     let isMounted = true;
 
-    async function loadExercises() {
-      // Instant local cache check first to avoid blocking user during weak network / offline
-      const cachedInitial = exerciseRepository.getCachedExercises({
-        query: searchQuery.trim() || undefined,
-        category: selectedCategory !== 'all' ? selectedCategory : undefined,
-        source: selectedSource,
-        limit: 30,
-      });
+    // Instant local cache check first to avoid blocking user during weak network / offline
+    const cachedInitial = exerciseRepository.getCachedExercises({
+      query: searchQuery.trim() || undefined,
+      category: selectedCategory !== 'all' ? selectedCategory : undefined,
+      source: selectedSource,
+    });
 
-      if (cachedInitial.length > 0) {
-        setExercises(cachedInitial);
-        setLoading(false);
-      } else {
-        setLoading(true);
-      }
+    if (cachedInitial.length > 0) {
+      setExercises(cachedInitial);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
 
-      try {
-        const result = await exerciseRepository.getExercises({
-          query: searchQuery.trim() || undefined,
-          category: selectedCategory !== 'all' ? selectedCategory : undefined,
-          source: selectedSource,
-          limit: 30,
-        });
-
-        if (isMounted) {
-          setExercises(result.exercises);
-        }
-      } catch {
-        if (isMounted && cachedInitial.length === 0) {
-          const cachedFallback = exerciseRepository.getCachedExercises({
+    const timeoutId = setTimeout(
+      async () => {
+        try {
+          const result = await exerciseRepository.getExercises({
             query: searchQuery.trim() || undefined,
             category: selectedCategory !== 'all' ? selectedCategory : undefined,
             source: selectedSource,
             limit: 30,
+            offset: 0,
           });
-          setExercises(cachedFallback);
-        }
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
-    }
 
-    void loadExercises();
+          if (isMounted) {
+            setExercises(result.exercises);
+            setHasMore(result.hasMore);
+            setNextOffset(result.nextOffset);
+          }
+        } catch {
+          if (isMounted && cachedInitial.length === 0) {
+            const cachedFallback = exerciseRepository.getCachedExercises({
+              query: searchQuery.trim() || undefined,
+              category: selectedCategory !== 'all' ? selectedCategory : undefined,
+              source: selectedSource,
+            });
+            setExercises(cachedFallback);
+            setHasMore(false);
+            setNextOffset(undefined);
+          }
+        } finally {
+          if (isMounted) {
+            setLoading(false);
+          }
+        }
+      },
+      searchQuery ? 200 : 0,
+    );
 
     return () => {
       isMounted = false;
+      clearTimeout(timeoutId);
     };
   }, [visible, searchQuery, selectedCategory, selectedSource]);
+
+  const handleLoadMore = async () => {
+    if (loading || loadingMore || !hasMore || nextOffset === undefined) return;
+    setLoadingMore(true);
+
+    try {
+      const result = await exerciseRepository.getExercises({
+        query: searchQuery.trim() || undefined,
+        category: selectedCategory !== 'all' ? selectedCategory : undefined,
+        source: selectedSource,
+        limit: 30,
+        offset: nextOffset,
+      });
+
+      setExercises((prev) => {
+        const existingIds = new Set(prev.map((e) => e.id));
+        const newExercises = result.exercises.filter((e) => !existingIds.has(e.id));
+        return [...prev, ...newExercises];
+      });
+      setHasMore(result.hasMore);
+      setNextOffset(result.nextOffset);
+    } catch {
+      // Keep current exercises on pagination failure
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const handleCreateCustomExercise = async () => {
     const trimmed = customName.trim();
@@ -462,6 +499,15 @@ export function ExercisePickerModal({
                 maxToRenderPerBatch={15}
                 windowSize={5}
                 removeClippedSubviews={Platform.OS !== 'web'}
+                onEndReached={handleLoadMore}
+                onEndReachedThreshold={0.5}
+                ListFooterComponent={
+                  loadingMore ? (
+                    <View style={styles.loadingMoreContainer}>
+                      <ActivityIndicator size="small" color={colors.primary} />
+                    </View>
+                  ) : null
+                }
               />
             )}
           </>
@@ -630,5 +676,10 @@ const createStyles = (colors: any) =>
       backgroundColor: '#3D1E1E',
       borderColor: colors.error,
       padding: spacing.sm,
+    },
+    loadingMoreContainer: {
+      paddingVertical: spacing.md,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
   });

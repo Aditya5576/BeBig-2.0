@@ -159,7 +159,7 @@ export class ExerciseRepository {
         // Fallback to local exercise cache on network error or timeout
         const cached = exerciseCacheStorage.searchCached({
           category: options.category,
-          limit: options.limit || 30,
+          limit: options.limit,
         });
         providerExercises = cached;
         totalCount = cached.length;
@@ -316,7 +316,7 @@ export class ExerciseRepository {
     return exerciseCacheStorage.searchCached({
       query: options.query,
       category: options.category,
-      limit: options.limit || 30,
+      limit: options.limit,
     });
   }
 
