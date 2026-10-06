@@ -10,6 +10,7 @@
  * - Restricts user context to anonymous or non-sensitive user IDs.
  */
 
+import * as Sentry from '@sentry/react-native';
 import { env } from '../../config/env';
 
 export interface ErrorContext {
@@ -30,13 +31,9 @@ const SENSITIVE_KEYS = [
   'supabasedb',
 ];
 
-/**
- * Recursively redacts sensitive auth tokens and credentials from error payloads/extra context.
- */
 export function sanitizeContextData(data: any): any {
   if (data === null || data === undefined) return data;
   if (typeof data === 'string') {
-    // Redact bearer tokens or key patterns if found in strings
     if (data.includes('Bearer ') || data.includes('eyJ')) {
       return '[REDACTED_AUTH_TOKEN]';
     }
@@ -62,10 +59,6 @@ export function sanitizeContextData(data: any): any {
 
 let isInitialized = false;
 
-/**
- * Initializes error monitoring safely.
- * Returns true if Sentry/monitoring is active, false if DSN is missing or disabled.
- */
 export function initErrorMonitoring(): boolean {
   if (isInitialized) return true;
 
@@ -78,6 +71,11 @@ export function initErrorMonitoring(): boolean {
   }
 
   try {
+    Sentry.init({
+      dsn,
+      debug: false,
+      enableAutoSessionTracking: true,
+    });
     isInitialized = true;
     if (env.isDev) {
       console.log('[MONITORING] Error monitoring successfully initialized with DSN.');
@@ -89,9 +87,6 @@ export function initErrorMonitoring(): boolean {
   }
 }
 
-/**
- * Safely captures exceptions in production, scrubbing any sensitive credentials.
- */
 export function captureException(error: unknown, context?: ErrorContext): void {
   if (!error) return;
 
@@ -104,17 +99,40 @@ export function captureException(error: unknown, context?: ErrorContext): void {
       extra: sanitizedExtra,
     });
   }
+
+  if (isInitialized) {
+    Sentry.withScope((scope) => {
+      if (sanitizedTags) {
+        scope.setTags(sanitizedTags as Record<string, string>);
+      }
+      if (sanitizedExtra) {
+        scope.setExtras(sanitizedExtra);
+      }
+      if (context?.level) {
+        scope.setLevel(context.level as Sentry.SeverityLevel);
+      }
+      Sentry.captureException(error);
+    });
+  }
 }
 
-/**
- * Sets user context anonymously for crash reporting without attaching PII.
- */
 export function setUserContext(userId: string | null): void {
   if (!userId) {
+    if (isInitialized) {
+      Sentry.setUser(null);
+    }
     return;
+  }
+  if (isInitialized) {
+    Sentry.setUser({ id: userId });
   }
 }
 
 export function isMonitoringConfigured(): boolean {
   return Boolean(env.sentryDsn);
+}
+
+export function wrapRootLayout<P extends Record<string, any>>(Component: React.ComponentType<P>): React.ComponentType<P> {
+  // Sentry.wrap handles root error boundaries safely
+  return Sentry.wrap(Component);
 }

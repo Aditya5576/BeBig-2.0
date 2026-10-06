@@ -8,7 +8,7 @@ import { useSyncLifecycle } from '../src/services/sync';
 import { useAuthStore, resolveAuthenticatedUserRoute } from '../src/features/auth';
 import { WebAlertModal, ReleaseNotesModal } from '../src/components/ui';
 import { BottomNavBar } from '../src/components/navigation';
-import { initErrorMonitoring } from '../src/services/monitoring/errorMonitoring';
+import { initErrorMonitoring, wrapRootLayout } from '../src/services/monitoring/errorMonitoring';
 import { useThemeStore, useWebThemeSync, useAppTheme } from '../src/features/theme';
 
 function useProtectedRoute() {
@@ -70,7 +70,7 @@ function useProtectedRoute() {
   }, [status, userId, segments, navigationState?.key, router]);
 }
 
-export default function RootLayout() {
+export default wrapRootLayout(function RootLayout() {
   useSyncLifecycle();
   useProtectedRoute();
   
@@ -121,5 +121,5 @@ export default function RootLayout() {
       <ReleaseNotesModal />
     </SafeAreaProvider>
   );
-}
+});
 
