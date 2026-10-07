@@ -11,6 +11,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   AppState,
+  Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ScreenContainer, Text, Button, Card } from '../../src/components/ui';
@@ -113,6 +114,9 @@ export default function ActiveWorkoutScreen() {
     Record<string, { workoutDate?: string; sets: WorkoutSet[] }>
   >({});
   const [expandedNotesSetIds, setExpandedNotesSetIds] = useState<Record<string, boolean>>({});
+  const [isMenuVisible, setIsMenuVisible] = useState(false);
+  const [isRenameModalVisible, setIsRenameModalVisible] = useState(false);
+  const [renameInputText, setRenameInputText] = useState('');
 
   const toggleNotesForSet = (setId: string) => {
     setExpandedNotesSetIds((prev) => ({ ...prev, [setId]: !prev[setId] }));
@@ -528,6 +532,49 @@ export default function ActiveWorkoutScreen() {
     router.push('/home' as any);
   };
 
+  const handleTogglePause = async () => {
+    const current = sessionRef.current || session;
+    if (!current) return;
+
+    if (current.pausedAt) {
+      const pauseStartMs = new Date(current.pausedAt).getTime();
+      const nowMs = Date.now();
+      const pauseDurationSec = Math.max(0, Math.floor((nowMs - pauseStartMs) / 1000));
+      const updated: WorkoutSession = {
+        ...current,
+        accumulatedPauseSeconds: (current.accumulatedPauseSeconds || 0) + pauseDurationSec,
+        pausedAt: null,
+      };
+      await updateSessionAndAutosaveImmediate(updated);
+    } else {
+      const updated: WorkoutSession = {
+        ...current,
+        pausedAt: new Date().toISOString(),
+      };
+      await updateSessionAndAutosaveImmediate(updated);
+    }
+  };
+
+  const handleOpenRename = () => {
+    const current = sessionRef.current || session;
+    if (!current) return;
+    setRenameInputText(current.name);
+    setIsRenameModalVisible(true);
+  };
+
+  const handleSaveRename = async () => {
+    const trimmed = renameInputText.trim();
+    if (!trimmed) {
+      Alert.alert('Invalid Name', 'Workout name cannot be empty.');
+      return;
+    }
+    const current = sessionRef.current || session;
+    if (!current) return;
+    const updated = { ...current, name: trimmed };
+    await updateSessionAndAutosaveImmediate(updated);
+    setIsRenameModalVisible(false);
+  };
+
   if (loading || !session) {
     return (
       <ScreenContainer>
@@ -565,24 +612,40 @@ export default function ActiveWorkoutScreen() {
             <Pressable
               testID="minimize-workout-button"
               onPress={handleMinimize}
-              style={styles.minimizeButton}
+              style={styles.headerIconButton}
               hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-              accessibilityLabel="Minimize workout"
+              accessibilityLabel="Back or minimize workout"
             >
-              <Text variant="titleMedium" color="primary">
-                ▼
+              <Text variant="titleLarge" color="primary" style={styles.backArrowText}>
+                ‹
               </Text>
             </Pressable>
 
             <View style={styles.headerTitleArea}>
+              <View style={styles.headerOverlineRow}>
+                <Text variant="caption" style={styles.headerOverlineText}>
+                  WORKOUT
+                </Text>
+                {session.pausedAt ? (
+                  <View style={styles.pausedPill}>
+                    <Text variant="caption" style={styles.pausedPillText}>
+                      PAUSED
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+
               <Text
                 variant="titleMedium"
                 color="primary"
                 numberOfLines={1}
+                ellipsizeMode="tail"
                 style={styles.workoutTitle}
+                testID="active-workout-title"
               >
                 {session.name}
               </Text>
+
               <ActiveWorkoutTimer
                 startedAt={session.startedAt}
                 accumulatedPauseSeconds={session.accumulatedPauseSeconds}
@@ -591,7 +654,17 @@ export default function ActiveWorkoutScreen() {
               />
             </View>
 
-            <View style={styles.headerRightSpacer} />
+            <Pressable
+              testID="active-workout-menu-button"
+              onPress={() => setIsMenuVisible(true)}
+              style={styles.headerIconButton}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              accessibilityLabel="Workout actions menu"
+            >
+              <Text variant="titleMedium" color="primary" style={styles.menuIconText}>
+                ⋮
+              </Text>
+            </Pressable>
           </View>
 
 
@@ -680,6 +753,137 @@ export default function ActiveWorkoutScreen() {
         selectedExerciseIds={session.exercises.map((e) => e.exerciseId)}
         multiSelect={true}
       />
+
+      {/* Workout Options Menu Modal */}
+      <Modal
+        visible={isMenuVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsMenuVisible(false)}
+      >
+        <Pressable
+          style={styles.menuBackdrop}
+          onPress={() => setIsMenuVisible(false)}
+        >
+          <View style={styles.menuSheet}>
+            <View style={styles.menuHeader}>
+              <Text variant="caption" style={styles.menuHeaderOverline}>
+                WORKOUT OPTIONS
+              </Text>
+              <Text variant="titleMedium" color="primary" numberOfLines={1} style={styles.menuTitleText}>
+                {session.name}
+              </Text>
+            </View>
+
+            <View style={styles.menuDivider} />
+
+            {/* Pause / Resume Action */}
+            <Pressable
+              testID="menu-toggle-pause-button"
+              onPress={() => {
+                setIsMenuVisible(false);
+                void handleTogglePause();
+              }}
+              style={styles.menuItem}
+            >
+              <Text variant="body" color="primary" style={styles.menuItemText}>
+                {session.pausedAt ? '▶  Resume Workout' : '⏸  Pause Workout'}
+              </Text>
+            </Pressable>
+
+            {/* Rename Action */}
+            <Pressable
+              testID="menu-rename-workout-button"
+              onPress={() => {
+                setIsMenuVisible(false);
+                handleOpenRename();
+              }}
+              style={styles.menuItem}
+            >
+              <Text variant="body" color="primary" style={styles.menuItemText}>
+                ✏️  Rename Workout
+              </Text>
+            </Pressable>
+
+            {/* Discard Action */}
+            <Pressable
+              testID="menu-discard-workout-button"
+              onPress={() => {
+                setIsMenuVisible(false);
+                handleDiscard();
+              }}
+              style={styles.menuItem}
+            >
+              <Text variant="body" style={styles.menuItemDestructiveText}>
+                🗑  Discard Workout
+              </Text>
+            </Pressable>
+
+            <View style={styles.menuDivider} />
+
+            {/* Close Button */}
+            <Button
+              title="Close"
+              variant="outline"
+              size="md"
+              onPress={() => setIsMenuVisible(false)}
+              style={styles.menuCloseButton}
+            />
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* Rename Workout Modal */}
+      <Modal
+        visible={isRenameModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsRenameModalVisible(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.renameBackdrop}
+        >
+          <View style={styles.renameCard}>
+            <Text variant="titleMedium" color="primary" style={styles.renameTitle}>
+              Rename Workout
+            </Text>
+            <Text variant="caption" color="secondary" style={styles.renameSubtitle}>
+              Give this active training session a personalized name.
+            </Text>
+
+            <TextInput
+              testID="rename-workout-input"
+              value={renameInputText}
+              onChangeText={setRenameInputText}
+              placeholder="e.g. Chest & Triceps"
+              placeholderTextColor={colors.textMuted}
+              style={styles.renameInput}
+              autoFocus
+              maxLength={50}
+              selectTextOnFocus
+            />
+
+            <View style={styles.renameActionsRow}>
+              <Button
+                title="Cancel"
+                variant="outline"
+                size="md"
+                onPress={() => setIsRenameModalVisible(false)}
+                style={styles.renameCancelButton}
+              />
+              <Button
+                testID="save-rename-workout-button"
+                title="Save Name"
+                variant="primary"
+                size="md"
+                onPress={handleSaveRename}
+                style={styles.renameSaveButton}
+              />
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </ScreenContainer>
   );
 }
@@ -702,29 +906,168 @@ const createStyles = (colors: any, insets: { bottom: number }) => StyleSheet.cre
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingBottom: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderLight,
-    gap: 10,
+  },
+  headerIconButton: {
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  backArrowText: {
+    fontSize: 28,
+    lineHeight: 32,
+    fontWeight: '400',
+  },
+  menuIconText: {
+    fontSize: 22,
+    fontWeight: '700',
+    lineHeight: 26,
   },
   headerTitleArea: {
     flex: 1,
     gap: 2,
     alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerOverlineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  headerOverlineText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    color: colors.textMuted,
+  },
+  pausedPill: {
+    backgroundColor: colors.surfaceElevated,
+    borderColor: colors.accent,
+    borderWidth: 1,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: radii.xs,
+  },
+  pausedPillText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: colors.accent,
+    letterSpacing: 0.5,
   },
   workoutTitle: {
     fontSize: 16,
     fontWeight: '700',
     textAlign: 'center',
+    maxWidth: 240,
   },
-  minimizeButton: {
-    padding: spacing.xs,
+  // Menu Sheet Styles
+  menuBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'flex-end',
+    padding: spacing.md,
+  },
+  menuSheet: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  menuHeader: {
+    alignItems: 'center',
+    gap: 2,
+    paddingVertical: spacing.xs,
+  },
+  menuHeaderOverline: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    color: colors.textMuted,
+  },
+  menuTitleText: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  menuDivider: {
+    height: 1,
+    backgroundColor: colors.borderLight,
+    marginVertical: 4,
+  },
+  menuItem: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+    borderRadius: radii.sm,
+  },
+  menuItemText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  menuItemDestructiveText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.error,
+  },
+  menuCloseButton: {
+    minHeight: 44,
+    marginTop: spacing.xs,
+  },
+  // Rename Modal Styles
+  renameBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'center',
-    alignItems: 'flex-start',
-    width: 44,
+    alignItems: 'center',
+    padding: spacing.lg,
   },
-  headerRightSpacer: {
-    width: 44,
+  renameCard: {
+    width: '100%',
+    maxWidth: 340,
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  renameTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  renameSubtitle: {
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: -spacing.xs,
+  },
+  renameInput: {
+    backgroundColor: colors.surfaceElevated,
+    borderColor: colors.borderLight,
+    borderWidth: 1,
+    borderRadius: radii.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    color: colors.primary,
+    fontSize: 15,
+  },
+  renameActionsRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  renameCancelButton: {
+    flex: 1,
+    minHeight: 44,
+  },
+  renameSaveButton: {
+    flex: 1,
+    minHeight: 44,
   },
   restBannerCard: {
     backgroundColor: colors.surfaceElevated,
