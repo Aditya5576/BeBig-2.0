@@ -4,7 +4,8 @@ import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, TextInput, 
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ScreenContainer, Text, Button, Card, SyncStatusChip } from '../../../src/components/ui';
 import { workoutRepository, WorkoutSession } from '../../../src/features/workout';
-import { templateRepository } from '../../../src/features/templates';
+import { templateRepository, WorkoutTemplate } from '../../../src/features/templates';
+import { WORKOUT_FOCUS_OPTIONS, deriveWorkoutFocus, getSuggestedSessionNumber } from '../../../src/features/templates/utils/templateUtils';
 import { convertWorkoutToTemplateInput } from '../summary';
 import { spacing, radii } from '../../../src/constants/theme';
 import {
@@ -35,6 +36,9 @@ export default function WorkoutHistoryDetailScreen() {
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [templateNameInput, setTemplateNameInput] = useState('');
   const templateNameInputRef = useRef('');
+  const [activeFocus, setActiveFocus] = useState<string>('Other');
+  const [sequenceNumber, setSequenceNumber] = useState<number>(1);
+  const [allTemplates, setAllTemplates] = useState<WorkoutTemplate[]>([]);
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [templateSaved, setTemplateSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -54,6 +58,8 @@ export default function WorkoutHistoryDetailScreen() {
         }
         const completed = await workoutRepository.getCompletedWorkouts();
         setAllWorkouts(completed);
+        const tpls = await templateRepository.getTemplates();
+        setAllTemplates(tpls);
       } catch {
         setWorkout(null);
       } finally {
@@ -63,6 +69,26 @@ export default function WorkoutHistoryDetailScreen() {
 
     void loadWorkoutDetail();
   }, [id]);
+
+  const openSaveModal = () => {
+    if (!workout) return;
+    const focus = deriveWorkoutFocus(workout.exercises || []);
+    const seq = getSuggestedSessionNumber(allWorkouts, focus);
+    const defaultName = `${focus} — Session ${seq}`;
+    
+    setActiveFocus(focus);
+    setSequenceNumber(seq);
+    updateTemplateName(defaultName);
+    setSaveError(null);
+    setShowSaveModal(true);
+  };
+
+  const handleFocusChange = (newFocus: string) => {
+    const seq = getSuggestedSessionNumber(allWorkouts, newFocus);
+    setActiveFocus(newFocus);
+    setSequenceNumber(seq);
+    updateTemplateName(`${newFocus} — Session ${seq}`);
+  };
 
   // Group performance snapshots across all completed workouts by exerciseId
   const exerciseSnapshotsMap = useMemo(() => {
@@ -91,7 +117,7 @@ export default function WorkoutHistoryDetailScreen() {
     setSaveError(null);
 
     try {
-      const input = convertWorkoutToTemplateInput(workout, trimmedName);
+      const input = convertWorkoutToTemplateInput(workout, trimmedName, activeFocus, sequenceNumber);
       await templateRepository.createTemplate(input);
 
       if (workout.id) {
@@ -440,40 +466,61 @@ export default function WorkoutHistoryDetailScreen() {
           ) : (
             <Button
               testID="save-as-template-button"
-              title="Save as Template"
-              onPress={() => {
-                const initialName = workout.name || '';
-                templateNameInputRef.current = initialName;
-                setTemplateNameInput(initialName);
-                setShowSaveModal(true);
-              }}
-              variant="outline"
-              size="lg"
-              style={styles.saveTemplateButton}
-            />
-          )}
-        </View>
-      </ScrollView>
+                title="Save as Template"
+                onPress={openSaveModal}
+                variant="outline"
+                size="lg"
+                style={styles.saveTemplateButton}
+              />
+            )}
+          </View>
+        </ScrollView>
+  
+        {/* Save Template Modal */}
+        {showSaveModal ? (
+          <View style={styles.modalOverlay} testID="save-template-modal">
+            <Card style={styles.modalCard}>
+              <Text variant="titleLarge" color="primary" style={styles.modalTitle}>
+                Save as Template
+              </Text>
+              <Text variant="body" color="secondary" style={styles.modalSubtitle}>
+                Give this template a clear name so you can start it anytime.
+              </Text>
 
-      {/* Save Template Modal */}
-      {showSaveModal ? (
-        <View style={styles.modalOverlay} testID="save-template-modal">
-          <Card style={styles.modalCard}>
-            <Text variant="titleLarge" color="primary" style={styles.modalTitle}>
-              Save as Template
-            </Text>
-            <Text variant="body" color="secondary" style={styles.modalSubtitle}>
-              Give this template a clear name so you can start it anytime.
-            </Text>
-
-            <TextInput
-              testID="template-name-input"
-              style={styles.textInput}
-              value={templateNameInput}
-              onChangeText={updateTemplateName}
-              placeholder="e.g. Upper Body Hypertrophy"
-              placeholderTextColor={colors.textMuted}
-              autoFocus
+              <Text variant="caption" color="primary" style={{ marginBottom: spacing.xs }}>
+                Workout Focus
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.md }}>
+                {WORKOUT_FOCUS_OPTIONS.map(option => (
+                  <Pressable
+                    key={option}
+                    onPress={() => handleFocusChange(option)}
+                    style={{
+                      paddingHorizontal: spacing.md,
+                      paddingVertical: spacing.xs,
+                      borderRadius: radii.full,
+                      backgroundColor: activeFocus === option ? colors.textPrimary : colors.surfaceSubtle,
+                      marginRight: spacing.xs,
+                    }}
+                  >
+                    <Text variant="caption" style={{ color: activeFocus === option ? colors.background : colors.textMuted }}>
+                      {option}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+  
+              <Text variant="caption" color="primary" style={{ marginBottom: spacing.xs }}>
+                Template Name
+              </Text>
+              <TextInput
+                testID="template-name-input"
+                style={styles.textInput}
+                value={templateNameInput}
+                onChangeText={updateTemplateName}
+                placeholder="e.g. Upper Body Hypertrophy"
+                placeholderTextColor={colors.textMuted}
+                autoFocus
             />
 
             {saveError ? (
@@ -740,3 +787,6 @@ const createStyles = (colors: any) =>
       marginTop: spacing.xs,
     },
   });
+
+
+

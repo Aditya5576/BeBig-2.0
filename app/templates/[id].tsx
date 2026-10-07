@@ -21,6 +21,7 @@ import {
 } from '../../src/features/templates';
 import { Exercise } from '../../src/features/exercises';
 import { spacing, radii } from '../../src/constants/theme';
+import { WORKOUT_FOCUS_OPTIONS, getTemplateFocus, getSuggestedSessionNumber } from '../../src/features/templates/utils/templateUtils';
 import { useEntitySyncStatus } from '../../src/services/sync';
 import { SyncStatusChip } from '../../src/components/ui';
 
@@ -41,6 +42,9 @@ export default function TemplateDetailScreen() {
 
   const [template, setTemplate] = useState<WorkoutTemplate | null>(null);
   const [name, setName] = useState('');
+  const [activeFocus, setActiveFocus] = useState<string>('Other');
+  const [sequenceNumber, setSequenceNumber] = useState<number>(1);
+  const [allTemplates, setAllTemplates] = useState<WorkoutTemplate[]>([]);
   const [exercises, setExercises] = useState<FormExercise[]>([]);
   const [isPickerVisible, setIsPickerVisible] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -57,10 +61,14 @@ export default function TemplateDetailScreen() {
 
       try {
         const item = await templateRepository.getTemplateById(id);
+        const tpls = await templateRepository.getTemplates();
+        if (isMounted) setAllTemplates(tpls);
         if (isMounted) {
           if (item) {
             setTemplate(item);
             setName(item.name);
+            setActiveFocus(item.workoutFocus || 'Other');
+            setSequenceNumber(item.sequenceNumber || 1);
             setExercises(
               item.exercises.map((e) => ({
                 exerciseId: e.exerciseId,
@@ -140,6 +148,11 @@ export default function TemplateDetailScreen() {
     });
   };
 
+  const handleFocusChange = (newFocus: string) => {
+    setActiveFocus(newFocus);
+    // Sequence number logic is optional here, we could just preserve it or fetch max. We won't auto-change the name aggressively on edit, because they might have a custom name.
+  };
+
   const handleUpdateExercise = (index: number, field: keyof FormExercise, value: any) => {
     setExercises((prev) => {
       const copy = [...prev];
@@ -168,6 +181,8 @@ export default function TemplateDetailScreen() {
       await templateRepository.updateTemplate({
         id,
         name: name.trim(),
+        workoutFocus: activeFocus,
+        sequenceNumber,
         exercises,
       });
 
@@ -292,6 +307,29 @@ export default function TemplateDetailScreen() {
 
           {/* Template Name Input */}
           <View style={styles.formGroup}>
+            <Text variant="label" color="secondary" style={{ marginBottom: spacing.xs }}>
+              WORKOUT FOCUS
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.md }}>
+              {WORKOUT_FOCUS_OPTIONS.map(option => (
+                <Pressable
+                  key={option}
+                  onPress={() => handleFocusChange(option)}
+                  style={{
+                    paddingHorizontal: spacing.md,
+                    paddingVertical: spacing.xs,
+                    borderRadius: radii.full,
+                    backgroundColor: activeFocus === option ? colors.textPrimary : colors.surfaceSubtle,
+                    marginRight: spacing.xs,
+                  }}
+                >
+                  <Text variant="caption" style={{ color: activeFocus === option ? colors.background : colors.textMuted }}>
+                    {option}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+
             <Text variant="label" color="secondary">
               TEMPLATE NAME
             </Text>
@@ -669,3 +707,13 @@ const createStyles = (colors: any) => StyleSheet.create({
     lineHeight: 18,
   },
 });
+
+
+
+
+
+
+
+
+
+

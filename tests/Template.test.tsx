@@ -398,8 +398,8 @@ describe('BeBig 2.0 — Workout Templates Milestone', () => {
 
       // 4. Open exercise picker and select exercise
       fireEvent.press(getByTestId('add-exercise-button'));
-      const exerciseItem = await findByText('Barbell Bench Press');
-      fireEvent.press(exerciseItem);
+      await findByText('Barbell Bench Press');
+      fireEvent.press(getByTestId('picker-exercise-wger_42'));
 
       // Verify exercise appears in template
       expect(await findByText('#1')).toBeTruthy();

@@ -24,6 +24,8 @@ export interface WorkoutTemplate {
   ownerId?: string;
   ownerType?: OwnerType;
   name: string;
+  workoutFocus?: string;
+  sequenceNumber?: number;
   exercises: TemplateExercise[];
   createdAt: string;
   updatedAt: string;
@@ -31,11 +33,15 @@ export interface WorkoutTemplate {
 
 export interface CreateTemplateInput {
   name: string;
+  workoutFocus?: string;
+  sequenceNumber?: number;
   exercises: Omit<TemplateExercise, 'order'>[];
 }
 
 export interface UpdateTemplateInput {
   id: string;
   name?: string;
+  workoutFocus?: string;
+  sequenceNumber?: number;
   exercises?: Omit<TemplateExercise, 'order'>[];
 }

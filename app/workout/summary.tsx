@@ -4,7 +4,8 @@ import { View, StyleSheet, ScrollView, ActivityIndicator, TextInput, Pressable }
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ScreenContainer, Text, Button, Card } from '../../src/components/ui';
 import { workoutRepository, WorkoutSession } from '../../src/features/workout';
-import { templateRepository, CreateTemplateInput } from '../../src/features/templates';
+import { templateRepository, CreateTemplateInput, WorkoutTemplate } from '../../src/features/templates';
+import { WORKOUT_FOCUS_OPTIONS, deriveWorkoutFocus, getSuggestedSessionNumber } from '../../src/features/templates/utils/templateUtils';
 import { spacing, radii } from '../../src/constants/theme';
 import {
   ExercisePerformanceSnapshot,
@@ -13,7 +14,7 @@ import {
   compareExerciseSets,
 } from '../../src/features/performance';
 
-export function convertWorkoutToTemplateInput(workout: WorkoutSession, customName?: string): CreateTemplateInput {
+export function convertWorkoutToTemplateInput(workout: WorkoutSession, customName?: string, workoutFocus?: string, sequenceNumber?: number): CreateTemplateInput {
   const templateName = customName && customName.trim() ? customName.trim() : workout.name || 'Quick Workout';
 
   const validExercises = (workout.exercises || []).filter((ex) => ex.exerciseId && ex.exerciseName);
@@ -65,6 +66,8 @@ export function convertWorkoutToTemplateInput(workout: WorkoutSession, customNam
 
   return {
     name: templateName,
+    workoutFocus,
+    sequenceNumber,
     exercises,
   };
 }
@@ -84,6 +87,9 @@ export default function WorkoutSummaryScreen() {
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [templateNameInput, setTemplateNameInput] = useState('');
   const templateNameInputRef = useRef('');
+  const [activeFocus, setActiveFocus] = useState<string>('Other');
+  const [sequenceNumber, setSequenceNumber] = useState<number>(1);
+  const [allTemplates, setAllTemplates] = useState<WorkoutTemplate[]>([]);
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [templateSaved, setTemplateSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -110,6 +116,8 @@ export default function WorkoutSummaryScreen() {
         }
         const allCompleted = await workoutRepository.getCompletedWorkouts();
         setAllWorkouts(allCompleted);
+        const tpls = await templateRepository.getTemplates();
+        setAllTemplates(tpls);
       } catch {
         setWorkout(null);
       } finally {
@@ -119,6 +127,26 @@ export default function WorkoutSummaryScreen() {
 
     void loadSummary();
   }, [id]);
+
+  const openSaveModal = () => {
+    if (!workout) return;
+    const focus = deriveWorkoutFocus(workout.exercises || []);
+    const seq = getSuggestedSessionNumber(allWorkouts, focus);
+    const defaultName = `${focus} — Session ${seq}`;
+    
+    setActiveFocus(focus);
+    setSequenceNumber(seq);
+    updateTemplateName(defaultName);
+    setSaveError(null);
+    setShowSaveModal(true);
+  };
+
+  const handleFocusChange = (newFocus: string) => {
+    const seq = getSuggestedSessionNumber(allWorkouts, newFocus);
+    setActiveFocus(newFocus);
+    setSequenceNumber(seq);
+    updateTemplateName(`${newFocus} — Session ${seq}`);
+  };
 
   // Group exercise snapshots from all completed workouts (excluding current workout)
   const exerciseSnapshotsMap = useMemo(() => {
@@ -192,7 +220,7 @@ export default function WorkoutSummaryScreen() {
     setSaveError(null);
 
     try {
-      const input = convertWorkoutToTemplateInput(workout, trimmedName);
+      const input = convertWorkoutToTemplateInput(workout, trimmedName, activeFocus, sequenceNumber);
       await templateRepository.createTemplate(input);
 
       if (workout.id) {
@@ -567,12 +595,7 @@ export default function WorkoutSummaryScreen() {
             <Button
               testID="save-as-template-button"
               title="Save as Template"
-              onPress={() => {
-                const defaultName = workout.name || 'Quick Workout';
-                updateTemplateName(defaultName);
-                setSaveError(null);
-                setShowSaveModal(true);
-              }}
+              onPress={openSaveModal}
               variant="outline"
               size="lg"
               style={styles.saveTemplateButton}
@@ -582,16 +605,42 @@ export default function WorkoutSummaryScreen() {
               <Text variant="titleMedium" color="primary">
                 Save as Template
               </Text>
-              <Text variant="caption" color="secondary">
+              <Text variant="caption" color="secondary" style={{ marginBottom: spacing.md }}>
                 Convert this completed workout into a reusable template plan.
               </Text>
 
               {saveError ? (
                 <Text testID="save-template-error" variant="caption" style={styles.errorText}>
-                  ⚠ {saveError}
+                  s {saveError}
                 </Text>
               ) : null}
+              
+              <Text variant="caption" color="primary" style={{ marginBottom: spacing.xs }}>
+                Workout Focus
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.md }}>
+                {WORKOUT_FOCUS_OPTIONS.map(option => (
+                  <Pressable
+                    key={option}
+                    onPress={() => handleFocusChange(option)}
+                    style={{
+                      paddingHorizontal: spacing.md,
+                      paddingVertical: spacing.xs,
+                      borderRadius: radii.full,
+                      backgroundColor: activeFocus === option ? colors.textPrimary : colors.surfaceSubtle,
+                      marginRight: spacing.xs,
+                    }}
+                  >
+                    <Text variant="caption" style={{ color: activeFocus === option ? colors.background : colors.textMuted }}>
+                      {option}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
 
+              <Text variant="caption" color="primary" style={{ marginBottom: spacing.xs }}>
+                Template Name
+              </Text>
               <TextInput
                 testID="input-template-name"
                 value={templateNameInput}
@@ -938,3 +987,5 @@ const createStyles = (colors: any) => StyleSheet.create({
     minWidth: 160,
   },
 });
+
+

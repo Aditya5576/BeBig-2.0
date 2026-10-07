@@ -93,6 +93,8 @@ export class TemplateRepository {
       ownerId: resolvedScope?.ownerId,
       ownerType: resolvedScope?.ownerType,
       name: input.name.trim(),
+      workoutFocus: input.workoutFocus,
+      sequenceNumber: input.sequenceNumber,
       exercises: normalizedExercises,
       createdAt: now,
       updatedAt: now,
@@ -156,6 +158,8 @@ export class TemplateRepository {
       ownerId: existing.ownerId || resolvedScope?.ownerId,
       ownerType: existing.ownerType || resolvedScope?.ownerType,
       name: updatedName.trim(),
+      workoutFocus: input.workoutFocus !== undefined ? input.workoutFocus : existing.workoutFocus,
+      sequenceNumber: input.sequenceNumber !== undefined ? input.sequenceNumber : existing.sequenceNumber,
       exercises: normalizedExercises,
       updatedAt: now,
     };

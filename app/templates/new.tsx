@@ -18,6 +18,9 @@ import {
 } from '../../src/features/templates';
 import { Exercise } from '../../src/features/exercises';
 import { spacing, radii } from '../../src/constants/theme';
+import { WORKOUT_FOCUS_OPTIONS, deriveWorkoutFocus, getSuggestedSessionNumber } from '../../src/features/templates/utils/templateUtils';
+import { WorkoutTemplate } from '../../src/features/templates/types';
+import { workoutRepository, WorkoutSession } from '../../src/features/workout';
 
 type FormExercise = Omit<TemplateExercise, 'order'>;
 
@@ -29,9 +32,23 @@ export default function CreateTemplateScreen() {
 
   const [name, setName] = useState('');
   const [exercises, setExercises] = useState<FormExercise[]>([]);
+  const [activeFocus, setActiveFocus] = useState<string>('Other');
+  const [sequenceNumber, setSequenceNumber] = useState<number>(1);
+  const [allTemplates, setAllTemplates] = useState<WorkoutTemplate[]>([]);
+  const [allWorkouts, setAllWorkouts] = useState<WorkoutSession[]>([]);
   const [isPickerVisible, setIsPickerVisible] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    async function load() {
+      const tpls = await templateRepository.getTemplates();
+      const completed = await workoutRepository.getCompletedWorkouts();
+      setAllWorkouts(completed);
+      setAllTemplates(tpls);
+    }
+    load();
+  }, []);
 
   const handleAddExercise = (exercise: Exercise) => {
     // Check duplicate
@@ -52,6 +69,27 @@ export default function CreateTemplateScreen() {
     };
 
     setExercises((prev) => [...prev, newEntry]);
+  };
+
+  React.useEffect(() => {
+    if (exercises.length === 0) return;
+    const focus = deriveWorkoutFocus(exercises);
+    if (focus !== activeFocus) {
+      const seq = getSuggestedSessionNumber(allWorkouts, focus);
+      setActiveFocus(focus);
+      setSequenceNumber(seq);
+      // Auto-update name if it's currently generated or empty
+      if (!name || name.includes(' — Session ')) {
+        setName(`${focus} — Session ${seq}`);
+      }
+    }
+  }, [exercises, allTemplates]);
+
+  const handleFocusChange = (newFocus: string) => {
+    const seq = getSuggestedSessionNumber(allWorkouts, newFocus);
+    setActiveFocus(newFocus);
+    setSequenceNumber(seq);
+    setName(`${newFocus} — Session ${seq}`);
   };
 
   const handleRemoveExercise = (exerciseId: string) => {
@@ -106,6 +144,8 @@ export default function CreateTemplateScreen() {
     try {
       await templateRepository.createTemplate({
         name: name.trim(),
+        workoutFocus: activeFocus,
+        sequenceNumber,
         exercises,
       });
 
@@ -163,6 +203,29 @@ export default function CreateTemplateScreen() {
 
           {/* Template Name Input */}
           <View style={styles.formGroup}>
+            <Text variant="label" color="secondary" style={{ marginBottom: spacing.xs }}>
+              WORKOUT FOCUS
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.md }}>
+              {WORKOUT_FOCUS_OPTIONS.map(option => (
+                <Pressable
+                  key={option}
+                  onPress={() => handleFocusChange(option)}
+                  style={{
+                    paddingHorizontal: spacing.md,
+                    paddingVertical: spacing.xs,
+                    borderRadius: radii.full,
+                    backgroundColor: activeFocus === option ? colors.textPrimary : colors.surfaceSubtle,
+                    marginRight: spacing.xs,
+                  }}
+                >
+                  <Text variant="caption" style={{ color: activeFocus === option ? colors.background : colors.textMuted }}>
+                    {option}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+
             <Text variant="label" color="secondary">
               TEMPLATE NAME *
             </Text>
@@ -546,3 +609,5 @@ const createStyles = (colors: any) => StyleSheet.create({
     minHeight: 50,
   },
 });
+
+

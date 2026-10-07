@@ -17,6 +17,19 @@ export interface ReleaseNoteItem {
 }
 
 export const CURRENT_RELEASE_NOTES: Record<string, ReleaseNoteItem> = {
+  '2.1.0': {
+    version: '2.1.0',
+    title: "What's New in BeBig",
+    highlights: [
+      'New premium Home dashboard',
+      'Cleaner personal progress overview',
+      'Faster access to Start/Resume Workout',
+      'Improved My Workouts preview',
+      'Cleaner Recent Workouts history',
+      'Refined Exercise Library access',
+      'Improved visual consistency and spacing',
+    ],
+  },
   '2.0.0': {
     version: '2.0.0',
     title: "What's New in BeBig",
