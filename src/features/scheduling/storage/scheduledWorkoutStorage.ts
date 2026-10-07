@@ -103,5 +103,18 @@ export const scheduledWorkoutStorage = {
       item.clientUpdatedAt = new Date().toISOString();
       await this.saveScheduledWorkout(item, scope);
     }
+  },
+
+  /**
+   * Clears all scheduled workouts for the given user scope from local storage.
+   */
+  async clearScheduledWorkouts(scope?: UserScope): Promise<void> {
+    try {
+      const key = this.getStorageKey(scope);
+      await platformStorage.removeItem(key);
+    } catch (error) {
+      console.error('[scheduledWorkoutStorage] Failed to clear scheduled workouts:', error);
+      throw error;
+    }
   }
 };

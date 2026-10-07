@@ -132,6 +132,7 @@ export const guestMigrationService = {
       await workoutStorage.clearAllWorkouts(guestScope);
       await templateStorage.clearTemplates(guestScope);
       await customExerciseStorage.clearCustomExercises(guestScope);
+      await scheduledWorkoutStorage.clearScheduledWorkouts(guestScope);
 
     } catch (error) {
       console.error('[GuestMigrationService] Migration failed:', error);

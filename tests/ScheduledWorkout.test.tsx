@@ -15,12 +15,16 @@ jest.mock('../src/lib/storage/platformStorage', () => ({
   },
 }));
 
-jest.mock('../src/lib/storage', () => ({
-  guestStorage: {
-    getGuestSession: jest.fn(),
-    clearGuestSession: jest.fn(),
-  },
-}));
+jest.mock('../src/lib/storage', () => {
+  const { platformStorage } = require('../src/lib/storage/platformStorage');
+  return {
+    platformStorage,
+    guestStorage: {
+      getGuestSession: jest.fn(),
+      clearGuestSession: jest.fn(),
+    },
+  };
+});
 
 jest.mock('../src/services/sync/syncMetadataStore', () => ({
   syncMetadataStore: {
@@ -103,6 +107,11 @@ describe('SCHED-1: Scheduled Workout Repository', () => {
     
     expect(results).toHaveLength(2); // Application-level duplicate scheduling allowed
   });
+
+  it('7. should clear scheduled workouts for a specific user scope', async () => {
+    await scheduledWorkoutStorage.clearScheduledWorkouts(guestScope);
+    expect(platformStorage.removeItem).toHaveBeenCalledWith('bebig.scheduled.workouts.guest.guest-123');
+  });
 });
 
 describe('SCHED-1: Guest Migration for Scheduled Workouts', () => {
@@ -152,5 +161,8 @@ describe('SCHED-1: Guest Migration for Scheduled Workouts', () => {
       '2026-09-20T00:00:00.000Z',
       authScope
     );
+
+    // Verify guest scheduled workout key was purged
+    expect(platformStorage.removeItem).toHaveBeenCalledWith('bebig.scheduled.workouts.guest.guest-123');
   });
 });
