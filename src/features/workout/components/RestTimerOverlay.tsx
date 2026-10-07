@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, Button, Card } from '../../../components/ui';
 import { useAppTheme } from '../../theme';
 import { ActiveRestTimer } from '../types';
-import { spacing } from '../../../constants/theme';
+import { spacing, radii } from '../../../constants/theme';
 
 interface RestTimerOverlayProps {
   activeRestTimer: ActiveRestTimer;
@@ -100,6 +100,7 @@ export function RestTimerOverlay({
     return (
       <View
         testID="persistent-rest-overlay"
+        pointerEvents="box-none"
         style={styles.persistentRestOverlay}
         onLayout={(e) => {
           const h = e.nativeEvent.layout.height;
@@ -107,8 +108,8 @@ export function RestTimerOverlay({
         }}
       >
         <Card style={styles.restCompleteCard} testID="rest-complete-banner">
-          <View style={styles.restBannerContent}>
-            <View style={styles.restInfo}>
+          <View style={styles.restCompleteContent}>
+            <View style={styles.restCompleteInfo}>
               <Text variant="caption" style={styles.restCompleteLabel}>
                 REST COMPLETE
               </Text>
@@ -116,7 +117,7 @@ export function RestTimerOverlay({
                 Ready for your next set!
               </Text>
               {activeRestTimer.exerciseName ? (
-                <Text variant="caption" color="secondary" numberOfLines={1}>
+                <Text variant="caption" color="secondary" numberOfLines={1} style={styles.nextExerciseText}>
                   Target rest finished for {activeRestTimer.exerciseName}
                 </Text>
               ) : null}
@@ -126,7 +127,7 @@ export function RestTimerOverlay({
               title="Dismiss"
               onPress={onClear}
               variant="primary"
-              size="sm"
+              size="md"
               style={styles.dismissRestButton}
             />
           </View>
@@ -138,6 +139,7 @@ export function RestTimerOverlay({
   return (
     <View
       testID="persistent-rest-overlay"
+      pointerEvents="box-none"
       style={styles.persistentRestOverlay}
       onLayout={(e) => {
         const h = e.nativeEvent.layout.height;
@@ -150,60 +152,69 @@ export function RestTimerOverlay({
           <View style={[styles.progressBarFill, { width: `${progressPercent}%` }]} />
         </View>
 
-        <View style={styles.restBannerContentCenter}>
-          <View style={styles.timerHeader}>
-            <Text
-              testID="rest-countdown-text"
-              variant="display"
-              color="primary"
-              tabularNums
-              style={styles.restCountdownText}
-            >
-              {activeRestTimer.isPaused ? `PAUSED (${formatTime(restRemaining)})` : formatTime(restRemaining)}
-            </Text>
+        {/* Top Level: Context + Dominant Countdown */}
+        <View style={styles.timerHeaderRow}>
+          <View style={styles.timerContext}>
+            <View style={styles.restTag}>
+              <Text variant="caption" style={styles.restTagText}>
+                REST
+              </Text>
+            </View>
             {activeRestTimer.exerciseName ? (
-              <Text variant="body" color="secondary" numberOfLines={1}>
-                Next: {activeRestTimer.exerciseName}
+              <Text variant="caption" color="secondary" numberOfLines={1} style={styles.exerciseNameText}>
+                {activeRestTimer.exerciseName}
               </Text>
             ) : null}
           </View>
 
-          <View style={styles.controlsRow}>
+          <Text
+            testID="rest-countdown-text"
+            tabularNums
+            style={[
+              styles.restCountdownText,
+              activeRestTimer.isPaused ? styles.restCountdownPaused : null,
+            ]}
+          >
+            {activeRestTimer.isPaused ? `PAUSED (${formatTime(restRemaining)})` : formatTime(restRemaining)}
+          </Text>
+        </View>
+
+        {/* Bottom Level: Comfortable Controls Row */}
+        <View style={styles.controlsRow}>
+          <Button
+            testID="extend-rest-minus-15-button"
+            title="-15s"
+            onPress={() => onExtend(-15)}
+            variant="outline"
+            size="sm"
+            style={styles.adjustButton}
+          />
+          {onTogglePause && (
             <Button
-              testID="extend-rest-minus-15-button"
-              title="-15s"
-              onPress={() => onExtend(-15)}
+              testID="toggle-pause-rest-timer-button"
+              title={activeRestTimer.isPaused ? 'RESUME' : 'PAUSE'}
+              onPress={onTogglePause}
               variant="outline"
-              size="sm"
-              style={styles.adjustButton}
-            />
-            {onTogglePause && (
-              <Button
-                testID="toggle-pause-rest-timer-button"
-                title={activeRestTimer.isPaused ? 'RESUME' : 'PAUSE'}
-                onPress={onTogglePause}
-                variant="outline"
-                size="sm"
-                style={styles.actionButton}
-              />
-            )}
-            <Button
-              testID="skip-rest-timer-button"
-              title="SKIP"
-              onPress={onClear}
-              variant="secondary"
               size="sm"
               style={styles.actionButton}
             />
-            <Button
-              testID="extend-rest-plus-15-button"
-              title="+15s"
-              onPress={() => onExtend(15)}
-              variant="outline"
-              size="sm"
-              style={styles.adjustButton}
-            />
-          </View>
+          )}
+          <Button
+            testID="skip-rest-timer-button"
+            title="SKIP"
+            onPress={onClear}
+            variant="secondary"
+            size="sm"
+            style={styles.skipButton}
+          />
+          <Button
+            testID="extend-rest-plus-15-button"
+            title="+15s"
+            onPress={() => onExtend(15)}
+            variant="outline"
+            size="sm"
+            style={styles.adjustButton}
+          />
         </View>
       </Card>
     </View>
@@ -213,104 +224,160 @@ export function RestTimerOverlay({
 const createStyles = (colors: any, insets: { bottom: number }) => StyleSheet.create({
   persistentRestOverlay: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingHorizontal: spacing.sm,
-    paddingTop: spacing.xs,
-    paddingBottom: Math.max(insets.bottom, 12),
-    backgroundColor: colors.background,
-    borderTopWidth: 1,
-    borderTopColor: colors.borderLight,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    elevation: 10,
+    bottom: Math.max(insets.bottom, 8) + 4,
+    left: 10,
+    right: 10,
+    backgroundColor: 'transparent',
     zIndex: 100,
   },
   restBannerCard: {
     backgroundColor: colors.surfaceElevated,
-    borderColor: colors.primary,
-    borderWidth: 1.5,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.md,
+    borderColor: colors.borderLight,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingTop: 8,
+    paddingBottom: 8,
+    gap: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    elevation: 4,
     overflow: 'hidden',
   },
   restCompleteCard: {
     backgroundColor: colors.surfaceElevated,
     borderColor: colors.success,
-    borderWidth: 1.5,
-    padding: spacing.sm,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    elevation: 4,
   },
   progressBarContainer: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    height: 4,
+    height: 2.5,
     backgroundColor: colors.borderLight,
   },
   progressBarFill: {
     height: '100%',
     backgroundColor: colors.primary,
   },
-  restBannerContentCenter: {
+  timerHeaderRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
+    justifyContent: 'space-between',
+    gap: 8,
+    paddingTop: 1,
   },
-  timerHeader: {
+  timerContext: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
+    gap: 6,
+    flex: 1,
+    minWidth: 0,
+  },
+  restTag: {
+    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.3)',
+  },
+  restTagText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    color: colors.primary,
+  },
+  exerciseNameText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    flexShrink: 1,
   },
   restCountdownText: {
-    fontWeight: '900',
-    letterSpacing: 1,
+    fontWeight: '800',
+    fontSize: 21,
+    lineHeight: 25,
+    letterSpacing: 0.5,
+    color: colors.primary,
+    textAlign: 'right',
+  },
+  restCountdownPaused: {
+    fontSize: 17,
+    lineHeight: 21,
+    color: colors.warning || colors.primary,
   },
   controlsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: spacing.xs,
-    width: '100%',
+    gap: 6,
   },
   adjustButton: {
-    flex: 1,
-    minHeight: 38,
-    minWidth: 0,
-    paddingHorizontal: 2,
+    minHeight: 34,
+    paddingHorizontal: 10,
+    paddingVertical: 0,
+    borderRadius: 6,
+    backgroundColor: colors.surfaceSubtle,
+    borderColor: colors.borderLight,
   },
   actionButton: {
-    flex: 1.3,
-    minHeight: 38,
-    minWidth: 0,
-    paddingHorizontal: 2,
+    flex: 1.2,
+    minHeight: 34,
+    paddingHorizontal: 10,
+    paddingVertical: 0,
+    borderRadius: 6,
   },
   skipButton: {
-    flex: 1.3,
-    minHeight: 38,
-    minWidth: 0,
-    paddingHorizontal: 2,
+    flex: 1.0,
+    minHeight: 34,
+    paddingHorizontal: 8,
+    paddingVertical: 0,
+    borderRadius: 6,
   },
-  restBannerContent: {
+  restCompleteContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 12,
   },
-  restInfo: {
+  restCompleteInfo: {
     flex: 1,
-    gap: 2,
+    gap: 1,
   },
   restCompleteLabel: {
     fontWeight: '800',
-    letterSpacing: 0.5,
+    fontSize: 11,
+    lineHeight: 14,
+    letterSpacing: 0.8,
     color: colors.success,
   },
   restCompleteTitle: {
-    fontWeight: '800',
+    fontWeight: '700',
+    fontSize: 13,
+    lineHeight: 17,
+  },
+  nextExerciseText: {
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '600',
+    color: colors.textSecondary,
   },
   dismissRestButton: {
-    minHeight: 40,
-    minWidth: 90,
+    minHeight: 34,
+    paddingHorizontal: 16,
+    paddingVertical: 0,
+    borderRadius: 6,
   },
 });

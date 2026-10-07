@@ -174,22 +174,22 @@ describe('BE BIG 2.0 — Active Workout Rest Timer Layout & Overlay Clearance', 
     const baseBottomPadding = 80 + Math.max(insets.bottom, 12); // 114
 
     // Case A: Timer hidden -> normal bottom inset
-    const calcPaddingTimerHidden = (timer: any, height: number) =>
-      timer ? Math.max(baseBottomPadding, (height > 0 ? height : 240) + 32) : baseBottomPadding;
+    const calcPaddingTimer = (timer: any, height: number) =>
+      timer ? Math.max(baseBottomPadding, (height > 0 ? height : 84) + 16) : baseBottomPadding;
 
-    expect(calcPaddingTimerHidden(null, 0)).toBe(114);
+    expect(calcPaddingTimer(null, 0)).toBe(114);
 
-    // Case B: Timer visible with measured height 235px
+    // Case B: Timer visible with measured height 118px (84 + 34 inset)
     const timer = createMockRestTimer();
-    const paddingWithTimer235 = calcPaddingTimerHidden(timer, 235);
-    expect(paddingWithTimer235).toBe(235 + 32); // 267px
+    const paddingWithTimer118 = calcPaddingTimer(timer, 118);
+    expect(paddingWithTimer118).toBe(118 + 16); // 134px
 
-    // Case C: Timer height changes to 250px (e.g. font scale / finished banner)
-    const paddingWithTimer250 = calcPaddingTimerHidden(timer, 250);
-    expect(paddingWithTimer250).toBe(250 + 32); // 282px
+    // Case C: Timer height changes to 130px (e.g. font scale / finished banner)
+    const paddingWithTimer130 = calcPaddingTimer(timer, 130);
+    expect(paddingWithTimer130).toBe(130 + 16); // 146px
 
     // Case D: Timer dismissed -> returns to normal inset
-    const paddingDismissed = calcPaddingTimerHidden(null, 250);
+    const paddingDismissed = calcPaddingTimer(null, 130);
     expect(paddingDismissed).toBe(114);
   });
 });

@@ -155,14 +155,14 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
     >
       {/* Main Tabular Row: [SET] [PREV] [KG] [REPS] [RIR] [✓] */}
       <View style={styles.mainRow}>
-        {/* Set Number Badge */}
-        <View style={styles.colSet}>
-          <View
-            style={[
-              styles.setNumberBadge,
-              set.completed ? styles.setNumberBadgeCompleted : null,
-            ]}
-          >
+        {/* Set Number Indicator */}
+        <Pressable
+          onPress={() => onToggleNotes(set.id)}
+          hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+          style={styles.colSet}
+          accessibilityLabel={`Set ${set.setNumber}, tap to toggle notes`}
+        >
+          <View style={styles.setNumberBadge}>
             <Text
               variant="label"
               style={[
@@ -173,7 +173,7 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
               {set.setNumber}
             </Text>
           </View>
-        </View>
+        </Pressable>
 
         {/* Previous Performance */}
         <View style={styles.colPrev}>
@@ -277,8 +277,8 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
         </View>
       </View>
 
-      {/* Expanded Notes Row OR Micro-actions Bar */}
-      {hasNotes ? (
+      {/* Expanded Notes & Delete Row */}
+      {hasNotes && (
         <View style={styles.notesRow}>
           <TextInput
             testID={`set-notes-${exercise.exerciseId}-${set.setNumber}`}
@@ -304,34 +304,6 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
             </Pressable>
           )}
         </View>
-      ) : (
-        <View style={styles.microActionsRow}>
-          <Pressable
-            onPress={() => onToggleNotes(set.id)}
-            style={styles.noteTriggerButton}
-            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-            accessibilityLabel={`Add note to set ${set.setNumber}`}
-          >
-            <Text variant="caption" style={styles.noteTriggerText}>
-              + Note
-            </Text>
-          </Pressable>
-
-          {canDelete && (
-            <Pressable
-              testID={`delete-set-${exercise.exerciseId}-${set.setNumber}`}
-              onPress={() => onDeleteSet(exercise.exerciseId, set.id)}
-              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-              style={styles.deleteTriggerButton}
-              accessibilityLabel={`Delete set ${set.setNumber}`}
-              accessibilityRole="button"
-            >
-              <Text variant="caption" style={styles.deleteTriggerText}>
-                Delete
-              </Text>
-            </Pressable>
-          )}
-        </View>
       )}
     </View>
   );
@@ -340,45 +312,35 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
 const createStyles = (colors: any) =>
   StyleSheet.create({
     rowWrapper: {
-      backgroundColor: colors.surfaceElevated,
-      borderRadius: radii.sm,
-      paddingVertical: 7,
-      paddingHorizontal: 8,
-      borderWidth: 1,
-      borderColor: colors.border,
-      gap: 6,
+      backgroundColor: 'transparent',
+      borderRadius: 8,
+      paddingVertical: 4,
+      paddingHorizontal: 2,
+      gap: 4,
     },
     rowWrapperCompleted: {
-      borderColor: 'rgba(56, 189, 248, 0.25)',
-      backgroundColor: 'rgba(56, 189, 248, 0.05)',
+      backgroundColor: 'rgba(56, 189, 248, 0.04)',
     },
     mainRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
+      gap: 6,
     },
     colSet: {
-      width: 30,
+      width: 28,
       alignItems: 'center',
       justifyContent: 'center',
     },
     setNumberBadge: {
-      width: 28,
+      width: 26,
       height: 44,
-      borderRadius: radii.xs,
-      backgroundColor: colors.surfaceSubtle,
-      borderWidth: 1,
-      borderColor: colors.border,
       justifyContent: 'center',
       alignItems: 'center',
     },
-    setNumberBadgeCompleted: {
-      backgroundColor: 'rgba(56, 189, 248, 0.15)',
-      borderColor: colors.primary,
-    },
+    setNumberBadgeCompleted: {},
     setNumberText: {
-      fontWeight: '800',
-      fontSize: 13,
+      fontWeight: '700',
+      fontSize: 14,
       color: colors.textSecondary,
     },
     setNumberTextCompleted: {
@@ -392,73 +354,73 @@ const createStyles = (colors: any) =>
     prevText: {
       fontWeight: '600',
       fontSize: 12,
-      color: colors.textSecondary,
+      color: colors.textMuted,
       textAlign: 'center',
     },
     prevTextEmpty: {
       color: colors.textMuted,
-      fontSize: 15,
+      fontSize: 13,
       fontWeight: '400',
     },
     colKg: {
       flex: 1.15,
-      minWidth: 64,
+      minWidth: 62,
     },
     colReps: {
-      flex: 1,
+      flex: 1.0,
       minWidth: 54,
     },
     colRir: {
       flex: 0.85,
-      minWidth: 44,
+      minWidth: 46,
     },
     metricInput: {
-      backgroundColor: colors.surface,
-      borderWidth: 1.5,
+      backgroundColor: colors.surfaceElevated,
+      borderWidth: 1,
       borderColor: colors.borderLight,
-      borderRadius: radii.sm,
+      borderRadius: 8,
       paddingHorizontal: 4,
       paddingVertical: 0,
       color: colors.textPrimary,
-      fontSize: 16,
-      fontWeight: '800',
+      fontSize: 15,
+      fontWeight: '700',
       textAlign: 'center',
       height: 44,
     },
     metricInputCompleted: {
-      backgroundColor: colors.surfaceSubtle,
-      borderColor: 'rgba(56, 189, 248, 0.35)',
+      backgroundColor: 'rgba(56, 189, 248, 0.04)',
+      borderColor: 'rgba(56, 189, 248, 0.25)',
       color: colors.textPrimary,
     },
     metricInputRir: {
-      fontSize: 14,
-      fontWeight: '700',
+      fontSize: 13,
+      fontWeight: '600',
       color: colors.textSecondary,
     },
     colCheck: {
-      width: 38,
+      width: 42,
       alignItems: 'center',
       justifyContent: 'center',
     },
     checkButton: {
-      width: 38,
+      width: 42,
       height: 44,
-      borderRadius: radii.sm,
+      borderRadius: 8,
       justifyContent: 'center',
       alignItems: 'center',
     },
     checkButtonPending: {
       backgroundColor: colors.surfaceSubtle,
-      borderWidth: 1.5,
+      borderWidth: 1,
       borderColor: colors.borderLight,
     },
     checkButtonDone: {
       backgroundColor: colors.primary,
-      borderWidth: 1.5,
+      borderWidth: 1,
       borderColor: colors.primary,
     },
     checkButtonIcon: {
-      fontSize: 16,
+      fontSize: 17,
       fontWeight: '900',
     },
     checkIconPending: {
@@ -467,53 +429,29 @@ const createStyles = (colors: any) =>
     checkIconDone: {
       color: colors.background,
     },
-    microActionsRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      paddingHorizontal: 6,
-      paddingTop: 3,
-    },
-    noteTriggerButton: {
-      paddingVertical: 3,
-      paddingHorizontal: 6,
-    },
-    noteTriggerText: {
-      color: colors.textMuted,
-      fontSize: 11,
-      fontWeight: '600',
-    },
-    deleteTriggerButton: {
-      paddingVertical: 3,
-      paddingHorizontal: 6,
-    },
-    deleteTriggerText: {
-      color: colors.error,
-      fontSize: 11,
-      fontWeight: '600',
-    },
     notesRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
+      gap: 6,
       paddingTop: 4,
+      paddingHorizontal: 2,
     },
     notesInput: {
       flex: 1,
-      backgroundColor: colors.surface,
-      borderWidth: 1.5,
+      backgroundColor: colors.surfaceElevated,
+      borderWidth: 1,
       borderColor: colors.borderLight,
-      borderRadius: radii.sm,
+      borderRadius: 8,
       paddingHorizontal: spacing.sm,
       paddingVertical: 0,
       color: colors.textPrimary,
-      fontSize: 13,
+      fontSize: 12,
       height: 36,
     },
     deleteIconButton: {
       width: 36,
       height: 36,
-      borderRadius: radii.sm,
+      borderRadius: 8,
       backgroundColor: 'rgba(239, 68, 68, 0.1)',
       justifyContent: 'center',
       alignItems: 'center',

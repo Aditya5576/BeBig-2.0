@@ -542,7 +542,7 @@ export default function ActiveWorkoutScreen() {
 
   const baseBottomPadding = 80 + Math.max(insets.bottom, 12);
   const dynamicBottomPadding = !!session?.activeRestTimer
-    ? Math.max(baseBottomPadding, (restOverlayHeight > 0 ? restOverlayHeight : 240) + 32)
+    ? Math.max(baseBottomPadding, (restOverlayHeight > 0 ? restOverlayHeight : 84) + 16)
     : baseBottomPadding;
 
   return (
@@ -695,25 +695,25 @@ const createStyles = (colors: any, insets: { bottom: number }) => StyleSheet.cre
   },
   scrollContent: {
     flexGrow: 1,
-    paddingVertical: spacing.md,
-    gap: spacing.md,
+    paddingVertical: 12,
+    gap: 14,
   },
   topBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingBottom: spacing.sm,
+    paddingBottom: 8,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderLight,
-    gap: spacing.sm,
+    gap: 10,
   },
   headerTitleArea: {
     flex: 1,
-    gap: 4,
+    gap: 2,
     alignItems: 'center',
   },
   workoutTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
     textAlign: 'center',
   },
@@ -1058,17 +1058,21 @@ const createStyles = (colors: any, insets: { bottom: number }) => StyleSheet.cre
     minHeight: 44,
   },
   bottomActions: {
-    gap: spacing.md,
-    marginTop: spacing.xs,
+    gap: 10,
+    marginTop: 12,
+    paddingTop: 4,
   },
   addExerciseButton: {
-    minHeight: 48,
+    minHeight: 46,
+    borderRadius: 10,
   },
   finishBottomButton: {
     minHeight: 48,
+    borderRadius: 10,
   },
   discardBottomButton: {
-    minHeight: 44,
+    minHeight: 38,
+    borderRadius: 10,
     borderColor: colors.error,
   },
 });
