@@ -21,13 +21,13 @@ A production-grade, local-first gym workout tracking Progressive Web Application
 ## 🚀 Latest Release — v2.1.0
 
 ### What's New in v2.1.0
+- **Workout 2.0 Experience**: Athletic, spacious active workout UI with compact set rows, streamlined input UX, and professional proportions.
+- **Multi-Select Exercise Picker**: Batch exercise selection with instant counter and addition.
+- **Smart Exercise Reordering**: Smooth up/down reordering with auto-scroll compensation keeping moved exercises in view.
+- **Redesigned Start Workout**: Modernized workout launcher integrated with Templates 2.0.
+- **Balanced Rest Timer**: Compact, non-intrusive floating overlay with intuitive extend/skip controls.
 - **New Premium Home Dashboard**: Streamlined personal training dashboard with focused hierarchy.
 - **Cleaner Personal Progress**: Compact metrics for PRs, monthly workouts, streaks, and volume.
-- **Fast Workout Start**: One-tap access to start or resume workout sessions.
-- **My Workouts Preview**: Horizontal saved workout template cards with subtle focus indicators.
-- **Recent Workouts History**: Clean completed history logs with date, volume, and sets.
-- **Refined Exercise Library Access**: Dedicated secondary navigation banner.
-- **Visual Consistency & Spacing**: Calmer dark surfaces and consistent athletic design tokens.
 
 ---
 
