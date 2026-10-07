@@ -3,7 +3,7 @@
 A production-grade, local-first gym workout tracking Progressive Web Application (PWA) and mobile platform engineered for serious lifters, strength athletes, and fitness enthusiasts. Built with Expo, React Native, TypeScript, Supabase, and resilient offline-first storage.
 
 [![Production App](https://img.shields.io/badge/Production-Live-success?style=for-the-badge&logo=vercel)](https://be-big-2-0.vercel.app)
-[![Version](https://img.shields.io/badge/Version-v1.0.6-blue?style=for-the-badge)](https://github.com/Aditya5576/BeBig-2.0)
+[![Version](https://img.shields.io/badge/Version-v2.0.0-blue?style=for-the-badge)](https://github.com/Aditya5576/BeBig-2.0)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Strict-3178C6?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org/)
 [![Expo](https://img.shields.io/badge/Expo-SDK_57-000020?style=for-the-badge&logo=expo)](https://expo.dev/)
 
@@ -18,9 +18,9 @@ A production-grade, local-first gym workout tracking Progressive Web Application
 
 ---
 
-## 🚀 Latest Release — v1.0.6
+## 🚀 Latest Release — v2.0.0
 
-### What's New in v1.0.6
+### What's New in v2.0.0
 - **Performance Progression**: Set-by-set history viewing for each exercise.
 - **Workout Insights**: Compare your current workout performance vs your previous workout dynamically.
 - **Weekly Performance**: Powerful analytics engine to track week-over-week progression trends.

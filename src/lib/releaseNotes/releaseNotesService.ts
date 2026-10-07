@@ -17,8 +17,8 @@ export interface ReleaseNoteItem {
 }
 
 export const CURRENT_RELEASE_NOTES: Record<string, ReleaseNoteItem> = {
-  '1.0.6': {
-    version: '1.0.6',
+  '2.0.0': {
+    version: '2.0.0',
     title: "What's New in BeBig",
     highlights: [
       'Performance Progression (Set-by-set history)',
