@@ -96,16 +96,17 @@ export default function HomeScreen() {
         }
       }
 
-      const [workouts, active, userTemplates, schedulesToday] = await Promise.all([
+      const [workoutsResult, activeResult, templatesResult, schedulesResult] = await Promise.allSettled([
         workoutRepository.getCompletedWorkouts(),
         workoutRepository.getActiveWorkout(),
         templateRepository.getTemplates(),
         scheduledWorkoutRepository.getTodayScheduledWorkouts(),
       ]);
-      setCompletedWorkouts(workouts);
-      setActiveWorkout(active);
-      setTemplates(userTemplates);
-      setTodaySchedules(schedulesToday);
+
+      setCompletedWorkouts(workoutsResult.status === 'fulfilled' ? workoutsResult.value : []);
+      setActiveWorkout(activeResult.status === 'fulfilled' ? activeResult.value : null);
+      setTemplates(templatesResult.status === 'fulfilled' ? templatesResult.value : []);
+      setTodaySchedules(schedulesResult.status === 'fulfilled' ? schedulesResult.value : []);
     } catch {
       setCompletedWorkouts([]);
       setActiveWorkout(null);

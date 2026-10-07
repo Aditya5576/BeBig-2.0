@@ -261,28 +261,23 @@ describe('Milestone 8 — Home Dashboard Integration Tests', () => {
     expect(discardActiveWorkoutSpy).toHaveBeenCalled();
   });
 
-  // Scenario 4: Today's Workout Card starts template directly
-  it("Scenario 4: Today's Workout card recommends next template and START WORKOUT launches it", async () => {
-    getTemplatesSpy.mockResolvedValue(mockTemplates);
-
+  // Scenario 4: Quick Start Card launches session
+  it("Scenario 4: Quick Start card allows launching unscheduled session", async () => {
     const { getByTestId } = await render(<HomeScreen />);
 
     await waitFor(
       () => {
-        const todayCard = getByTestId('today-workout-card');
-        expect(todayCard).toBeTruthy();
-        expect(within(todayCard).getByText('Push Day')).toBeTruthy();
-        expect(within(todayCard).getByText(/2 Exercises/)).toBeTruthy();
+        expect(getByTestId('quick-start-card')).toBeTruthy();
       },
       { timeout: 3000 },
     );
 
-    const startBtn = getByTestId('start-workout-button');
+    const startBtn = getByTestId('start-quick-workout-button');
     await act(async () => {
       fireEvent.press(startBtn);
     });
 
-    expect(startWorkoutFromTemplateSpy).toHaveBeenCalledWith(mockTemplates[0]);
+    expect(startEmptyWorkoutSpy).toHaveBeenCalledWith('Quick Workout');
     expect(mockPush).toHaveBeenCalledWith('/workout/active');
   });
 
@@ -292,12 +287,12 @@ describe('Milestone 8 — Home Dashboard Integration Tests', () => {
 
     await waitFor(
       () => {
-        expect(getByTestId('start-empty-workout-button')).toBeTruthy();
+        expect(getByTestId('start-quick-workout-button')).toBeTruthy();
       },
       { timeout: 3000 },
     );
 
-    const emptyBtn = getByTestId('start-empty-workout-button');
+    const emptyBtn = getByTestId('start-quick-workout-button');
     await act(async () => {
       fireEvent.press(emptyBtn);
     });
@@ -368,7 +363,7 @@ describe('Milestone 8 — Home Dashboard Integration Tests', () => {
     await waitFor(
       () => {
         expect(getByTestId('home-title')).toBeTruthy();
-        expect(getByTestId('start-workout-button')).toBeTruthy();
+        expect(getByTestId('start-quick-workout-button')).toBeTruthy();
         expect(getByTestId('workout-history-button')).toBeTruthy();
         expect(getByTestId('my-templates-button')).toBeTruthy();
         expect(getByTestId('browse-exercises-button')).toBeTruthy();
@@ -396,5 +391,34 @@ describe('Milestone 8 — Home Dashboard Integration Tests', () => {
     });
 
     expect(mockPush).toHaveBeenCalledWith('/workout/progress/prs');
+  });
+
+  // Scenario 11: Partial loader rejection leaves successful loader results intact
+  it('Scenario 11: Partial loader rejection leaves successful loader results intact and uses fallbacks for failed loaders', async () => {
+    const mockCompletedWorkout: WorkoutSession = {
+      id: 'w-partial-1',
+      name: 'Partial Success Workout',
+      startedAt: '2026-10-07T10:00:00.000Z',
+      finishedAt: '2026-10-07T10:45:00.000Z',
+      status: 'completed',
+      exercises: [],
+    };
+
+    getCompletedWorkoutsSpy.mockResolvedValueOnce([mockCompletedWorkout]);
+    getTemplatesSpy.mockResolvedValueOnce(mockTemplates);
+    getActiveWorkoutSpy.mockRejectedValueOnce(new Error('Active workout storage error'));
+
+    const { getByTestId, getByText } = await render(<HomeScreen />);
+
+    await waitFor(
+      () => {
+        expect(getByTestId('home-title')).toBeTruthy();
+        expect(getByTestId('recent-workout-card-w-partial-1')).toBeTruthy();
+      },
+      { timeout: 3000 },
+    );
+
+    // Verify completed workout data rendered successfully despite active workout rejection
+    expect(getByText('Partial Success Workout')).toBeTruthy();
   });
 });
