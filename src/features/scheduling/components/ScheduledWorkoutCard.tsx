@@ -8,9 +8,15 @@
 import React from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import { useAppTheme } from '../../theme';
-import { Text, Card, Icon } from '../../../components/ui';
+import { Text, Card, Icon, SyncStatusChip } from '../../../components/ui';
 import { ScheduledWorkout } from '../types';
 import { radii, spacing } from '../../../constants/theme';
+import { useEntitySyncStatus } from '../../../services/sync';
+
+function ScheduledCardSyncStatus({ id }: { id: string }) {
+  const status = useEntitySyncStatus('scheduled_workout', id);
+  return <SyncStatusChip status={status} />;
+}
 
 interface ScheduledWorkoutCardProps {
   scheduledWorkout: ScheduledWorkout;
@@ -52,9 +58,12 @@ export function ScheduledWorkoutCard({
     <Card style={styles.card}>
       <View style={styles.headerRow}>
         <View style={styles.titleContainer}>
-          <Text variant="titleMedium" style={styles.title} numberOfLines={1}>
-            {name}
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Text variant="titleMedium" style={[styles.title, { flexShrink: 1 }]} numberOfLines={1}>
+              {name}
+            </Text>
+            <ScheduledCardSyncStatus id={scheduledWorkout.id} />
+          </View>
           {templateName ? (
             <Text variant="caption" style={styles.subtitle}>
               Template: {templateName}

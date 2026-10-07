@@ -2,7 +2,7 @@ import { useAppTheme } from '../../../src/features/theme';
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, TextInput, Alert } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ScreenContainer, Text, Button, Card } from '../../../src/components/ui';
+import { ScreenContainer, Text, Button, Card, SyncStatusChip } from '../../../src/components/ui';
 import { workoutRepository, WorkoutSession } from '../../../src/features/workout';
 import { templateRepository } from '../../../src/features/templates';
 import { convertWorkoutToTemplateInput } from '../summary';
@@ -13,6 +13,12 @@ import {
   findPreviousPerformance,
   compareExerciseSets,
 } from '../../../src/features/performance';
+import { useEntitySyncStatus } from '../../../src/services/sync';
+
+function WorkoutHistoryDetailSyncStatus({ workoutId }: { workoutId: string }) {
+  const status = useEntitySyncStatus('workout', workoutId);
+  return <SyncStatusChip status={status} />;
+}
 
 export default function WorkoutHistoryDetailScreen() {
   const { colors } = useAppTheme();
@@ -193,9 +199,12 @@ export default function WorkoutHistoryDetailScreen() {
                 COMPLETED WORKOUT LOG (READ-ONLY)
               </Text>
             </View>
-            <Text variant="display" color="primary" testID="history-detail-name">
-              {workout.name || 'Completed Workout'}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Text variant="display" color="primary" testID="history-detail-name" style={{ flexShrink: 1 }}>
+                {workout.name || 'Completed Workout'}
+              </Text>
+              <WorkoutHistoryDetailSyncStatus workoutId={workout.id} />
+            </View>
             <Text variant="body" color="secondary" testID="history-detail-date">
               {formatCompletedDate(workout.finishedAt || workout.startedAt)}
             </Text>
