@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, Pressable } from 'react-native';
+import { View, StyleSheet, Pressable, LayoutChangeEvent } from 'react-native';
 import { useAppTheme } from '../../theme';
 import { Text, Card, Button } from '../../../components/ui';
 import { WorkoutExercise, WorkoutSet } from '../types';
@@ -29,6 +29,7 @@ export interface ActiveExerciseCardProps {
     set: WorkoutSet,
     pendingUpdates?: Partial<WorkoutSet>,
   ) => void;
+  onLayout?: (e: LayoutChangeEvent) => void;
 }
 
 const formatShortDate = (dateStr?: string) => {
@@ -52,12 +53,13 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(({
   onToggleNotes,
   onUpdateSetField,
   onToggleCompleteSet,
+  onLayout,
 }) => {
   const { colors } = useAppTheme();
   const styles = createStyles(colors);
 
   return (
-    <Card key={exercise.exerciseId} style={styles.exerciseCard}>
+    <Card key={exercise.exerciseId} style={styles.exerciseCard} onLayout={onLayout}>
       {/* Exercise Header */}
       <View style={styles.exerciseCardHeader}>
         <View style={styles.exerciseTitleGroup}>
@@ -79,40 +81,55 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(({
         </View>
 
         <View style={styles.exerciseHeaderActions}>
-          <Pressable
-            testID={`move-up-exercise-${exercise.exerciseId}`}
-            onPress={() => onMoveUp(exIndex)}
-            disabled={exIndex === 0}
-            style={[styles.arrowButton, exIndex === 0 && styles.buttonDisabled]}
-            hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-          >
-            <Text
-              variant="caption"
-              color={exIndex === 0 ? 'muted' : 'primary'}
-              style={styles.controlIcon}
+          <View style={styles.reorderControlGroup}>
+            <Pressable
+              testID={`move-up-exercise-${exercise.exerciseId}`}
+              onPress={() => onMoveUp(exIndex)}
+              disabled={exIndex === 0}
+              style={[styles.reorderButton, exIndex === 0 && styles.reorderButtonDisabled]}
+              hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+              accessibilityLabel={`Move ${exercise.exerciseName} up`}
             >
-              ▲
-            </Text>
-          </Pressable>
+              <Text
+                style={[
+                  styles.reorderArrowText,
+                  { color: exIndex === 0 ? colors.textMuted : colors.primary },
+                  exIndex === 0 && styles.iconDisabled,
+                ]}
+              >
+                ↑
+              </Text>
+            </Pressable>
 
-          <Pressable
-            testID={`move-down-exercise-${exercise.exerciseId}`}
-            onPress={() => onMoveDown(exIndex)}
-            disabled={exIndex === totalExercisesCount - 1}
-            style={[
-              styles.arrowButton,
-              exIndex === totalExercisesCount - 1 && styles.buttonDisabled,
-            ]}
-            hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-          >
-            <Text
-              variant="caption"
-              color={exIndex === totalExercisesCount - 1 ? 'muted' : 'primary'}
-              style={styles.controlIcon}
+            <View style={styles.reorderDivider} />
+
+            <Pressable
+              testID={`move-down-exercise-${exercise.exerciseId}`}
+              onPress={() => onMoveDown(exIndex)}
+              disabled={exIndex === totalExercisesCount - 1}
+              style={[
+                styles.reorderButton,
+                exIndex === totalExercisesCount - 1 && styles.reorderButtonDisabled,
+              ]}
+              hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+              accessibilityLabel={`Move ${exercise.exerciseName} down`}
             >
-              ▼
-            </Text>
-          </Pressable>
+              <Text
+                style={[
+                  styles.reorderArrowText,
+                  {
+                    color:
+                      exIndex === totalExercisesCount - 1
+                        ? colors.textMuted
+                        : colors.primary,
+                  },
+                  exIndex === totalExercisesCount - 1 && styles.iconDisabled,
+                ]}
+              >
+                ↓
+              </Text>
+            </Pressable>
+          </View>
 
           <Pressable
             testID={`remove-exercise-${exercise.exerciseId}`}
@@ -270,25 +287,39 @@ const createStyles = (colors: any) =>
     exerciseHeaderActions: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 4,
+      gap: 6,
       flexShrink: 0,
     },
-    arrowButton: {
+    reorderControlGroup: {
+      flexDirection: 'row',
+      alignItems: 'center',
       backgroundColor: colors.surfaceElevated,
-      minWidth: 30,
-      minHeight: 30,
-      borderRadius: 6,
+      borderRadius: 8,
       borderWidth: 1,
       borderColor: colors.borderLight,
+      overflow: 'hidden',
+    },
+    reorderButton: {
+      width: 36,
+      height: 34,
       justifyContent: 'center',
       alignItems: 'center',
     },
-    buttonDisabled: {
-      opacity: 0.3,
+    reorderButtonDisabled: {
+      opacity: 0.25,
     },
-    controlIcon: {
-      fontWeight: '700',
-      fontSize: 11,
+    reorderArrowText: {
+      fontSize: 15,
+      fontWeight: '800',
+      textAlign: 'center',
+    },
+    reorderDivider: {
+      width: 1,
+      height: 18,
+      backgroundColor: colors.borderLight,
+    },
+    iconDisabled: {
+      opacity: 0.4,
     },
     exerciseTitleGroup: {
       flexDirection: 'row',
@@ -323,10 +354,12 @@ const createStyles = (colors: any) =>
       color: colors.textPrimary,
     },
     removeExButton: {
-      backgroundColor: 'rgba(239, 68, 68, 0.1)',
-      minWidth: 30,
-      minHeight: 30,
-      borderRadius: 6,
+      backgroundColor: 'rgba(239, 68, 68, 0.08)',
+      width: 34,
+      height: 34,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: 'rgba(239, 68, 68, 0.2)',
       justifyContent: 'center',
       alignItems: 'center',
     },

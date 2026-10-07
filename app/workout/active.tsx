@@ -47,6 +47,9 @@ export default function ActiveWorkoutScreen() {
   const [restOverlayHeight, setRestOverlayHeight] = useState<number>(0);
   const sessionRef = useRef<WorkoutSession | null>(null);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scrollViewRef = useRef<ScrollView>(null);
+  const currentScrollY = useRef(0);
+  const cardLayoutsRef = useRef<{ [exerciseId: string]: { y: number; height: number } }>({});
 
   useEffect(() => {
     sessionRef.current = session;
@@ -311,8 +314,22 @@ export default function ActiveWorkoutScreen() {
 
   // Reorder exercise move up
   const handleMoveUpExercise = async (index: number) => {
+    if (finishing) return;
     const current = sessionRef.current || session;
     if (!current || index <= 0) return;
+
+    // Calculate vertical height of the item we are swapping with (above us)
+    const swappedEx = current.exercises[index - 1];
+    const swappedHeight =
+      (swappedEx && cardLayoutsRef.current[swappedEx.exerciseId]?.height) || 260;
+    const gap = 14;
+    const shift = swappedHeight + gap;
+
+    // Adjust scroll view immediately so moving exercise stays directly under finger
+    const targetScrollY = Math.max(0, currentScrollY.current - shift);
+    scrollViewRef.current?.scrollTo?.({ y: targetScrollY, animated: false });
+    currentScrollY.current = targetScrollY;
+
     const updated = [...current.exercises];
     const temp = updated[index - 1];
     updated[index - 1] = updated[index];
@@ -323,8 +340,22 @@ export default function ActiveWorkoutScreen() {
 
   // Reorder exercise move down
   const handleMoveDownExercise = async (index: number) => {
+    if (finishing) return;
     const current = sessionRef.current || session;
     if (!current || index >= current.exercises.length - 1) return;
+
+    // Calculate vertical height of the item we are swapping with (below us)
+    const swappedEx = current.exercises[index + 1];
+    const swappedHeight =
+      (swappedEx && cardLayoutsRef.current[swappedEx.exerciseId]?.height) || 260;
+    const gap = 14;
+    const shift = swappedHeight + gap;
+
+    // Adjust scroll view immediately so moving exercise stays directly under finger
+    const targetScrollY = currentScrollY.current + shift;
+    scrollViewRef.current?.scrollTo?.({ y: targetScrollY, animated: false });
+    currentScrollY.current = targetScrollY;
+
     const updated = [...current.exercises];
     const temp = updated[index + 1];
     updated[index + 1] = updated[index];
@@ -600,6 +631,11 @@ export default function ActiveWorkoutScreen() {
         style={styles.keyboardContainer}
       >
         <ScrollView
+          ref={scrollViewRef}
+          onScroll={(e) => {
+            currentScrollY.current = e.nativeEvent.contentOffset.y;
+          }}
+          scrollEventThrottle={16}
           contentContainerStyle={[
             styles.scrollContent,
             { paddingBottom: dynamicBottomPadding },
@@ -696,6 +732,10 @@ export default function ActiveWorkoutScreen() {
                 onToggleNotes={toggleNotesForSet}
                 onUpdateSetField={handleUpdateSetField}
                 onToggleCompleteSet={handleToggleCompleteSet}
+                onLayout={(e) => {
+                  const { y, height } = e.nativeEvent.layout;
+                  cardLayoutsRef.current[ex.exerciseId] = { y, height };
+                }}
               />
             ))
           )}
