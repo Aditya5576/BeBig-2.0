@@ -180,6 +180,11 @@ describe('ActiveWorkout Exercise Picker Source Filter', () => {
       fireEvent.press(customExCard);
     });
 
+    const addExercisesBtn = getByTestId('picker-add-exercises-button');
+    await act(async () => {
+      fireEvent.press(addExercisesBtn);
+    });
+
     // Verify both exercises exist in active workout and original set state is intact
     await waitFor(() => {
       expect(getByText('Bench Press')).toBeTruthy();

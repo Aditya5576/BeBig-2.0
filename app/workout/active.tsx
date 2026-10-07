@@ -250,24 +250,35 @@ export default function ActiveWorkoutScreen() {
     }
   };
 
-  // Add exercise from picker
-  const handleSelectExercise = async (exercise: Exercise) => {
+  // Add exercises from picker (multi-select)
+  const handleSelectExercises = async (exercisesToAdd: Exercise[]) => {
     const current = sessionRef.current || session;
-    if (!current) return;
+    if (!current || exercisesToAdd.length === 0) return;
     setIsPickerVisible(false);
 
-    // Check duplicate
-    if (current.exercises.some((e) => e.exerciseId === exercise.id)) {
-      Alert.alert('Duplicate Exercise', `"${exercise.name}" is already in this workout session.`);
+    // Filter out duplicates that already exist in active workout
+    const existingIds = new Set(current.exercises.map((e) => e.exerciseId));
+    const nonDuplicates = exercisesToAdd.filter((e) => !existingIds.has(e.id));
+
+    if (nonDuplicates.length === 0) {
+      Alert.alert('Duplicate Exercises', 'All selected exercises are already in this workout session.');
       return;
     }
 
-    const updated = workoutRepository.addExerciseToWorkout(current, {
-      id: exercise.id,
-      name: exercise.name,
-      categoryName: exercise.categoryName,
-    });
+    let updated = current;
+    for (const exercise of nonDuplicates) {
+      updated = workoutRepository.addExerciseToWorkout(updated, {
+        id: exercise.id,
+        name: exercise.name,
+        categoryName: exercise.categoryName,
+      });
+    }
+
     await updateSessionAndAutosaveImmediate(updated);
+  };
+
+  const handleSelectExercise = async (exercise: Exercise) => {
+    await handleSelectExercises([exercise]);
   };
 
   // Remove exercise
@@ -665,7 +676,9 @@ export default function ActiveWorkoutScreen() {
         visible={isPickerVisible}
         onClose={() => setIsPickerVisible(false)}
         onSelectExercise={handleSelectExercise}
+        onSelectExercises={handleSelectExercises}
         selectedExerciseIds={session.exercises.map((e) => e.exerciseId)}
+        multiSelect={true}
       />
     </ScreenContainer>
   );

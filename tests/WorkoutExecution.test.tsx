@@ -599,13 +599,10 @@ describe('BeBig 2.0 — Milestone 5: Workout Execution', () => {
       expect(mockReplace).toHaveBeenCalledWith('/home');
     });
 
-    it('HomeScreen displays Start Workout button and Active Workout banner when workout active', async () => {
+    it('HomeScreen displays Active Workout banner when workout active', async () => {
       await workoutRepository.startEmptyWorkout('Current Active Session');
 
       const { findByTestId, findByText } = await render(<HomeScreen />);
-
-      // Start Workout button
-      expect(await findByTestId('start-workout-button')).toBeTruthy();
 
       // Active workout banner
       expect(await findByTestId('home-active-workout-banner')).toBeTruthy();

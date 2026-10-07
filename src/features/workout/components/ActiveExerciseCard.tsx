@@ -183,6 +183,40 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(({
         </View>
       )}
 
+      {/* Sets Table Header */}
+      <View style={styles.tableHeaderRow}>
+        <View style={styles.headerColSet}>
+          <Text variant="caption" color="muted" style={styles.headerLabel}>
+            SET
+          </Text>
+        </View>
+        <View style={styles.headerColPrev}>
+          <Text variant="caption" color="muted" style={styles.headerLabel}>
+            PREV
+          </Text>
+        </View>
+        <View style={styles.headerColKg}>
+          <Text variant="caption" color="muted" style={styles.headerLabel}>
+            KG
+          </Text>
+        </View>
+        <View style={styles.headerColReps}>
+          <Text variant="caption" color="muted" style={styles.headerLabel}>
+            REPS
+          </Text>
+        </View>
+        <View style={styles.headerColRir}>
+          <Text variant="caption" color="muted" style={styles.headerLabel}>
+            RIR
+          </Text>
+        </View>
+        <View style={styles.headerColCheck}>
+          <Text variant="caption" color="muted" style={styles.headerLabel}>
+            ✓
+          </Text>
+        </View>
+      </View>
+
       {/* Sets List */}
       <View style={styles.setsContainer}>
         {exercise.actualSets.map((set) => (
@@ -190,6 +224,7 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(({
             key={set.id}
             exercise={exercise}
             set={set}
+            previousSet={lastPerformance?.sets?.[set.setNumber - 1]}
             canDelete={exercise.actualSets.length > 1 && !set.completed}
             isNotesExpanded={Boolean(expandedNotesSetIds[set.id])}
             onToggleNotes={onToggleNotes}
@@ -217,7 +252,8 @@ const createStyles = (colors: any) =>
   StyleSheet.create({
     exerciseCard: {
       gap: spacing.md,
-      padding: spacing.md,
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.sm + 2,
       backgroundColor: colors.surface,
       borderColor: colors.borderLight,
     },
@@ -342,8 +378,48 @@ const createStyles = (colors: any) =>
       fontStyle: 'italic',
       color: colors.textMuted,
     },
+    tableHeaderRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 8,
+      paddingBottom: 4,
+    },
+    headerLabel: {
+      fontSize: 10,
+      fontWeight: '800',
+      letterSpacing: 0.6,
+      textAlign: 'center',
+    },
+    headerColSet: {
+      width: 30,
+      alignItems: 'center',
+    },
+    headerColPrev: {
+      width: 58,
+      alignItems: 'center',
+    },
+    headerColKg: {
+      flex: 1.15,
+      minWidth: 64,
+      alignItems: 'center',
+    },
+    headerColReps: {
+      flex: 1,
+      minWidth: 54,
+      alignItems: 'center',
+    },
+    headerColRir: {
+      flex: 0.85,
+      minWidth: 44,
+      alignItems: 'center',
+    },
+    headerColCheck: {
+      width: 38,
+      alignItems: 'center',
+    },
     setsContainer: {
-      gap: spacing.md,
+      gap: 8,
     },
     addSetButton: {
       minHeight: 44,

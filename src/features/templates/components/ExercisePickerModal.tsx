@@ -1,5 +1,5 @@
 import { useAppTheme } from '../../theme';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Modal,
   View,
@@ -15,7 +15,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScreenContainer, Text, Button, Card } from '../../../components/ui';
 import {
   exerciseRepository,
-  exerciseCacheStorage,
   Exercise,
   ExerciseCategory,
   STANDARD_CATEGORIES,
@@ -26,15 +25,19 @@ import { spacing, radii } from '../../../constants/theme';
 export interface ExercisePickerModalProps {
   visible: boolean;
   onClose: () => void;
-  onSelectExercise: (exercise: Exercise) => void;
+  onSelectExercise?: (exercise: Exercise) => void;
+  onSelectExercises?: (exercises: Exercise[]) => void;
   selectedExerciseIds?: string[];
+  multiSelect?: boolean;
 }
 
 export function ExercisePickerModal({
   visible,
   onClose,
   onSelectExercise,
+  onSelectExercises,
   selectedExerciseIds = [],
+  multiSelect,
 }: ExercisePickerModalProps) {
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -46,6 +49,9 @@ export function ExercisePickerModal({
     // Fallback if rendered outside SafeAreaProvider
   }
 
+  // Multi-select is enabled if explicitly specified or if multi-exercise callback is provided
+  const isMultiSelect = multiSelect !== undefined ? multiSelect : Boolean(onSelectExercises);
+
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -55,6 +61,10 @@ export function ExercisePickerModal({
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedSource, setSelectedSource] = useState<'all' | 'custom' | 'external'>('all');
 
+  // Multi-select state: Map of id -> Exercise, and array of IDs preserving selection order
+  const [selectedExercisesMap, setSelectedExercisesMap] = useState<Map<string, Exercise>>(new Map());
+  const [selectionOrder, setSelectionOrder] = useState<string[]>([]);
+
   // Custom exercise creation state inside picker
   const [isCreatingCustom, setIsCreatingCustom] = useState(false);
   const [customName, setCustomName] = useState('');
@@ -63,8 +73,11 @@ export function ExercisePickerModal({
   const [customSaving, setCustomSaving] = useState(false);
   const [customError, setCustomError] = useState<string | null>(null);
 
+  // Reset transient picker state when modal opens or closes
   useEffect(() => {
     if (!visible) {
+      setSelectedExercisesMap(new Map());
+      setSelectionOrder([]);
       setIsCreatingCustom(false);
       setCustomName('');
       setCustomError(null);
@@ -158,6 +171,58 @@ export function ExercisePickerModal({
     }
   };
 
+  const handleCancelAndClose = useCallback(() => {
+    setSelectedExercisesMap(new Map());
+    setSelectionOrder([]);
+    onClose();
+  }, [onClose]);
+
+  const handleToggleExercise = useCallback((item: Exercise) => {
+    if (selectedExerciseIds.includes(item.id)) return;
+
+    if (!isMultiSelect) {
+      onSelectExercise?.(item);
+      onClose();
+      return;
+    }
+
+    setSelectedExercisesMap((prev) => {
+      const next = new Map(prev);
+      if (next.has(item.id)) {
+        next.delete(item.id);
+      } else {
+        next.set(item.id, item);
+      }
+      return next;
+    });
+
+    setSelectionOrder((prev) => {
+      if (prev.includes(item.id)) {
+        return prev.filter((id) => id !== item.id);
+      } else {
+        return [...prev, item.id];
+      }
+    });
+  }, [isMultiSelect, selectedExerciseIds, onSelectExercise, onClose]);
+
+  const handleSubmitSelection = useCallback(() => {
+    const orderedExercises = selectionOrder
+      .map((id) => selectedExercisesMap.get(id))
+      .filter((e): e is Exercise => Boolean(e));
+
+    if (orderedExercises.length === 0) return;
+
+    if (onSelectExercises) {
+      onSelectExercises(orderedExercises);
+    } else if (onSelectExercise) {
+      orderedExercises.forEach((ex) => onSelectExercise(ex));
+    }
+
+    setSelectedExercisesMap(new Map());
+    setSelectionOrder([]);
+    onClose();
+  }, [selectionOrder, selectedExercisesMap, onSelectExercises, onSelectExercise, onClose]);
+
   const handleCreateCustomExercise = async () => {
     const trimmed = customName.trim();
     if (!trimmed) {
@@ -180,8 +245,12 @@ export function ExercisePickerModal({
       setIsCreatingCustom(false);
       setCustomSaving(false);
 
-      // Auto select newly created custom exercise for active workout session
-      onSelectExercise(created);
+      // Auto select newly created custom exercise for workout/template session
+      if (onSelectExercises) {
+        onSelectExercises([created]);
+      } else if (onSelectExercise) {
+        onSelectExercise(created);
+      }
       onClose();
     } catch (err: any) {
       setCustomError(err?.message || 'Failed to create custom exercise.');
@@ -189,40 +258,66 @@ export function ExercisePickerModal({
     }
   };
 
+  const selectedCount = selectionOrder.length;
+
   const renderItem = ({ item }: { item: Exercise }) => {
     const isAlreadyAdded = selectedExerciseIds.includes(item.id);
+    const isSelected = selectedExercisesMap.has(item.id);
 
     return (
       <Pressable
         testID={`picker-exercise-${item.id}`}
         disabled={isAlreadyAdded}
-        onPress={() => {
-          onSelectExercise(item);
-          onClose();
-        }}
+        onPress={() => handleToggleExercise(item)}
         style={[styles.cardPressable, isAlreadyAdded && styles.cardDisabled]}
       >
-        <Card style={styles.exerciseCard}>
+        <Card
+          style={[
+            styles.exerciseCard,
+            isMultiSelect && isSelected ? styles.exerciseCardSelected : null,
+          ]}
+        >
           <View style={styles.cardHeader}>
             <View style={styles.titleContainer}>
-              <Text
-                variant="bodyBold"
-                color={isAlreadyAdded ? 'muted' : 'primary'}
-                numberOfLines={2}
-                style={styles.cardTitle}
-              >
-                {item.name}
-              </Text>
+              <View style={styles.titleWithBadge}>
+                <Text
+                  variant="bodyBold"
+                  color={isAlreadyAdded ? 'muted' : isSelected ? 'accent' : 'primary'}
+                  numberOfLines={2}
+                  style={styles.cardTitle}
+                >
+                  {item.name}
+                </Text>
+                {item.isCustom ? (
+                  <View style={styles.customInlineBadge}>
+                    <Text variant="caption" color="accent" style={styles.inlineBadgeText}>
+                      CUSTOM
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
               <Text variant="caption" color="secondary" numberOfLines={1}>
                 {item.categoryName}
               </Text>
             </View>
 
             {isAlreadyAdded ? (
-              <View style={styles.addedBadge}>
+              <View style={styles.addedBadge} testID={`picker-added-badge-${item.id}`}>
                 <Text variant="caption" color="muted" style={styles.badgeText}>
                   ADDED
                 </Text>
+              </View>
+            ) : isMultiSelect ? (
+              <View
+                testID={`picker-checkbox-${item.id}`}
+                style={[
+                  styles.checkboxContainer,
+                  isSelected ? styles.checkboxSelected : styles.checkboxUnselected,
+                ]}
+              >
+                {isSelected ? (
+                  <Text style={styles.checkIcon}>✓</Text>
+                ) : null}
               </View>
             ) : item.isCustom ? (
               <View style={styles.customBadge}>
@@ -244,7 +339,7 @@ export function ExercisePickerModal({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" onRequestClose={handleCancelAndClose}>
       <ScreenContainer style={[styles.container, { paddingTop: Math.max(insets.top, spacing.xs) }]}>
         {isCreatingCustom ? (
           /* Custom Exercise Creation Form View */
@@ -382,7 +477,7 @@ export function ExercisePickerModal({
                 <Button
                   testID="picker-close-button"
                   title="Cancel"
-                  onPress={onClose}
+                  onPress={handleCancelAndClose}
                   variant="ghost"
                   size="sm"
                   style={styles.closeButton}
@@ -490,9 +585,13 @@ export function ExercisePickerModal({
               <FlatList
                 testID="picker-exercise-list"
                 data={exercises}
+                extraData={selectedCount}
                 keyExtractor={(item) => item.id}
                 renderItem={renderItem}
-                contentContainerStyle={styles.listContent}
+                contentContainerStyle={[
+                  styles.listContent,
+                  isMultiSelect ? { paddingBottom: 110 } : null,
+                ]}
                 keyboardDismissMode="on-drag"
                 keyboardShouldPersistTaps="handled"
                 initialNumToRender={15}
@@ -509,6 +608,32 @@ export function ExercisePickerModal({
                   ) : null
                 }
               />
+            )}
+
+            {/* Sticky Bottom Action Bar for Multi-select */}
+            {isMultiSelect && (
+              <View
+                style={[
+                  styles.bottomActionBar,
+                  { paddingBottom: Math.max(insets.bottom, spacing.md) },
+                ]}
+              >
+                <Button
+                  testID="picker-add-exercises-button"
+                  title={
+                    selectedCount === 0
+                      ? 'SELECT EXERCISES'
+                      : selectedCount === 1
+                      ? 'ADD 1 EXERCISE'
+                      : `ADD ${selectedCount} EXERCISES`
+                  }
+                  disabled={selectedCount === 0}
+                  onPress={handleSubmitSelection}
+                  variant="primary"
+                  size="lg"
+                  style={styles.addExercisesButton}
+                />
+              </View>
             )}
           </>
         )}
@@ -607,6 +732,13 @@ const createStyles = (colors: any) =>
     exerciseCard: {
       backgroundColor: colors.surface,
       borderColor: colors.borderLight,
+      borderWidth: 1,
+      borderRadius: radii.md,
+      padding: spacing.md,
+    },
+    exerciseCardSelected: {
+      borderColor: colors.primary,
+      backgroundColor: 'rgba(56, 189, 248, 0.08)',
     },
     cardHeader: {
       flexDirection: 'row',
@@ -619,8 +751,50 @@ const createStyles = (colors: any) =>
       gap: 2,
       marginRight: spacing.xs,
     },
+    titleWithBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs + 2,
+      flexWrap: 'wrap',
+    },
+    customInlineBadge: {
+      backgroundColor: 'rgba(34, 197, 94, 0.15)',
+      borderColor: colors.success,
+      borderWidth: 1,
+      paddingHorizontal: 5,
+      paddingVertical: 1,
+      borderRadius: radii.xs,
+    },
+    inlineBadgeText: {
+      fontSize: 9,
+      fontWeight: '800',
+      color: colors.success,
+    },
     cardTitle: {
       lineHeight: 20,
+    },
+    checkboxContainer: {
+      width: 28,
+      height: 28,
+      borderRadius: radii.full,
+      justifyContent: 'center',
+      alignItems: 'center',
+      flexShrink: 0,
+    },
+    checkboxUnselected: {
+      borderWidth: 2,
+      borderColor: colors.borderLight,
+      backgroundColor: colors.surfaceSubtle,
+    },
+    checkboxSelected: {
+      backgroundColor: colors.primary,
+      borderWidth: 2,
+      borderColor: colors.primary,
+    },
+    checkIcon: {
+      color: colors.background,
+      fontSize: 15,
+      fontWeight: '900',
     },
     addedBadge: {
       backgroundColor: colors.surfaceElevated,
@@ -656,6 +830,25 @@ const createStyles = (colors: any) =>
     badgeText: {
       fontSize: 11,
       fontWeight: '700',
+    },
+    bottomActionBar: {
+      position: 'absolute',
+      bottom: 0,
+      left: 0,
+      right: 0,
+      backgroundColor: colors.background,
+      borderTopWidth: 1,
+      borderTopColor: colors.borderLight,
+      paddingHorizontal: spacing.md,
+      paddingTop: spacing.sm,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: -4 },
+      shadowOpacity: 0.25,
+      shadowRadius: 8,
+      elevation: 10,
+    },
+    addExercisesButton: {
+      minHeight: 48,
     },
     centerContainer: {
       flex: 1,
