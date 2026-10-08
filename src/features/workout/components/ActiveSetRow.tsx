@@ -10,7 +10,7 @@ export interface ActiveSetRowProps {
   set: WorkoutSet;
   previousSet?: WorkoutSet;
   canDelete: boolean;
-  isNotesExpanded: boolean;
+  isNotesExpanded?: boolean;
   onToggleNotes: (setId: string) => void;
   onDeleteSet: (exerciseId: string, setId: string) => void;
   onUpdateSetField: (
@@ -68,7 +68,9 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
       setLocalReps(set.reps !== undefined && set.reps !== null ? String(set.reps) : '');
       setLocalRir(set.rir !== undefined && set.rir !== null ? String(set.rir) : '');
     }
-    setLocalNotes(set.notes || '');
+    if (set.notes !== undefined) {
+      setLocalNotes(set.notes);
+    }
   }, [set.completed, set.weight, set.reps, set.rir, set.notes]);
 
   const handleWeightChange = useCallback((val: string) => {
@@ -107,6 +109,11 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
     onUpdateSetField(exercise.exerciseId, set.id, 'notes', localNotes);
   }, [exercise.exerciseId, set.id, localNotes, onUpdateSetField]);
 
+  const handleClearNote = useCallback(() => {
+    setLocalNotes('');
+    onUpdateSetField(exercise.exerciseId, set.id, 'notes', '');
+  }, [exercise.exerciseId, set.id, onUpdateSetField]);
+
   const handleToggleComplete = useCallback(() => {
     let pendingUpdates: Partial<WorkoutSet> = {};
 
@@ -144,7 +151,8 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
 
   const previousText = formatPrevious(previousSet);
 
-  const hasNotes = Boolean(set.notes && set.notes.trim().length > 0) || Boolean(isNotesExpanded);
+  const hasExistingNote = Boolean(localNotes && localNotes.trim().length > 0);
+  const isExpanded = isNotesExpanded !== undefined ? isNotesExpanded : hasExistingNote;
 
   return (
     <View
@@ -153,7 +161,7 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
         set.completed ? styles.rowWrapperCompleted : null,
       ]}
     >
-      {/* Main Tabular Row: [SET] [PREV] [KG] [REPS] [RIR] [✓] */}
+      {/* Main Tabular Row: [SET] [PREV] [KG] [REPS] [RIR] [✓] [NOTE] */}
       <View style={styles.mainRow}>
         {/* Set Number Indicator */}
         <Pressable
@@ -275,10 +283,65 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
             </Text>
           </Pressable>
         </View>
+
+        {/* Compact Note Trigger Button */}
+        <View style={styles.colNote}>
+          <Pressable
+            testID={`set-note-toggle-${exercise.exerciseId}-${set.setNumber}`}
+            onPress={() => onToggleNotes(set.id)}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            style={[
+              styles.noteButton,
+              hasExistingNote ? styles.noteButtonActive : null,
+            ]}
+            accessibilityLabel={
+              hasExistingNote
+                ? `Edit note for set ${set.setNumber}`
+                : `Add note for set ${set.setNumber}`
+            }
+            accessibilityRole="button"
+          >
+            <Text
+              style={[
+                styles.noteButtonIcon,
+                hasExistingNote ? styles.noteButtonIconActive : null,
+              ]}
+            >
+              {hasExistingNote ? '📝' : '✎'}
+            </Text>
+            {hasExistingNote && (
+              <View
+                testID={`set-note-indicator-${exercise.exerciseId}-${set.setNumber}`}
+                style={styles.noteActiveDot}
+              />
+            )}
+          </Pressable>
+        </View>
       </View>
 
-      {/* Expanded Notes & Delete Row */}
-      {hasNotes && (
+      {/* Collapsed Note Preview Pill */}
+      {!isExpanded && hasExistingNote && (
+        <Pressable
+          testID={`set-note-preview-${exercise.exerciseId}-${set.setNumber}`}
+          onPress={() => onToggleNotes(set.id)}
+          style={styles.notePreviewPill}
+          accessibilityLabel={`Note: ${localNotes}. Tap to edit.`}
+          accessibilityRole="button"
+        >
+          <Text style={styles.notePreviewIcon}>📝</Text>
+          <Text
+            numberOfLines={1}
+            ellipsizeMode="tail"
+            style={styles.notePreviewText}
+          >
+            {localNotes}
+          </Text>
+          <Text style={styles.notePreviewEditHint}>Edit</Text>
+        </Pressable>
+      )}
+
+      {/* Expanded Notes & Actions Row */}
+      {isExpanded && (
         <View style={styles.notesRow}>
           <TextInput
             testID={`set-notes-${exercise.exerciseId}-${set.setNumber}`}
@@ -289,8 +352,34 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
             onBlur={commitNotes}
             onSubmitEditing={commitNotes}
             style={styles.notesInput}
-            autoFocus={!set.notes && Boolean(isNotesExpanded)}
+            autoFocus={!hasExistingNote}
+            returnKeyType="done"
           />
+          {localNotes.trim().length > 0 && (
+            <Pressable
+              testID={`clear-set-note-${exercise.exerciseId}-${set.setNumber}`}
+              onPress={handleClearNote}
+              hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+              style={styles.clearNoteButton}
+              accessibilityLabel={`Clear note for set ${set.setNumber}`}
+              accessibilityRole="button"
+            >
+              <Text style={styles.clearNoteText}>✕</Text>
+            </Pressable>
+          )}
+          <Pressable
+            testID={`done-set-note-${exercise.exerciseId}-${set.setNumber}`}
+            onPress={() => {
+              commitNotes();
+              onToggleNotes(set.id);
+            }}
+            hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+            style={styles.doneNoteButton}
+            accessibilityLabel={`Done editing note for set ${set.setNumber}`}
+            accessibilityRole="button"
+          >
+            <Text style={styles.doneNoteText}>Done</Text>
+          </Pressable>
           {canDelete && (
             <Pressable
               testID={`delete-set-${exercise.exerciseId}-${set.setNumber}`}
@@ -327,7 +416,7 @@ const createStyles = (colors: any) =>
       gap: 6,
     },
     colSet: {
-      width: 28,
+      width: 26,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -347,39 +436,39 @@ const createStyles = (colors: any) =>
       color: colors.primary,
     },
     colPrev: {
-      width: 58,
+      width: 48,
       alignItems: 'center',
       justifyContent: 'center',
     },
     prevText: {
       fontWeight: '600',
-      fontSize: 12,
+      fontSize: 11,
       color: colors.textMuted,
       textAlign: 'center',
     },
     prevTextEmpty: {
       color: colors.textMuted,
-      fontSize: 13,
+      fontSize: 12,
       fontWeight: '400',
     },
     colKg: {
       flex: 1.15,
-      minWidth: 62,
+      minWidth: 54,
     },
     colReps: {
       flex: 1.0,
-      minWidth: 54,
+      minWidth: 48,
     },
     colRir: {
       flex: 0.85,
-      minWidth: 46,
+      minWidth: 42,
     },
     metricInput: {
       backgroundColor: colors.surfaceElevated,
       borderWidth: 1,
       borderColor: colors.borderLight,
       borderRadius: 8,
-      paddingHorizontal: 4,
+      paddingHorizontal: 2,
       paddingVertical: 0,
       color: colors.textPrimary,
       fontSize: 15,
@@ -398,12 +487,12 @@ const createStyles = (colors: any) =>
       color: colors.textSecondary,
     },
     colCheck: {
-      width: 42,
+      width: 38,
       alignItems: 'center',
       justifyContent: 'center',
     },
     checkButton: {
-      width: 42,
+      width: 38,
       height: 44,
       borderRadius: 8,
       justifyContent: 'center',
@@ -420,7 +509,7 @@ const createStyles = (colors: any) =>
       borderColor: colors.primary,
     },
     checkButtonIcon: {
-      fontSize: 17,
+      fontSize: 16,
       fontWeight: '900',
     },
     checkIconPending: {
@@ -428,6 +517,69 @@ const createStyles = (colors: any) =>
     },
     checkIconDone: {
       color: colors.background,
+    },
+    colNote: {
+      width: 32,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    noteButton: {
+      width: 32,
+      height: 44,
+      borderRadius: 8,
+      backgroundColor: colors.surfaceSubtle,
+      borderWidth: 1,
+      borderColor: colors.borderLight,
+      justifyContent: 'center',
+      alignItems: 'center',
+      position: 'relative',
+    },
+    noteButtonActive: {
+      backgroundColor: 'rgba(56, 189, 248, 0.12)',
+      borderColor: colors.primary,
+    },
+    noteButtonIcon: {
+      fontSize: 13,
+      color: colors.textMuted,
+    },
+    noteButtonIconActive: {
+      fontSize: 13,
+    },
+    noteActiveDot: {
+      position: 'absolute',
+      top: 5,
+      right: 5,
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: colors.primary,
+    },
+    notePreviewPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: 'rgba(56, 189, 248, 0.06)',
+      borderWidth: 1,
+      borderColor: 'rgba(56, 189, 248, 0.2)',
+      borderRadius: 6,
+      paddingVertical: 5,
+      paddingHorizontal: 8,
+      marginTop: 2,
+      gap: 6,
+    },
+    notePreviewIcon: {
+      fontSize: 11,
+    },
+    notePreviewText: {
+      flex: 1,
+      fontSize: 12,
+      color: colors.textSecondary,
+      fontWeight: '500',
+    },
+    notePreviewEditHint: {
+      fontSize: 11,
+      color: colors.primary,
+      fontWeight: '700',
+      letterSpacing: 0.3,
     },
     notesRow: {
       flexDirection: 'row',
@@ -447,6 +599,36 @@ const createStyles = (colors: any) =>
       color: colors.textPrimary,
       fontSize: 12,
       height: 36,
+    },
+    clearNoteButton: {
+      width: 32,
+      height: 36,
+      borderRadius: 8,
+      backgroundColor: colors.surfaceSubtle,
+      borderWidth: 1,
+      borderColor: colors.borderLight,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    clearNoteText: {
+      color: colors.textMuted,
+      fontSize: 12,
+      fontWeight: '700',
+    },
+    doneNoteButton: {
+      paddingHorizontal: 10,
+      height: 36,
+      borderRadius: 8,
+      backgroundColor: 'rgba(56, 189, 248, 0.12)',
+      borderWidth: 1,
+      borderColor: colors.primary,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    doneNoteText: {
+      color: colors.primary,
+      fontSize: 12,
+      fontWeight: '700',
     },
     deleteIconButton: {
       width: 36,

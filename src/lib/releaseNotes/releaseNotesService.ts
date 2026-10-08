@@ -17,6 +17,19 @@ export interface ReleaseNoteItem {
 }
 
 export const CURRENT_RELEASE_NOTES: Record<string, ReleaseNoteItem> = {
+  '2.1.1': {
+    version: '2.1.1',
+    title: "What's New in BeBig",
+    highlights: [
+      'Per-set Notes are easier to access during workouts',
+      'Notes remain visible after workout completion',
+      'Notes are shown in Workout Summary',
+      'Notes are shown in Workout History detail',
+      'History cards show when notes exist',
+      'Previous performance indicates when a previous set had a note',
+      'Notes remain attached to the correct exercise/set',
+    ],
+  },
   '2.1.0': {
     version: '2.1.0',
     title: "What's New in BeBig",

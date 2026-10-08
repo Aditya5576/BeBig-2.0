@@ -122,7 +122,17 @@ export default function ActiveWorkoutScreen() {
   const [renameInputText, setRenameInputText] = useState('');
 
   const toggleNotesForSet = (setId: string) => {
-    setExpandedNotesSetIds((prev) => ({ ...prev, [setId]: !prev[setId] }));
+    setExpandedNotesSetIds((prev) => {
+      let isCurrentlyExpanded = prev[setId];
+      if (isCurrentlyExpanded === undefined) {
+        const current = sessionRef.current || session;
+        const setObj = current?.exercises
+          .flatMap((e) => e.actualSets)
+          .find((s) => s.id === setId);
+        isCurrentlyExpanded = Boolean(setObj?.notes && setObj.notes.trim().length > 0);
+      }
+      return { ...prev, [setId]: !isCurrentlyExpanded };
+    });
   };
 
   // Fetch last performance per exercise from local completed history

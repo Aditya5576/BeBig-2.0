@@ -229,6 +229,15 @@ export default function WorkoutHistoryScreen() {
                       .slice(0, 3)
                       .join(' • ');
 
+                    const notesCount = (item.exercises || []).reduce(
+                      (acc, ex) =>
+                        acc +
+                        (ex.actualSets
+                          ? ex.actualSets.filter((s) => typeof s.notes === 'string' && s.notes.trim().length > 0).length
+                          : 0),
+                      0
+                    );
+
                     return (
                       <Card key={item.id} style={styles.workoutCard} testID={`history-card-${item.id}`}>
                         <Pressable
@@ -267,7 +276,7 @@ export default function WorkoutHistoryScreen() {
                               </View>
                             ) : (
                               <View style={{ gap: 4 }}>
-                                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                                     <Text
                                       variant="titleMedium"
                                       color="primary"
@@ -277,6 +286,13 @@ export default function WorkoutHistoryScreen() {
                                       {item.name}
                                     </Text>
                                     <HistorySyncStatus workoutId={item.id} />
+                                    {notesCount > 0 && (
+                                      <View style={styles.historyCardNoteBadge} testID={`history-card-notes-indicator-${item.id}`}>
+                                        <Text style={styles.historyCardNoteText}>
+                                          📝 {notesCount} {notesCount === 1 ? 'note' : 'notes'}
+                                        </Text>
+                                      </View>
+                                    )}
                                   </View>
                                   <Text variant="caption" color="muted">
                                     {formatCompletedDate(item.finishedAt || item.startedAt)}
@@ -585,6 +601,18 @@ const createStyles = (colors: any) => StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'flex-end',
     gap: spacing.sm,
+  },
+  historyCardNoteBadge: {
+    backgroundColor: 'rgba(56, 189, 248, 0.1)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: radii.xs || 4,
+    alignSelf: 'center',
+  },
+  historyCardNoteText: {
+    fontSize: 11,
+    color: colors.primary,
+    fontWeight: '600',
   },
 });
 

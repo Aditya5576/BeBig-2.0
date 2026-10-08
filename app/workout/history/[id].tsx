@@ -42,6 +42,11 @@ export default function WorkoutHistoryDetailScreen() {
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [templateSaved, setTemplateSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [expandedHistoryNotes, setExpandedHistoryNotes] = useState<Record<string, boolean>>({});
+
+  const toggleHistoryNote = (setId: string) => {
+    setExpandedHistoryNotes((prev) => ({ ...prev, [setId]: !prev[setId] }));
+  };
 
   const updateTemplateName = (val: string) => {
     templateNameInputRef.current = val;
@@ -339,34 +344,60 @@ export default function WorkoutHistoryDetailScreen() {
                 <View style={styles.setsList}>
                   {setsToRender.map((s, index) => {
                     const isLastSet = index === setsToRender.length - 1;
+                    const hasNote = Boolean(s.notes && s.notes.trim().length > 0);
                     return (
                       <View
                         key={s.id}
-                        style={[styles.setRow, isLastSet && styles.lastSetRow]}
+                        style={[styles.setRowWrapper, isLastSet && styles.lastSetRowWrapper]}
                         testID={`history-set-${ex.exerciseId}-${s.setNumber}`}
                       >
-                        <View style={styles.setIndexBadge}>
-                          <Text variant="caption" color="primary" style={styles.setIndexText}>
-                            SET {s.setNumber}
-                          </Text>
-                        </View>
-
-                        <View style={styles.setMetricsGroup}>
-                          <Text variant="bodyBold" color="primary">
-                            {s.weight > 0 ? `${s.weight} kg` : 'Bodyweight'} × {s.reps} reps
-                          </Text>
-                          {typeof s.rir === 'number' ? (
-                            <Text variant="caption" color="muted">
-                              RIR {s.rir}
+                        <View style={styles.setRow}>
+                          <View style={styles.setIndexBadge}>
+                            <Text variant="caption" color="primary" style={styles.setIndexText}>
+                              SET {s.setNumber}
                             </Text>
-                          ) : null}
+                          </View>
+
+                          <View style={styles.setMetricsGroup}>
+                            <Text variant="bodyBold" color="primary">
+                              {s.weight > 0 ? `${s.weight} kg` : 'Bodyweight'} × {s.reps} reps
+                            </Text>
+                            {typeof s.rir === 'number' ? (
+                              <Text variant="caption" color="muted">
+                                RIR {s.rir}
+                              </Text>
+                            ) : null}
+                          </View>
+
+                          {hasNote && (
+                            <Pressable
+                              onPress={() => toggleHistoryNote(s.id)}
+                              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                              style={styles.historyNoteBadge}
+                              testID={`history-set-note-indicator-${ex.exerciseId}-${s.setNumber}`}
+                              accessibilityLabel={`Set ${s.setNumber} note: ${s.notes}`}
+                            >
+                              <Text style={styles.historyNoteBadgeIcon}>📝</Text>
+                            </Pressable>
+                          )}
                         </View>
 
-                        {s.notes ? (
-                          <Text variant="caption" color="secondary" style={styles.setNotesText}>
-                            {`"${s.notes}"`}
-                          </Text>
-                        ) : null}
+                        {hasNote && (
+                          <Pressable
+                            onPress={() => toggleHistoryNote(s.id)}
+                            style={styles.historyNoteCallout}
+                            testID={`history-set-note-${ex.exerciseId}-${s.setNumber}`}
+                          >
+                            <Text
+                              variant="caption"
+                              color="secondary"
+                              style={styles.setNotesText}
+                              numberOfLines={expandedHistoryNotes[s.id] ? undefined : 2}
+                            >
+                              {`"${s.notes}"`}
+                            </Text>
+                          </Pressable>
+                        )}
                       </View>
                     );
                   })}
@@ -655,16 +686,40 @@ const createStyles = (colors: any) =>
       letterSpacing: 0.8,
       marginBottom: spacing.xs,
     },
+    setRowWrapper: {
+      paddingVertical: spacing.xs,
+      borderBottomWidth: 1,
+      borderBottomColor: 'rgba(255, 255, 255, 0.05)',
+      gap: 4,
+    },
+    lastSetRowWrapper: {
+      borderBottomWidth: 0,
+    },
     setRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingVertical: spacing.xs,
-      borderBottomWidth: 1,
-      borderBottomColor: 'rgba(255, 255, 255, 0.05)',
     },
     lastSetRow: {
       borderBottomWidth: 0,
+    },
+    historyNoteBadge: {
+      paddingHorizontal: 4,
+      paddingVertical: 2,
+      borderRadius: 4,
+      backgroundColor: 'rgba(56, 189, 248, 0.08)',
+    },
+    historyNoteBadgeIcon: {
+      fontSize: 12,
+    },
+    historyNoteCallout: {
+      backgroundColor: 'rgba(56, 189, 248, 0.05)',
+      borderLeftWidth: 2,
+      borderLeftColor: colors.primary,
+      paddingVertical: 4,
+      paddingHorizontal: 8,
+      borderRadius: 4,
+      marginTop: 2,
     },
     setIndexBadge: {
       backgroundColor: 'rgba(255, 255, 255, 0.06)',

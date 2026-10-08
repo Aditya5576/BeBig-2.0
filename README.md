@@ -3,7 +3,7 @@
 A production-grade, local-first gym workout tracking Progressive Web Application (PWA) and mobile platform engineered for serious lifters, strength athletes, and fitness enthusiasts. Built with Expo, React Native, TypeScript, Supabase, and resilient offline-first storage.
 
 [![Production App](https://img.shields.io/badge/Production-Live-success?style=for-the-badge&logo=vercel)](https://be-big-2-0.vercel.app)
-[![Version](https://img.shields.io/badge/Version-v2.1.0-blue?style=for-the-badge)](https://github.com/Aditya5576/BeBig-2.0)
+[![Version](https://img.shields.io/badge/Version-v2.1.1-blue?style=for-the-badge)](https://github.com/Aditya5576/BeBig-2.0)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Strict-3178C6?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org/)
 [![Expo](https://img.shields.io/badge/Expo-SDK_57-000020?style=for-the-badge&logo=expo)](https://expo.dev/)
 
@@ -18,7 +18,18 @@ A production-grade, local-first gym workout tracking Progressive Web Application
 
 ---
 
-## 🚀 Latest Release — v2.1.0
+## 🚀 Latest Release — v2.1.1
+
+### What's New in v2.1.1
+- **Per-Set Notes Accessibility**: Per-set notes are readily discoverable and accessible directly within active workout set rows.
+- **Completed Workout Notes Visibility**: Notes remain fully visible and readable across Workout Summary and Workout History detail.
+- **Workout History Indicators**: History workout cards display a compact badge (`📝 X notes`) indicating when a session contains logged notes.
+- **Previous Performance Insights**: Set chips under "LAST TIME" clearly indicate (`📝`) if a past set had notes.
+- **Durable Notes Attachment**: Notes survive set completion, exercise reordering, and workout minimize/reopen.
+
+---
+
+## 🚀 Previous Release — v2.1.0
 
 ### What's New in v2.1.0
 - **Workout 2.0 Experience**: Athletic, spacious active workout UI with compact set rows, streamlined input UX, and professional proportions.

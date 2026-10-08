@@ -93,6 +93,11 @@ export default function WorkoutSummaryScreen() {
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [templateSaved, setTemplateSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [expandedSummaryNotes, setExpandedSummaryNotes] = useState<Record<string, boolean>>({});
+
+  const toggleSummaryNote = (setId: string) => {
+    setExpandedSummaryNotes((prev) => ({ ...prev, [setId]: !prev[setId] }));
+  };
 
   const updateTemplateName = (val: string) => {
     templateNameInputRef.current = val;
@@ -553,23 +558,52 @@ export default function WorkoutSummaryScreen() {
                 </View>
 
                 <View style={styles.setsList}>
-                  {finishedSets.map((s) => (
-                    <View key={s.id} style={styles.setDetailRow}>
-                      <Text variant="caption" color="muted" style={styles.setIndex}>
-                        SET {s.setNumber}
-                      </Text>
-                      <Text variant="bodyBold" color="primary" style={styles.setData}>
-                        {s.weight > 0 ? `${s.weight} kg × ` : ''}
-                        {s.reps} reps
-                        {s.rir !== undefined ? ` (RIR ${s.rir})` : ''}
-                      </Text>
-                      {s.notes ? (
-                        <Text variant="caption" color="secondary" style={styles.setNotes}>
-                          {`"${s.notes}"`}
-                        </Text>
-                      ) : null}
-                    </View>
-                  ))}
+                  {finishedSets.map((s) => {
+                    const hasNote = Boolean(s.notes && s.notes.trim().length > 0);
+                    return (
+                      <View key={s.id} style={styles.setDetailItem}>
+                        <View style={styles.setDetailRow}>
+                          <View style={styles.setMainInfo}>
+                            <Text variant="caption" color="muted" style={styles.setIndex}>
+                              SET {s.setNumber}
+                            </Text>
+                            <Text variant="bodyBold" color="primary" style={styles.setData}>
+                              {s.weight > 0 ? `${s.weight} kg × ` : ''}
+                              {s.reps} reps
+                              {s.rir !== undefined ? ` (RIR ${s.rir})` : ''}
+                            </Text>
+                          </View>
+                          {hasNote && (
+                            <Pressable
+                              onPress={() => toggleSummaryNote(s.id)}
+                              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                              style={styles.summaryNoteBadge}
+                              testID={`summary-note-indicator-${ex.exerciseId}-${s.setNumber}`}
+                              accessibilityLabel={`Set ${s.setNumber} note: ${s.notes}`}
+                            >
+                              <Text style={styles.summaryNoteBadgeIcon}>📝</Text>
+                            </Pressable>
+                          )}
+                        </View>
+                        {hasNote && (
+                          <Pressable
+                            onPress={() => toggleSummaryNote(s.id)}
+                            style={styles.summaryNoteCallout}
+                            testID={`summary-note-${ex.exerciseId}-${s.setNumber}`}
+                          >
+                            <Text
+                              variant="caption"
+                              color="secondary"
+                              style={styles.setNotes}
+                              numberOfLines={expandedSummaryNotes[s.id] ? undefined : 2}
+                            >
+                              {`"${s.notes}"`}
+                            </Text>
+                          </Pressable>
+                        )}
+                      </View>
+                    );
+                  })}
                 </View>
               </Card>
             );
@@ -918,7 +952,18 @@ const createStyles = (colors: any) => StyleSheet.create({
   setsList: {
     gap: spacing.xs,
   },
+  setDetailItem: {
+    paddingVertical: 3,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.04)',
+    gap: 3,
+  },
   setDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  setMainInfo: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
@@ -931,8 +976,28 @@ const createStyles = (colors: any) => StyleSheet.create({
   setData: {
     fontSize: 14,
   },
+  summaryNoteBadge: {
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 4,
+    backgroundColor: 'rgba(56, 189, 248, 0.08)',
+  },
+  summaryNoteBadgeIcon: {
+    fontSize: 12,
+  },
+  summaryNoteCallout: {
+    backgroundColor: 'rgba(56, 189, 248, 0.05)',
+    borderLeftWidth: 2,
+    borderLeftColor: colors.primary,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 4,
+    marginTop: 2,
+  },
   setNotes: {
     fontStyle: 'italic',
+    fontSize: 12,
+    lineHeight: 16,
   },
   templateSection: {
     marginTop: spacing.xs,

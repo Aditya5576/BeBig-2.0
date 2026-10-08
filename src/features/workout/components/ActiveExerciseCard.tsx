@@ -175,18 +175,23 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(({
             </Text>
           </View>
           <View style={styles.lastTimeSetsRow}>
-            {lastPerformance.sets.map((s, idx, arr) => (
-              <Text
-                key={s.id || idx}
-                variant="caption"
-                color="secondary"
-                style={styles.lastTimeSetChip}
-              >
-                {s.weight > 0 ? `${s.weight}kg` : 'BW'} × {s.reps}
-                {s.rir !== undefined && s.rir !== null ? ` @ RIR ${s.rir}` : ''}
-                {idx < arr.length - 1 ? '  •  ' : ''}
-              </Text>
-            ))}
+            {lastPerformance.sets.map((s, idx, arr) => {
+              const weightText = s.weight > 0 ? `${s.weight}kg` : 'BW';
+              const rirText = s.rir !== undefined && s.rir !== null ? ` @ RIR ${s.rir}` : '';
+              const noteText = s.notes && s.notes.trim().length > 0 ? ' 📝' : '';
+              const separator = idx < arr.length - 1 ? '  •  ' : '';
+              return (
+                <Text
+                  key={s.id || idx}
+                  variant="caption"
+                  color="secondary"
+                  style={styles.lastTimeSetChip}
+                  testID={`last-time-set-chip-${exercise.exerciseId}-${s.setNumber || idx + 1}`}
+                >
+                  {`${weightText} × ${s.reps}${rirText}${noteText}${separator}`}
+                </Text>
+              );
+            })}
           </View>
         </View>
       ) : (
@@ -232,6 +237,11 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(({
             ✓
           </Text>
         </View>
+        <View style={styles.headerColNote}>
+          <Text variant="caption" color="muted" style={styles.headerLabel}>
+            NOTE
+          </Text>
+        </View>
       </View>
 
       {/* Sets List */}
@@ -243,7 +253,7 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(({
             set={set}
             previousSet={lastPerformance?.sets?.[set.setNumber - 1]}
             canDelete={exercise.actualSets.length > 1 && !set.completed}
-            isNotesExpanded={Boolean(expandedNotesSetIds[set.id])}
+            isNotesExpanded={expandedNotesSetIds[set.id]}
             onToggleNotes={onToggleNotes}
             onDeleteSet={onDeleteSet}
             onUpdateSetField={onUpdateSetField}
@@ -435,30 +445,34 @@ const createStyles = (colors: any) =>
       color: colors.textMuted,
     },
     headerColSet: {
-      width: 28,
+      width: 26,
       alignItems: 'center',
     },
     headerColPrev: {
-      width: 58,
+      width: 48,
       alignItems: 'center',
     },
     headerColKg: {
       flex: 1.15,
-      minWidth: 62,
+      minWidth: 54,
       alignItems: 'center',
     },
     headerColReps: {
       flex: 1.0,
-      minWidth: 54,
+      minWidth: 48,
       alignItems: 'center',
     },
     headerColRir: {
       flex: 0.85,
-      minWidth: 46,
+      minWidth: 42,
       alignItems: 'center',
     },
     headerColCheck: {
-      width: 42,
+      width: 38,
+      alignItems: 'center',
+    },
+    headerColNote: {
+      width: 32,
       alignItems: 'center',
     },
     setsContainer: {
