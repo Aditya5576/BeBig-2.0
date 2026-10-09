@@ -47,6 +47,10 @@ export default function ActiveWorkoutScreen() {
   const [restOverlayHeight, setRestOverlayHeight] = useState<number>(0);
   const sessionRef = useRef<WorkoutSession | null>(null);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Guard: true once the workout is completed or discarded so that the
+  // component cleanup / AppState background handler never re-saves a stale
+  // active session over the already-cleared active draft.
+  const workoutCompletedRef = useRef(false);
   const scrollViewRef = useRef<ScrollView>(null);
   const currentScrollY = useRef(0);
   const cardLayoutsRef = useRef<{ [exerciseId: string]: { y: number; height: number } }>({});
@@ -63,6 +67,9 @@ export default function ActiveWorkoutScreen() {
   };
 
   const flushActiveWorkout = async (targetSession?: WorkoutSession) => {
+    // Do not autosave after the workout has been completed or discarded.
+    // This prevents the unmount cleanup from resurrecting a cleared active draft.
+    if (workoutCompletedRef.current) return;
     cancelDebouncedSave();
     const sessionToSave = targetSession || sessionRef.current;
     if (!sessionToSave) return;
@@ -82,6 +89,9 @@ export default function ActiveWorkoutScreen() {
   const scheduleDebouncedSave = (newSession: WorkoutSession) => {
     setSession(newSession);
     sessionRef.current = newSession;
+
+    // Do not schedule a new debounced save after completion or discard.
+    if (workoutCompletedRef.current) return;
 
     cancelDebouncedSave();
 
@@ -516,8 +526,16 @@ export default function ActiveWorkoutScreen() {
           style: 'destructive',
           onPress: async () => {
             cancelDebouncedSave();
-            await workoutRepository.discardActiveWorkout();
-            router.replace('/home' as any);
+            // Mark completed BEFORE discarding so the unmount cleanup
+            // does not re-save the stale active session after the clear.
+            workoutCompletedRef.current = true;
+            try {
+              await workoutRepository.discardActiveWorkout();
+              router.replace('/home' as any);
+            } catch (err: any) {
+              workoutCompletedRef.current = false;
+              Alert.alert('Error', err?.message || 'Failed to discard workout.');
+            }
           },
         },
       ],
@@ -551,9 +569,15 @@ export default function ActiveWorkoutScreen() {
               setFinishing(true);
               const latest = sessionRef.current || current;
               await flushActiveWorkout(latest);
+              // Mark completed BEFORE the repository call so the unmount
+              // cleanup (flushActiveWorkout) cannot race with clearActiveWorkout
+              // and resurrect the active draft on Home screen.
+              workoutCompletedRef.current = true;
               const completed = await workoutRepository.completeActiveWorkout(latest);
               router.replace(`/workout/summary?id=${completed.id}` as any);
             } catch (err: any) {
+              // If completion failed, unset the guard so autosave resumes.
+              workoutCompletedRef.current = false;
               Alert.alert('Error', err?.message || 'Failed to complete workout.');
             } finally {
               setFinishing(false);
