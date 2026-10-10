@@ -1,6 +1,6 @@
 import { useAppTheme } from '../../../src/features/theme';
 import React, { useEffect, useState, useRef, useMemo } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, TextInput, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, TextInput, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ScreenContainer, Text, Button, Card, SyncStatusChip } from '../../../src/components/ui';
 import { workoutRepository, WorkoutSession } from '../../../src/features/workout';
@@ -509,8 +509,13 @@ export default function WorkoutHistoryDetailScreen() {
   
         {/* Save Template Modal */}
         {showSaveModal ? (
-          <View style={styles.modalOverlay} testID="save-template-modal">
-            <Card style={styles.modalCard}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay} testID="save-template-modal">
+            <ScrollView
+              contentContainerStyle={styles.modalScrollContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              <Card style={styles.modalCard}>
               <Text variant="titleLarge" color="primary" style={styles.modalTitle}>
                 Save as Template
               </Text>
@@ -577,8 +582,9 @@ export default function WorkoutHistoryDetailScreen() {
                 loading={savingTemplate}
               />
             </View>
-          </Card>
-        </View>
+              </Card>
+            </ScrollView>
+          </KeyboardAvoidingView>
       ) : null}
     </ScreenContainer>
   );
@@ -807,10 +813,13 @@ const createStyles = (colors: any) =>
       right: 0,
       bottom: 0,
       backgroundColor: 'rgba(0, 0, 0, 0.7)',
+      zIndex: 100,
+    },
+    modalScrollContent: {
+      flexGrow: 1,
       justifyContent: 'center',
       alignItems: 'center',
       padding: spacing.md,
-      zIndex: 100,
     },
     modalCard: {
       width: '100%',
