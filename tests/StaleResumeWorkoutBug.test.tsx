@@ -13,8 +13,45 @@
  * and `scheduleDebouncedSave` bail out immediately when that flag is set.
  */
 
+import React from 'react';
+import { View, AppState, Alert } from 'react-native';
+import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { workoutRepository } from '../src/features/workout/services/workoutRepository';
 import { workoutStorage } from '../src/features/workout/storage/workoutStorage';
+import ActiveWorkoutScreen from '../app/workout/active';
+
+const mockPush = jest.fn();
+const mockReplace = jest.fn();
+const mockBack = jest.fn();
+
+jest.mock('expo-router', () => ({
+  useRouter: () => ({
+    push: mockPush,
+    replace: mockReplace,
+    back: mockBack,
+  }),
+  useLocalSearchParams: () => ({}),
+  useFocusEffect: (cb: () => void) => {
+    const React = require('react');
+    React.useEffect(() => {
+      cb();
+    }, [cb]);
+  },
+  Link: ({ children }: { children: React.ReactNode }) => children,
+  Redirect: () => null,
+  Stack: Object.assign(({ children }: { children: React.ReactNode }) => children, {
+    Screen: () => null,
+  }),
+}));
+
+jest.mock('react-native-safe-area-context', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  return {
+    useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+    SafeAreaView: ({ children, style }: any) => React.createElement(View, { style }, children),
+  };
+});
 
 const mockSecureStore = new Map<string, string>();
 jest.mock('expo-secure-store', () => ({
@@ -26,6 +63,23 @@ jest.mock('expo-secure-store', () => ({
     mockSecureStore.delete(key);
   }),
 }));
+
+jest.mock('../src/features/auth', () => {
+  const actual = jest.requireActual('../src/features/auth');
+  const mockState = {
+    user: { id: 'test_user_stale_resume', email: 'athlete@bebig.app' },
+    isGuest: false,
+    signOut: jest.fn(),
+    exitGuestMode: jest.fn(),
+  };
+  const useAuthStore = (selector: any) => selector(mockState);
+  useAuthStore.getState = () => mockState;
+  useAuthStore.setState = jest.fn();
+  return {
+    ...actual,
+    useAuthStore,
+  };
+});
 
 // Silence sync-engine side effects that are irrelevant to this unit
 jest.mock('../src/services/sync', () => ({
@@ -79,10 +133,20 @@ async function seedActiveWorkoutWithCompletedSet(name = 'Test Workout') {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('BeBig 2.0 — Stale Resume Workout Bug Regression', () => {
+  let appStateListener: ((state: string) => void) | null = null;
+
   beforeEach(async () => {
     jest.clearAllMocks();
     mockSecureStore.clear();
     await workoutStorage.clearAllWorkouts();
+    appStateListener = null;
+
+    jest.spyOn(AppState, 'addEventListener').mockImplementation((event: string, callback: any) => {
+      if (event === 'change') {
+        appStateListener = callback;
+      }
+      return { remove: jest.fn() } as any;
+    });
   });
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -128,56 +192,136 @@ describe('BeBig 2.0 — Stale Resume Workout Bug Regression', () => {
   });
 
   // ──────────────────────────────────────────────────────────────────────────
-  // TEST 3: Late autosave cannot resurrect the active draft after completion
+  // TEST 3A: Component unmount after Finish & Save does NOT resurrect active draft
   //
-  // This directly tests the race condition: if saveActiveWorkout is called
-  // AFTER clearActiveWorkout (the bug), the active draft must NOT reappear.
-  // The storage queue serialises operations so the correct expectation is
-  // that the final state is cleared (no active draft).
+  // This directly tests the UI-layer race condition:
+  // ActiveWorkoutScreen unmount triggers useEffect cleanup `flushActiveWorkout()`.
+  // Without the `workoutCompletedRef` guard, that cleanup writes the stale session
+  // back to storage, resurrecting the active draft after `completeActiveWorkout`.
+  // With the guard, `flushActiveWorkout` exits immediately and active draft remains null.
   // ──────────────────────────────────────────────────────────────────────────
-  it('TEST 3 — a saveActiveWorkout queued after clearActiveWorkout does NOT resurrect the draft', async () => {
-    const session = await seedActiveWorkoutWithCompletedSet('Push Day');
+  it('TEST 3A — completing workout in ActiveWorkoutScreen does not resurrect active draft on unmount', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert');
+    await seedActiveWorkoutWithCompletedSet('Push Day');
 
-    // Simulate the EXACT race: complete (which saves completed + clears active)
-    // then immediately try to save active again (simulating the stale flush).
-    const completed = await workoutRepository.completeActiveWorkout(session);
+    const screen = await render(<ActiveWorkoutScreen />);
 
-    // Stale autosave fires AFTER clear (the bug scenario):
-    // workoutStorage.saveActiveWorkout should be blocked by workoutCompletedRef in the UI,
-    // but to prove the storage layer works correctly even if called directly, the
-    // isValidSession check in getActiveWorkout will reject a session with status 'active'
-    // that was re-saved with the same ID as a completed workout because the storage guard
-    // only validates `status === 'active'`.
-    //
-    // The real fix is in the UI layer (workoutCompletedRef). At the storage layer,
-    // a direct `saveActiveWorkout` call with the old session would indeed re-create the key.
-    // So this test validates the UI-layer guard by verifying the end state after completeActiveWorkout.
-    // The session passed to saveActiveWorkout still has status: 'active'.
+    // Wait for the active session to load and UI to render
+    await screen.findByTestId('finish-workout-button');
 
-    // Attempt a stale re-save (the bug path, without the guard)
-    await workoutStorage.saveActiveWorkout({ ...session, status: 'active' });
+    // Tap Finish Workout button
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('finish-workout-button'));
+    });
 
-    // Even if storage accepted the write, getActiveWorkout validates status
-    // The key concern: the COMPLETED workout must still be in history and must not
-    // be returned by getActiveWorkout now that we look for status: 'active'
+    // Alert prompt appears
+    const finishAlertCall = alertSpy.mock.calls.find((call) => call[0] === 'Finish Workout');
+    expect(finishAlertCall).toBeDefined();
+
+    const finishButton = finishAlertCall?.[2]?.find((b: any) => b.text === 'Finish & Save');
+    expect(finishButton).toBeDefined();
+
+    // Confirm completion
+    await act(async () => {
+      await finishButton?.onPress?.();
+    });
+
+    // Unmount component (triggers useEffect cleanup calling flushActiveWorkout)
+    await act(async () => {
+      screen.unmount();
+    });
+
+    // Verify active draft is NOT resurrected
     const activeDraft = await workoutRepository.getActiveWorkout();
-    // If the stale save wrote successfully with status 'active', this would be non-null.
-    // The storage-level validation allows status: 'active'. This proves we NEED the UI guard.
-    // The test documents the surface: active draft may reappear if the guard is removed.
-    // With the guard in place (workoutCompletedRef), this code path is never reached.
+    expect(activeDraft).toBeNull();
 
-    // What we care about for history integrity:
+    // Verify completed workout is preserved in history
     const history = await workoutRepository.getCompletedWorkouts();
-    expect(history.length).toBeGreaterThanOrEqual(1);
-    const found = history.find((w) => w.id === completed.id);
-    expect(found).not.toBeUndefined();
-    expect(found?.status).toBe('completed');
+    expect(history.length).toBe(1);
+    expect(history[0].name).toBe('Push Day');
+    expect(history[0].status).toBe('completed');
   });
 
   // ──────────────────────────────────────────────────────────────────────────
-  // TEST 4: Unfinished workout survives restart (resume flow still works)
+  // TEST 3B: Component unmount after Discard Workout does NOT resurrect active draft
   // ──────────────────────────────────────────────────────────────────────────
-  it('TEST 4 — unfinished workout survives closure and reopen as resume candidate', async () => {
+  it('TEST 3B — discarding workout in ActiveWorkoutScreen does not resurrect active draft on unmount', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert');
+    await seedActiveWorkoutWithCompletedSet('Discard Day');
+
+    const screen = await render(<ActiveWorkoutScreen />);
+
+    await screen.findByTestId('discard-workout-button');
+
+    // Tap Discard Workout button
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('discard-workout-button'));
+    });
+
+    // Alert prompt appears
+    const discardAlertCall = alertSpy.mock.calls.find((call) => call[0] === 'Discard Workout');
+    expect(discardAlertCall).toBeDefined();
+
+    const discardButton = discardAlertCall?.[2]?.find((b: any) => b.text === 'Discard Workout');
+    expect(discardButton).toBeDefined();
+
+    // Confirm discard
+    await act(async () => {
+      await discardButton?.onPress?.();
+    });
+
+    // Unmount component (triggers useEffect cleanup calling flushActiveWorkout)
+    await act(async () => {
+      screen.unmount();
+    });
+
+    // Verify active draft is NOT resurrected
+    const activeDraft = await workoutRepository.getActiveWorkout();
+    expect(activeDraft).toBeNull();
+
+    // Discarded workout must not exist in completed history
+    const history = await workoutRepository.getCompletedWorkouts();
+    expect(history.length).toBe(0);
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // TEST 3C: AppState background transition after completion does NOT resurrect active draft
+  // ──────────────────────────────────────────────────────────────────────────
+  it('TEST 3C — AppState background event after completion does not resurrect active draft', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert');
+    await seedActiveWorkoutWithCompletedSet('Backgrounding Test');
+
+    const screen = await render(<ActiveWorkoutScreen />);
+    await screen.findByTestId('finish-workout-button');
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('finish-workout-button'));
+    });
+
+    const finishAlertCall = alertSpy.mock.calls.find((call) => call[0] === 'Finish Workout');
+    const finishButton = finishAlertCall?.[2]?.find((b: any) => b.text === 'Finish & Save');
+
+    await act(async () => {
+      await finishButton?.onPress?.();
+    });
+
+    // Simulate OS backgrounding the app before screen is unmounted
+    await act(async () => {
+      if (appStateListener) {
+        appStateListener('background');
+      }
+    });
+
+    expect(await workoutRepository.getActiveWorkout()).toBeNull();
+
+    screen.unmount();
+    expect(await workoutRepository.getActiveWorkout()).toBeNull();
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // TEST 4: Unfinished workout survives unmount / reopen as resume candidate
+  // ──────────────────────────────────────────────────────────────────────────
+  it('TEST 4 — unfinished workout survives unmount and restart as resume candidate', async () => {
     const session = await workoutRepository.startEmptyWorkout('Unfinished Arms');
     const withEx = workoutRepository.addExerciseToWorkout(session, {
       id: 'ex_curl',
@@ -185,10 +329,15 @@ describe('BeBig 2.0 — Stale Resume Workout Bug Regression', () => {
     });
     await workoutRepository.updateActiveWorkout(withEx);
 
-    // Simulate minimize / close by clearing in-memory cache
+    const screen = await render(<ActiveWorkoutScreen />);
+    await screen.findByText('Unfinished Arms');
+
+    // Normal exit / unmount without completion or discard
+    screen.unmount();
+
+    // Simulate reopen
     workoutRepository.clearInMemoryState();
 
-    // On reopen, getActiveWorkout should return the unfinished draft
     const restored = await workoutRepository.getActiveWorkout();
     expect(restored).not.toBeNull();
     expect(restored?.id).toBe(session.id);
@@ -202,16 +351,12 @@ describe('BeBig 2.0 — Stale Resume Workout Bug Regression', () => {
   it('TEST 5 — completing the same active session twice does not duplicate history', async () => {
     const session = await seedActiveWorkoutWithCompletedSet('Dedup Test');
 
-    // First completion
     const completed = await workoutRepository.completeActiveWorkout(session);
     expect(completed.status).toBe('completed');
 
-    // Manually simulate a second save of the same completed workout
-    // (mirrors what would happen if saveCompletedWorkout is called twice)
     await workoutStorage.saveCompletedWorkout(completed);
     await workoutStorage.saveCompletedWorkout(completed);
 
-    // saveCompletedWorkout uses filter+prepend so duplicates are replaced in-place
     const history = await workoutRepository.getCompletedWorkouts();
     const matches = history.filter((w) => w.id === completed.id);
     expect(matches.length).toBe(1);
@@ -242,7 +387,6 @@ describe('BeBig 2.0 — Stale Resume Workout Bug Regression', () => {
 
     const completed = await workoutRepository.completeActiveWorkout(session);
 
-    // Retrieve from history and verify data integrity
     const fromHistory = await workoutRepository.getCompletedWorkoutById(completed.id);
     expect(fromHistory).not.toBeNull();
     expect(fromHistory?.status).toBe('completed');
@@ -254,7 +398,7 @@ describe('BeBig 2.0 — Stale Resume Workout Bug Regression', () => {
     expect(set?.notes).toBe('Felt strong, bar path clean');
     expect(set?.completed).toBe(true);
 
-    // Active draft must be gone
     expect(await workoutRepository.getActiveWorkout()).toBeNull();
   });
 });
+
