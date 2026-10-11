@@ -17,6 +17,7 @@ import { useAuthStore } from '../src/features/auth';
 import { UserScope } from '../src/features/auth/types';
 import { WorkoutSession } from '../src/features/workout/types';
 import { WorkoutTemplate } from '../src/features/templates/types';
+import { platformStorage } from '../src/lib/storage';
 import { Exercise } from '../src/features/exercises/types';
 
 describe('Milestone 10 — Critical Delete / Tombstone Resurrection Tests', () => {
@@ -35,6 +36,7 @@ describe('Milestone 10 — Critical Delete / Tombstone Resurrection Tests', () =
   let engine: SyncEngine;
 
   beforeEach(async () => {
+    platformStorage.clearMemoryCache();
     syncMetadataStore.clearMemoryCache();
     workoutStorage.clearMemoryCache();
     templateStorage.clearMemoryCache();
@@ -991,5 +993,187 @@ describe('Milestone 10 — Critical Delete / Tombstone Resurrection Tests', () =
     expect(exResult.exercises.find((item) => item.id === 'custom_ui_check_1')).toBeUndefined();
     const singleE = await exerciseRepository.getExerciseById('custom_ui_check_1');
     expect(singleE).toBeNull();
+  });
+
+  // --------------------------------------------------------------------------
+  // 17, 18, 19: MILESTONE 1 — DURABLE DELETIONS (NEWER CLOUD TIMESTAMP RESURRECTION PREVENTION)
+  // --------------------------------------------------------------------------
+
+  it('17. pull with live cloud record having newer timestamp does NOT resurrect locally deleted completed workout', async () => {
+    // 1. Locally deleted workout in pending_delete
+    await syncMetadataStore.markPendingDelete(
+      'workout',
+      'w_newer_cloud_1',
+      '2026-09-01T10:00:00Z',
+      '2026-09-01T10:00:00Z',
+      userA,
+    );
+
+    // 2. Cloud returns a LIVE record with a NEWER timestamp (e.g. 11:00:00Z > 10:00:00Z)
+    mockQueryBuilder.order.mockReturnThis();
+    mockQueryBuilder.limit.mockResolvedValueOnce({
+      data: [
+        {
+          id: 'w_newer_cloud_1',
+          user_id: userA.ownerId,
+          name: 'Resurrect Attempt Workout',
+          started_at: '2026-09-01T08:00:00Z',
+          finished_at: '2026-09-01T09:00:00Z',
+          status: 'completed',
+          total_duration: 3600,
+          total_volume: 5000,
+          completed_sets_count: 10,
+          exercises: [],
+          client_updated_at: '2026-09-01T11:00:00Z', // NEWER than local tombstone!
+          deleted_at: null, // Cloud record is still live
+          created_at: '2026-09-01T08:00:00Z',
+          updated_at: '2026-09-01T11:00:05Z',
+        },
+      ],
+      error: null,
+    });
+
+    const result = await engine.pull(userA);
+
+    // Live cloud record MUST be ignored when local record is a tombstone
+    expect(result.ignoredCount).toBe(1);
+    expect(result.appliedCount).toBe(0);
+
+    // Storage check: must NOT be resurrected into workoutStorage
+    const local = await workoutStorage.getCompletedWorkoutById('w_newer_cloud_1', userA);
+    expect(local).toBeNull();
+
+    // Repository check: getCompletedWorkouts must NOT return it
+    const list = await workoutRepository.getCompletedWorkouts(userA);
+    expect(list.find((w) => w.id === 'w_newer_cloud_1')).toBeUndefined();
+    const single = await workoutRepository.getCompletedWorkoutById('w_newer_cloud_1', userA);
+    expect(single).toBeNull();
+  });
+
+  it('18. pull with live cloud record having newer timestamp does NOT resurrect locally deleted template', async () => {
+    // 1. Locally deleted template in pending_delete
+    await syncMetadataStore.markPendingDelete(
+      'template',
+      't_newer_cloud_1',
+      '2026-09-01T10:00:00Z',
+      '2026-09-01T10:00:00Z',
+      userA,
+    );
+
+    // 2. Cloud returns a LIVE record with a NEWER timestamp for workout_templates
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'workout_templates') {
+        return {
+          ...mockQueryBuilder,
+          limit: jest.fn().mockResolvedValue({
+            data: [
+              {
+                id: 't_newer_cloud_1',
+                user_id: userA.ownerId,
+                name: 'Resurrect Attempt Template',
+                exercises: [],
+                client_updated_at: '2026-09-01T11:00:00Z', // NEWER than local tombstone!
+                deleted_at: null, // Cloud record is still live
+                created_at: '2026-09-01T08:00:00Z',
+                updated_at: '2026-09-01T11:00:05Z',
+              },
+            ],
+            error: null,
+          }),
+        };
+      }
+      return {
+        ...mockQueryBuilder,
+        limit: jest.fn().mockResolvedValue({
+          data: [],
+          error: null,
+        }),
+      };
+    });
+
+    const result = await engine.pull(userA);
+
+    // Live cloud record MUST be ignored when local record is a tombstone
+    expect(result.ignoredCount).toBe(1);
+    expect(result.appliedCount).toBe(0);
+
+    // Storage check: must NOT be resurrected into templateStorage
+    const local = await templateStorage.getTemplateById('t_newer_cloud_1', userA);
+    expect(local).toBeNull();
+
+    // Repository check: getTemplates must NOT return it
+    const list = await templateRepository.getTemplates(userA);
+    expect(list.find((t) => t.id === 't_newer_cloud_1')).toBeUndefined();
+    const single = await templateRepository.getTemplateById('t_newer_cloud_1', userA);
+    expect(single).toBeNull();
+  });
+
+  it('19. offline deleted workout and template remain hidden from UI even if present in storage prior to push', async () => {
+    // Workout setup
+    const w: WorkoutSession = {
+      id: 'w_persist_hide_1',
+      name: 'Persist Hide Workout',
+      startedAt: '2026-09-01T08:00:00Z',
+      finishedAt: '2026-09-01T09:00:00Z',
+      status: 'completed',
+      exercises: [],
+      ownerId: userA.ownerId,
+      ownerType: 'authenticated',
+    };
+    await workoutStorage.saveCompletedWorkout(w, userA);
+    await syncMetadataStore.setRecord(
+      {
+        entityType: 'workout',
+        id: 'w_persist_hide_1',
+        clientUpdatedAt: '2026-09-01T09:00:00Z',
+        deletedAt: null,
+        syncStatus: 'synced',
+        lastSyncedServerUpdatedAt: '2026-09-01T09:05:00Z',
+      },
+      userA,
+    );
+
+    // Template setup
+    const t: WorkoutTemplate = {
+      id: 't_persist_hide_1',
+      name: 'Persist Hide Template',
+      exercises: [],
+      createdAt: '2026-09-01T08:00:00Z',
+      updatedAt: '2026-09-01T09:00:00Z',
+      ownerId: userA.ownerId,
+      ownerType: 'authenticated',
+    };
+    await templateStorage.saveTemplate(t, userA);
+    await syncMetadataStore.setRecord(
+      {
+        entityType: 'template',
+        id: 't_persist_hide_1',
+        clientUpdatedAt: '2026-09-01T09:00:00Z',
+        deletedAt: null,
+        syncStatus: 'synced',
+        lastSyncedServerUpdatedAt: '2026-09-01T09:05:00Z',
+      },
+      userA,
+    );
+
+    // Delete both offline
+    await workoutRepository.deleteCompletedWorkout('w_persist_hide_1', userA);
+    await templateRepository.deleteTemplate('t_persist_hide_1', userA);
+
+    // Simulate force-close and restart: clear in-memory caches
+    syncMetadataStore.clearMemoryCache();
+    workoutStorage.clearMemoryCache();
+    templateStorage.clearMemoryCache();
+
+    // Verify repositories hide them completely from UI
+    const workouts = await workoutRepository.getCompletedWorkouts(userA);
+    expect(workouts.find((item) => item.id === 'w_persist_hide_1')).toBeUndefined();
+    const singleW = await workoutRepository.getCompletedWorkoutById('w_persist_hide_1', userA);
+    expect(singleW).toBeNull();
+
+    const templates = await templateRepository.getTemplates(userA);
+    expect(templates.find((item) => item.id === 't_persist_hide_1')).toBeUndefined();
+    const singleT = await templateRepository.getTemplateById('t_persist_hide_1', userA);
+    expect(singleT).toBeNull();
   });
 });

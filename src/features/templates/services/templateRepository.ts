@@ -14,7 +14,7 @@ import {
 } from '../types';
 import { templateStorage } from '../storage/templateStorage';
 import { getCurrentUserScope, UserScope } from '../../auth/utils/userScope';
-import { syncMetadataStore, syncLifecycleManager } from '../../../services/sync';
+import { syncMetadataStore, syncLifecycleManager, getRecordKey } from '../../../services/sync';
 
 export class TemplateRepository {
   private validateTemplateData(name: string, exercises: Omit<TemplateExercise, 'order'>[]): void {
@@ -59,10 +59,31 @@ export class TemplateRepository {
   }
 
   async getTemplates(scope?: UserScope | null): Promise<WorkoutTemplate[]> {
-    return templateStorage.getTemplates(scope);
+    const templates = await templateStorage.getTemplates(scope);
+    const resolvedScope = scope !== undefined ? scope : getCurrentUserScope();
+    if (!resolvedScope || resolvedScope.ownerType !== 'authenticated') {
+      return templates;
+    }
+    const state = await syncMetadataStore.getState(resolvedScope);
+    if (!state) return templates;
+
+    return templates.filter((t) => {
+      const meta = state.records[getRecordKey('template', t.id)];
+      if (meta && (meta.syncStatus === 'pending_delete' || meta.deletedAt !== null)) {
+        return false;
+      }
+      return true;
+    });
   }
 
   async getTemplateById(id: string, scope?: UserScope | null): Promise<WorkoutTemplate | null> {
+    const resolvedScope = scope !== undefined ? scope : getCurrentUserScope();
+    if (resolvedScope && resolvedScope.ownerType === 'authenticated') {
+      const meta = await syncMetadataStore.getRecord('template', id, resolvedScope);
+      if (meta && (meta.syncStatus === 'pending_delete' || meta.deletedAt !== null)) {
+        return null;
+      }
+    }
     return templateStorage.getTemplateById(id, scope);
   }
 

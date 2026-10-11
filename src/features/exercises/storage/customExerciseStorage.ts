@@ -21,7 +21,7 @@ export const customExerciseStorage = {
    * Clears volatile in-memory storage (called on logout/user switch).
    */
   clearMemoryCache: (): void => {
-    platformStorage.clearMemoryCache();
+    // In-memory cache hook (customExerciseStorage persists directly to platformStorage)
   },
 
   getCustomExercises: async (scope?: UserScope | null): Promise<Exercise[]> => {

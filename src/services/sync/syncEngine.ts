@@ -1420,6 +1420,11 @@ export class SyncEngine {
             scope,
           );
           tombstones++;
+        } else if (localIsTombstone) {
+          // Invariant: Local tombstone wins against live cloud record.
+          // A live cloud record must NEVER resurrect a locally deleted workout.
+          await workoutStorage.deleteCompletedWorkout(row.id, scope);
+          ignored++;
         } else {
           const session: WorkoutSession = {
             id: row.id,
@@ -1591,6 +1596,11 @@ export class SyncEngine {
             scope,
           );
           tombstones++;
+        } else if (localIsTombstone) {
+          // Invariant: Local tombstone wins against live cloud record.
+          // A live cloud record must NEVER resurrect a locally deleted template.
+          await templateStorage.deleteTemplate(row.id, scope);
+          ignored++;
         } else {
           const template: WorkoutTemplate = {
             id: row.id,
@@ -1758,6 +1768,11 @@ export class SyncEngine {
             scope,
           );
           tombstones++;
+        } else if (localIsTombstone) {
+          // Invariant: Local tombstone wins against live cloud record.
+          // A live cloud record must NEVER resurrect a locally deleted custom exercise.
+          await customExerciseStorage.deleteCustomExercise(row.id, scope);
+          ignored++;
         } else {
           const exercise: Exercise = {
             id: row.id,
@@ -1911,7 +1926,16 @@ export class SyncEngine {
       // CASE B: Cloud is live
       const cloudMs = new Date(row.client_updated_at).getTime();
       const localMs = localItem ? new Date(localItem.clientUpdatedAt).getTime() : 0;
-      const isLocalPendingUpload = (await syncMetadataStore.getRecord('scheduled_workout', row.id, scope))?.syncStatus === 'pending_upload';
+      const scheduledMeta = await syncMetadataStore.getRecord('scheduled_workout', row.id, scope);
+      const isLocalPendingUpload = scheduledMeta?.syncStatus === 'pending_upload';
+      const isLocalTombstone = Boolean(
+        localItem?.deletedAt || scheduledMeta?.deletedAt || scheduledMeta?.syncStatus === 'pending_delete'
+      );
+
+      if (isLocalTombstone) {
+        ignored++;
+        continue;
+      }
 
       if (localItem && isLocalPendingUpload && localMs > cloudMs) {
         ignored++;

@@ -24,6 +24,7 @@ import {
   ActiveWorkoutTimer,
 } from '../../src/features/workout';
 import { ExercisePickerModal } from '../../src/features/templates/components/ExercisePickerModal';
+import { buildLastPerformanceMap } from '../../src/features/workout/services/previousPerformanceService';
 import { Exercise } from '../../src/features/exercises';
 import { spacing, radii } from '../../src/constants/theme';
 import { RestTimerOverlay } from '../../src/features/workout/components/RestTimerOverlay';
@@ -154,43 +155,7 @@ export default function ActiveWorkoutScreen() {
     async function loadLastPerformances() {
       try {
         const completed = await workoutRepository.getCompletedWorkouts();
-        const map: Record<string, { workoutDate?: string; sets: WorkoutSet[] }> = {};
-
-        for (const ex of session!.exercises) {
-          if (!ex.exerciseId && !ex.exerciseName) continue;
-          const targetId = ex.exerciseId;
-          const targetName = ex.exerciseName ? ex.exerciseName.trim().toLowerCase() : '';
-
-          for (const w of completed) {
-            if (w.id === session!.id) continue;
-            if (!w.exercises || w.exercises.length === 0) continue;
-
-            const match = w.exercises.find((e) => {
-              if (targetId && e.exerciseId && e.exerciseId === targetId) return true;
-              if (
-                targetName &&
-                e.exerciseName &&
-                e.exerciseName.trim().toLowerCase() === targetName
-              ) {
-                return true;
-              }
-              return false;
-            });
-
-            if (match && match.actualSets && match.actualSets.length > 0) {
-              const loggedSets = match.actualSets.filter(
-                (s) => s.completed || (s.weight ?? 0) > 0 || (s.reps ?? 0) > 0,
-              );
-              if (loggedSets.length > 0) {
-                map[ex.exerciseId] = {
-                  workoutDate: w.finishedAt || w.startedAt,
-                  sets: loggedSets,
-                };
-                break;
-              }
-            }
-          }
-        }
+        const map = buildLastPerformanceMap(session!.exercises, completed, session?.id);
 
         if (isMounted) {
           setLastPerformanceMap(map);
@@ -207,7 +172,7 @@ export default function ActiveWorkoutScreen() {
     };
   }, [
     session?.id,
-    session?.exercises?.map((e) => `${e.exerciseId}_${e.exerciseName}`).join(','),
+    session?.exercises?.map((e) => `${e.exerciseId}_${e.order}_${e.exerciseName}`).join(','),
   ]);
 
   // Load active workout draft
@@ -396,6 +361,11 @@ export default function ActiveWorkoutScreen() {
   const handleDeleteSet = async (exerciseId: string, setId: string) => {
     const current = sessionRef.current || session;
     if (!current) return;
+    const targetEx = current.exercises.find((e) => e.exerciseId === exerciseId);
+    if (!targetEx || targetEx.actualSets.length <= 1) return;
+    const targetSet = targetEx.actualSets.find((s) => s.id === setId);
+    if (targetSet?.completed) return;
+
     const updated = workoutRepository.removeSetFromExercise(current, exerciseId, setId);
     await updateSessionAndAutosaveImmediate(updated);
   };
@@ -752,11 +722,11 @@ export default function ActiveWorkoutScreen() {
           ) : (
             session.exercises.map((ex, exIndex) => (
               <ActiveExerciseCard
-                key={ex.exerciseId}
+                key={`${ex.exerciseId}_${ex.order ?? exIndex}`}
                 exercise={ex}
                 exIndex={exIndex}
                 totalExercisesCount={session.exercises.length}
-                lastPerformance={lastPerformanceMap[ex.exerciseId]}
+                lastPerformance={lastPerformanceMap[`${ex.exerciseId}_${ex.order}`] ?? lastPerformanceMap[ex.exerciseId]}
                 expandedNotesSetIds={expandedNotesSetIds}
                 onMoveUp={handleMoveUpExercise}
                 onMoveDown={handleMoveDownExercise}

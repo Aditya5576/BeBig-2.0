@@ -3,6 +3,7 @@ import { View, StyleSheet, Pressable, LayoutChangeEvent } from 'react-native';
 import { useAppTheme } from '../../theme';
 import { Text, Card, Button } from '../../../components/ui';
 import { WorkoutExercise, WorkoutSet } from '../types';
+import { findMatchingPreviousSet } from '../services/previousPerformanceService';
 import { ActiveSetRow } from './ActiveSetRow';
 import { spacing, radii } from '../../../constants/theme';
 
@@ -242,6 +243,11 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(({
             NOTE
           </Text>
         </View>
+        <View style={styles.headerColDelete}>
+          <Text variant="caption" color="muted" style={styles.headerLabel}>
+            DEL
+          </Text>
+        </View>
       </View>
 
       {/* Sets List */}
@@ -251,7 +257,7 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(({
             key={set.id}
             exercise={exercise}
             set={set}
-            previousSet={lastPerformance?.sets?.[set.setNumber - 1]}
+            previousSet={findMatchingPreviousSet(lastPerformance?.sets, set)}
             canDelete={exercise.actualSets.length > 1 && !set.completed}
             isNotesExpanded={expandedNotesSetIds[set.id]}
             onToggleNotes={onToggleNotes}
@@ -280,7 +286,7 @@ const createStyles = (colors: any) =>
     exerciseCard: {
       gap: 10,
       paddingVertical: 14,
-      paddingHorizontal: 12,
+      paddingHorizontal: 10,
       backgroundColor: colors.surface,
       borderColor: colors.borderLight,
       borderRadius: 12,
@@ -433,46 +439,50 @@ const createStyles = (colors: any) =>
     tableHeaderRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
-      paddingHorizontal: 4,
+      gap: 4,
+      paddingHorizontal: 2,
       paddingBottom: 4,
     },
     headerLabel: {
-      fontSize: 10,
+      fontSize: 9.5,
       fontWeight: '700',
-      letterSpacing: 0.8,
+      letterSpacing: 0.5,
       textAlign: 'center',
       color: colors.textMuted,
     },
     headerColSet: {
-      width: 26,
+      width: 22,
       alignItems: 'center',
     },
     headerColPrev: {
-      width: 48,
+      width: 44,
       alignItems: 'center',
     },
     headerColKg: {
       flex: 1.15,
-      minWidth: 54,
+      minWidth: 38,
       alignItems: 'center',
     },
     headerColReps: {
       flex: 1.0,
-      minWidth: 48,
+      minWidth: 36,
       alignItems: 'center',
     },
     headerColRir: {
       flex: 0.85,
-      minWidth: 42,
+      minWidth: 32,
       alignItems: 'center',
     },
     headerColCheck: {
-      width: 38,
+      width: 36,
       alignItems: 'center',
     },
     headerColNote: {
-      width: 32,
+      width: 28,
+      alignItems: 'center',
+    },
+    headerColDelete: {
+      width: 28,
       alignItems: 'center',
     },
     setsContainer: {
