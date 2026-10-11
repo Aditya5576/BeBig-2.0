@@ -78,7 +78,7 @@ export const workoutStorage = {
    * Clears the volatile memoryStorage map (called on sign out or user switch).
    */
   clearMemoryCache: (): void => {
-    platformStorage.clearMemoryCache();
+    // In-memory cache hook (workoutStorage persists directly to platformStorage)
   },
 
   getActiveWorkout: async (scope?: UserScope | null): Promise<WorkoutSession | null> => {

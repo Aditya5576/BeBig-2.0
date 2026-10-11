@@ -59,7 +59,7 @@ export const templateStorage = {
    * Clears volatile in-memory storage (called on logout/user switch).
    */
   clearMemoryCache: (): void => {
-    platformStorage.clearMemoryCache();
+    // In-memory cache hook (templateStorage persists directly to platformStorage)
   },
 
   getTemplates: async (scope?: UserScope | null): Promise<WorkoutTemplate[]> => {

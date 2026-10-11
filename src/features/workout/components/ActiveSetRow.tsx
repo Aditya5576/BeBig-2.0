@@ -166,7 +166,7 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
         {/* Set Number Indicator */}
         <Pressable
           onPress={() => onToggleNotes(set.id)}
-          hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+          hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
           style={styles.colSet}
           accessibilityLabel={`Set ${set.setNumber}, tap to toggle notes`}
         >
@@ -261,7 +261,7 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
           <Pressable
             testID={`complete-set-${exercise.exerciseId}-${set.setNumber}`}
             onPress={handleToggleComplete}
-            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
             style={[
               styles.checkButton,
               set.completed ? styles.checkButtonDone : styles.checkButtonPending,
@@ -289,7 +289,7 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
           <Pressable
             testID={`set-note-toggle-${exercise.exerciseId}-${set.setNumber}`}
             onPress={() => onToggleNotes(set.id)}
-            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
             style={[
               styles.noteButton,
               hasExistingNote ? styles.noteButtonActive : null,
@@ -316,6 +316,22 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
               />
             )}
           </Pressable>
+        </View>
+
+        {/* Remove Set Button (directly accessible on eligible set rows) */}
+        <View style={styles.colDelete}>
+          {canDelete ? (
+            <Pressable
+              testID={`delete-set-${exercise.exerciseId}-${set.setNumber}`}
+              onPress={() => onDeleteSet(exercise.exerciseId, set.id)}
+              hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+              style={styles.deleteButton}
+              accessibilityLabel={`Delete set ${set.setNumber}`}
+              accessibilityRole="button"
+            >
+              <Text style={styles.deleteIconText}>✕</Text>
+            </Pressable>
+          ) : null}
         </View>
       </View>
 
@@ -382,7 +398,7 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
           </Pressable>
           {canDelete && (
             <Pressable
-              testID={`delete-set-${exercise.exerciseId}-${set.setNumber}`}
+              testID={`delete-set-notes-${exercise.exerciseId}-${set.setNumber}`}
               onPress={() => onDeleteSet(exercise.exerciseId, set.id)}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               style={styles.deleteIconButton}
@@ -413,36 +429,36 @@ const createStyles = (colors: any) =>
     mainRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
+      gap: 4,
     },
     colSet: {
-      width: 26,
+      width: 22,
       alignItems: 'center',
       justifyContent: 'center',
     },
     setNumberBadge: {
-      width: 26,
-      height: 44,
+      width: 22,
+      height: 40,
       justifyContent: 'center',
       alignItems: 'center',
     },
     setNumberBadgeCompleted: {},
     setNumberText: {
       fontWeight: '700',
-      fontSize: 14,
+      fontSize: 13,
       color: colors.textSecondary,
     },
     setNumberTextCompleted: {
       color: colors.primary,
     },
     colPrev: {
-      width: 48,
+      width: 44,
       alignItems: 'center',
       justifyContent: 'center',
     },
     prevText: {
       fontWeight: '600',
-      fontSize: 11,
+      fontSize: 10.5,
       color: colors.textMuted,
       textAlign: 'center',
     },
@@ -453,15 +469,15 @@ const createStyles = (colors: any) =>
     },
     colKg: {
       flex: 1.15,
-      minWidth: 54,
+      minWidth: 38,
     },
     colReps: {
       flex: 1.0,
-      minWidth: 48,
+      minWidth: 36,
     },
     colRir: {
       flex: 0.85,
-      minWidth: 42,
+      minWidth: 32,
     },
     metricInput: {
       backgroundColor: colors.surfaceElevated,
@@ -471,10 +487,10 @@ const createStyles = (colors: any) =>
       paddingHorizontal: 2,
       paddingVertical: 0,
       color: colors.textPrimary,
-      fontSize: 15,
+      fontSize: 14,
       fontWeight: '700',
       textAlign: 'center',
-      height: 44,
+      height: 40,
     },
     metricInputCompleted: {
       backgroundColor: 'rgba(56, 189, 248, 0.04)',
@@ -487,13 +503,13 @@ const createStyles = (colors: any) =>
       color: colors.textSecondary,
     },
     colCheck: {
-      width: 38,
+      width: 36,
       alignItems: 'center',
       justifyContent: 'center',
     },
     checkButton: {
-      width: 38,
-      height: 44,
+      width: 36,
+      height: 40,
       borderRadius: 8,
       justifyContent: 'center',
       alignItems: 'center',
@@ -509,7 +525,7 @@ const createStyles = (colors: any) =>
       borderColor: colors.primary,
     },
     checkButtonIcon: {
-      fontSize: 16,
+      fontSize: 15,
       fontWeight: '900',
     },
     checkIconPending: {
@@ -519,13 +535,13 @@ const createStyles = (colors: any) =>
       color: colors.background,
     },
     colNote: {
-      width: 32,
+      width: 28,
       alignItems: 'center',
       justifyContent: 'center',
     },
     noteButton: {
-      width: 32,
-      height: 44,
+      width: 28,
+      height: 40,
       borderRadius: 8,
       backgroundColor: colors.surfaceSubtle,
       borderWidth: 1,
@@ -539,19 +555,19 @@ const createStyles = (colors: any) =>
       borderColor: colors.primary,
     },
     noteButtonIcon: {
-      fontSize: 13,
+      fontSize: 12,
       color: colors.textMuted,
     },
     noteButtonIconActive: {
-      fontSize: 13,
+      fontSize: 12,
     },
     noteActiveDot: {
       position: 'absolute',
-      top: 5,
-      right: 5,
-      width: 6,
-      height: 6,
-      borderRadius: 3,
+      top: 4,
+      right: 4,
+      width: 5,
+      height: 5,
+      borderRadius: 2.5,
       backgroundColor: colors.primary,
     },
     notePreviewPill: {
@@ -640,7 +656,22 @@ const createStyles = (colors: any) =>
     },
     deleteIconText: {
       color: colors.error,
-      fontSize: 13,
+      fontSize: 12,
       fontWeight: '700',
+    },
+    colDelete: {
+      width: 28,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    deleteButton: {
+      width: 28,
+      height: 40,
+      borderRadius: 8,
+      backgroundColor: 'rgba(239, 68, 68, 0.08)',
+      borderWidth: 1,
+      borderColor: 'rgba(239, 68, 68, 0.25)',
+      justifyContent: 'center',
+      alignItems: 'center',
     },
   });

@@ -9,7 +9,7 @@ import { WorkoutTemplate } from '../../templates/types';
 import { WorkoutSession, WorkoutExercise, WorkoutSet, ActiveRestTimer } from '../types';
 import { workoutStorage } from '../storage/workoutStorage';
 import { getCurrentUserScope, UserScope } from '../../auth/utils/userScope';
-import { syncMetadataStore, syncLifecycleManager } from '../../../services/sync';
+import { syncMetadataStore, syncLifecycleManager, getRecordKey } from '../../../services/sync';
 import { scheduledWorkoutRepository } from '../../scheduling/services/scheduledWorkoutRepository';
 import { nativeRestTimerService } from './nativeRestTimerService';
 
@@ -222,6 +222,7 @@ export class WorkoutRepository {
 
   /**
    * Removes a set from an exercise and re-indexes set numbers.
+   * Enforces minimum 1 set rule and prevents deletion of completed sets.
    */
   removeSetFromExercise(
     workout: WorkoutSession,
@@ -230,6 +231,13 @@ export class WorkoutRepository {
   ): WorkoutSession {
     const updatedExercises = workout.exercises.map((ex) => {
       if (ex.exerciseId !== exerciseId) return ex;
+
+      // Invariant: Cannot remove set if exercise only has 1 set (minimum-one-set rule)
+      if (ex.actualSets.length <= 1) return ex;
+
+      // Invariant: Cannot remove a completed set
+      const targetSet = ex.actualSets.find((s) => s.id === setId);
+      if (targetSet?.completed) return ex;
 
       const remainingSets = ex.actualSets.filter((s) => s.id !== setId);
       const reindexedSets = remainingSets.map((s, idx) => ({
@@ -564,16 +572,39 @@ export class WorkoutRepository {
 
   /**
    * Retrieves all completed workouts history, newest first.
+   * Filters out any records that have active local tombstones (pending_delete or deletedAt).
    */
-  async getCompletedWorkouts(): Promise<WorkoutSession[]> {
-    return workoutStorage.getCompletedWorkouts();
+  async getCompletedWorkouts(scope?: UserScope | null): Promise<WorkoutSession[]> {
+    const workouts = await workoutStorage.getCompletedWorkouts(scope);
+    const resolvedScope = scope !== undefined ? scope : getCurrentUserScope();
+    if (!resolvedScope || resolvedScope.ownerType !== 'authenticated') {
+      return workouts;
+    }
+    const state = await syncMetadataStore.getState(resolvedScope);
+    if (!state) return workouts;
+
+    return workouts.filter((w) => {
+      const meta = state.records[getRecordKey('workout', w.id)];
+      if (meta && (meta.syncStatus === 'pending_delete' || meta.deletedAt !== null)) {
+        return false;
+      }
+      return true;
+    });
   }
 
   /**
    * Retrieves a specific completed workout by ID.
+   * Returns null if the record has an active local tombstone.
    */
-  async getCompletedWorkoutById(id: string): Promise<WorkoutSession | null> {
-    return workoutStorage.getCompletedWorkoutById(id);
+  async getCompletedWorkoutById(id: string, scope?: UserScope | null): Promise<WorkoutSession | null> {
+    const resolvedScope = scope !== undefined ? scope : getCurrentUserScope();
+    if (resolvedScope && resolvedScope.ownerType === 'authenticated') {
+      const meta = await syncMetadataStore.getRecord('workout', id, resolvedScope);
+      if (meta && (meta.syncStatus === 'pending_delete' || meta.deletedAt !== null)) {
+        return null;
+      }
+    }
+    return workoutStorage.getCompletedWorkoutById(id, scope);
   }
 
   /**
