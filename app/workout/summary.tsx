@@ -1,6 +1,6 @@
 import { useAppTheme } from '../../src/features/theme';
 import React, { useEffect, useState, useRef, useMemo } from 'react';
-import { View, StyleSheet, ScrollView, ActivityIndicator, TextInput, Pressable } from 'react-native';
+import { View, StyleSheet, ScrollView, ActivityIndicator, TextInput, Pressable, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ScreenContainer, Text, Button, Card } from '../../src/components/ui';
 import { workoutRepository, WorkoutSession } from '../../src/features/workout';
@@ -303,7 +303,16 @@ export default function WorkoutSummaryScreen() {
 
   return (
     <ScreenContainer>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.trophyBadge}>
@@ -645,7 +654,7 @@ export default function WorkoutSummaryScreen() {
 
               {saveError ? (
                 <Text testID="save-template-error" variant="caption" style={styles.errorText}>
-                  s {saveError}
+                  {saveError}
                 </Text>
               ) : null}
               
@@ -719,7 +728,8 @@ export default function WorkoutSummaryScreen() {
           size="lg"
           style={styles.doneButton}
         />
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </ScreenContainer>
   );
 }
