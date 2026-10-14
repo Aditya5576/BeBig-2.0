@@ -43,6 +43,7 @@ import {
   exportTemplatesToXlsx,
   exportWorkoutsToPdf,
   exportTemplatesToPdf,
+  sanitizePdfText,
   shareOrDownloadExport,
 } from '../src/features/export';
 import { WorkoutSession } from '../src/features/workout/types';
@@ -337,6 +338,164 @@ describe('DataExport Service', () => {
       ];
 
       await expect(exportWorkoutsToPdf(minimalWorkouts)).resolves.not.toThrow();
+    });
+
+    it('successfully generates workout PDF containing U+202F (NARROW NO-BREAK SPACE) in dynamic fields', async () => {
+      const workoutWithNarrowSpace: WorkoutSession[] = [
+        {
+          id: 'w-narrow-1',
+          name: 'Morning Session\u202F(Heavy)',
+          startedAt: '2026-10-14T09:30:00.000Z',
+          finishedAt: '2026-10-14T10:45:00.000Z',
+          status: 'completed',
+          totalDuration: 4500,
+          totalVolume: 6200,
+          exercises: [
+            {
+              exerciseId: 'ex-bench',
+              exerciseName: 'Bench Press\u202F— Barbell',
+              categoryName: 'Chest\u202FStrength',
+              order: 1,
+              actualSets: [
+                {
+                  id: 'set-ns-1',
+                  setNumber: 1,
+                  weight: 100,
+                  reps: 8,
+                  rir: 2,
+                  notes: 'Rest 90\u202fs between sets',
+                  completed: true,
+                },
+              ],
+            },
+          ],
+        },
+      ];
+
+      const base64Pdf = await exportWorkoutsToPdf(workoutWithNarrowSpace);
+      expect(typeof base64Pdf).toBe('string');
+      expect(base64Pdf.length).toBeGreaterThan(100);
+
+      const bytes = base64ToUint8Array(base64Pdf);
+      const headerString = String.fromCharCode(...bytes.slice(0, 5));
+      expect(headerString).toBe('%PDF-');
+    });
+
+    it('successfully generates template PDF containing U+202F in template dynamic fields', async () => {
+      const templateWithNarrowSpace: WorkoutTemplate[] = [
+        {
+          id: 't-narrow-1',
+          name: 'Hypertrophy\u202FDay',
+          workoutFocus: 'Upper\u202FBody',
+          sequenceNumber: 2,
+          createdAt: '2026-09-01T00:00:00.000Z',
+          updatedAt: '2026-09-01T00:00:00.000Z',
+          exercises: [
+            {
+              exerciseId: 'ex-incline',
+              exerciseName: 'Incline Dumbbell\u202FPress',
+              categoryName: 'Chest',
+              order: 1,
+              sets: 4,
+              targetReps: '8-10\u202freps',
+              restTime: 90,
+              targetWeight: 32,
+            },
+          ],
+        },
+      ];
+
+      const base64Pdf = await exportTemplatesToPdf(templateWithNarrowSpace);
+      expect(typeof base64Pdf).toBe('string');
+      expect(base64Pdf.length).toBeGreaterThan(100);
+
+      const bytes = base64ToUint8Array(base64Pdf);
+      const headerString = String.fromCharCode(...bytes.slice(0, 5));
+      expect(headerString).toBe('%PDF-');
+    });
+
+    it('safely handles emojis, smart quotes, mathematical symbols, and accented Unicode text in PDF export', async () => {
+      const workoutWithUnicode: WorkoutSession[] = [
+        {
+          id: 'w-uni-1',
+          name: '“Leg Day” 💪🔥 — Max Effort',
+          startedAt: '2026-10-14T08:00:00.000Z',
+          finishedAt: '2026-10-14T09:15:00.000Z',
+          status: 'completed',
+          totalDuration: 4500,
+          totalVolume: 8500,
+          exercises: [
+            {
+              exerciseId: 'ex-squat-fr',
+              exerciseName: 'Développé couché & Kniebeugen',
+              categoryName: 'Cuisses / Rücken',
+              order: 1,
+              actualSets: [
+                {
+                  id: 's-uni-1',
+                  setNumber: 1,
+                  weight: 140,
+                  reps: 5,
+                  rir: 1,
+                  notes: 'Target: 140 kg × 5 reps @ 90° ± 2kg! Felt strong 🏋️',
+                  completed: true,
+                },
+              ],
+            },
+          ],
+        },
+      ];
+
+      const base64Pdf = await exportWorkoutsToPdf(workoutWithUnicode);
+      expect(typeof base64Pdf).toBe('string');
+      expect(base64Pdf.length).toBeGreaterThan(100);
+
+      const bytes = base64ToUint8Array(base64Pdf);
+      const headerString = String.fromCharCode(...bytes.slice(0, 5));
+      expect(headerString).toBe('%PDF-');
+    });
+
+    describe('sanitizePdfText Unit Tests', () => {
+      it('normalizes U+202F narrow no-break space to standard ASCII space', () => {
+        expect(sanitizePdfText('10:30\u202fAM')).toBe('10:30 AM');
+        expect(sanitizePdfText('Date:\u202fOct 14')).toBe('Date: Oct 14');
+      });
+
+      it('normalizes other Unicode whitespace variants and collapses line breaks', () => {
+        expect(sanitizePdfText('Word\u2009Thin\u200AHair\u3000Ideographic')).toBe('Word Thin Hair Ideographic');
+        expect(sanitizePdfText('Line 1\r\nLine 2\tTabbed')).toBe('Line 1 Line 2 Tabbed');
+      });
+
+      it('strips zero-width and invisible directional markers', () => {
+        expect(sanitizePdfText('Zero\u200BWidth\u200CJoiner\u200DMark\uFEFFBOM')).toBe('ZeroWidthJoinerMarkBOM');
+      });
+
+      it('preserves legitimate WinAnsi accented Latin characters and smart quotes', () => {
+        expect(sanitizePdfText('Développé couché')).toBe('Développé couché');
+        expect(sanitizePdfText('Kniebeugen & Rücken')).toBe('Kniebeugen & Rücken');
+        expect(sanitizePdfText('“Push Day” – ‘Chest & Triceps’')).toBe('“Push Day” – ‘Chest & Triceps’');
+        expect(sanitizePdfText('100 kg × 5 reps @ 85° ± 2kg')).toBe('100 kg × 5 reps @ 85° ± 2kg');
+      });
+
+      it('composes decomposed Unicode combining forms (NFC)', () => {
+        expect(sanitizePdfText('e\u0301')).toBe('é');
+      });
+
+      it('decomposes unmapped accented characters to ASCII base equivalents', () => {
+        expect(sanitizePdfText('Boğaz')).toBe('Bogaz');
+        expect(sanitizePdfText('Dvořák')).toBe('Dvorák');
+        expect(sanitizePdfText('Łódź')).toBe('Lódz');
+      });
+
+      it('safely drops unencodable emojis without throwing', () => {
+        expect(sanitizePdfText('Bench PR! 💪🔥')).toBe('Bench PR! ');
+      });
+
+      it('returns empty string for null, undefined, or empty text', () => {
+        expect(sanitizePdfText(null)).toBe('');
+        expect(sanitizePdfText(undefined)).toBe('');
+        expect(sanitizePdfText('')).toBe('');
+      });
     });
   });
 

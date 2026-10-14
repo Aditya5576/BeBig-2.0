@@ -12,9 +12,23 @@
 
 import { Platform, Share } from 'react-native';
 import * as XLSX from 'xlsx';
-import { PDFDocument, StandardFonts, rgb, RGB } from 'pdf-lib';
+import type { RGB } from 'pdf-lib';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
+
+/**
+ * Loads pdf-lib from its standalone pre-bundled distribution.
+ * This completely isolates pdf-lib from external tslib resolution issues in Metro web/mobile bundler.
+ */
+function getPdfLib() {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const pdfLib = require('pdf-lib/dist/pdf-lib.min.js');
+  return {
+    PDFDocument: pdfLib.PDFDocument as typeof import('pdf-lib').PDFDocument,
+    StandardFonts: pdfLib.StandardFonts as typeof import('pdf-lib').StandardFonts,
+    rgb: pdfLib.rgb as typeof import('pdf-lib').rgb,
+  };
+}
 import { WorkoutSession } from '../../workout/types';
 import { WorkoutTemplate } from '../../templates/types';
 
@@ -388,22 +402,99 @@ export function exportTemplatesToXlsx(templates: WorkoutTemplate[]): string {
 }
 
 /**
+ * Set of character codes natively supported by StandardFonts (Helvetica / WinAnsi).
+ * Includes ASCII (32-126), Latin-1 Supplement (160-255), and standard Windows-1252 extensions.
+ */
+export const WIN_ANSI_CHAR_CODES = new Set<number>([
+  32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49,
+  50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67,
+  68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85,
+  86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102,
+  103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116,
+  117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 160, 161, 162, 163,
+  164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177,
+  178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191,
+  192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205,
+  206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219,
+  220, 221, 222, 223, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233,
+  234, 235, 236, 237, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247,
+  248, 249, 250, 251, 252, 253, 254, 255, 338, 339, 352, 353, 376, 381,
+  382, 402, 710, 732, 8211, 8212, 8216, 8217, 8218, 8220, 8221, 8222,
+  8224, 8225, 8226, 8230, 8240, 8249, 8250, 8364, 8482,
+]);
+
+/**
+ * Sanitizes and normalizes text for rendering with standard WinAnsi PDF fonts.
+ *
+ * - Normalizes non-standard Unicode whitespace (including U+202F NARROW NO-BREAK SPACE
+ *   produced by iOS/WebKit ICU date formatters) to standard ASCII space (0x20).
+ * - Strips zero-width & non-printable formatting characters.
+ * - Composes decomposed Unicode sequences (NFC) to preserve accented Latin characters.
+ * - Maps dashes, quotes, and stroke letters to WinAnsi equivalents.
+ * - Safely decomposes unmapped accented letters (e.g. Eastern European diacritics)
+ *   to ASCII base letters, and safely omits unrepresentable emojis or symbols without crashing.
+ */
+export function sanitizePdfText(
+  text: unknown,
+  allowedCodes: Set<number> = WIN_ANSI_CHAR_CODES
+): string {
+  if (text === null || text === undefined) return '';
+  let str = String(text).normalize('NFC');
+
+  // Normalize Unicode whitespace (including U+202F NARROW NO-BREAK SPACE from iOS ICU)
+  str = str.replace(/[\u202F\u2000-\u200A\u205F\u3000]/g, ' ');
+
+  // Collapse line breaks / tabs for table cell drawing
+  str = str.replace(/[\r\n\t]+/g, ' ');
+
+  // Strip zero-width & non-printable formatting characters
+  str = str.replace(/[\u200B-\u200D\uFEFF\u200E\u200F\u0000-\u001F\u007F-\u009F]/g, '');
+
+  // Map common Unicode punctuation & Latin letters with stroke to WinAnsi equivalents
+  str = str.replace(/[\u2010\u2011\u2012\u2015]/g, '-');
+  str = str.replace(/[\u2032]/g, "'");
+  str = str.replace(/[\u2033]/g, '"');
+  str = str.replace(/\u0141/g, 'L').replace(/\u0142/g, 'l');
+  str = str.replace(/\u0110/g, 'D').replace(/\u0111/g, 'd');
+
+  let result = '';
+  for (const char of str) {
+    const code = char.codePointAt(0);
+    if (code !== undefined && allowedCodes.has(code)) {
+      result += char;
+    } else {
+      // Decompose accented characters outside WinAnsi to ASCII base letters
+      const decomposed = char.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+      for (const dChar of decomposed) {
+        const dCode = dChar.codePointAt(0);
+        if (dCode !== undefined && allowedCodes.has(dCode)) {
+          result += dChar;
+        }
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
  * Formats an ISO timestamp nicely for PDF reports (e.g., "Oct 12, 2026, 10:30 AM")
  */
 function formatReportDate(isoString?: string): string {
   if (!isoString) return 'N/A';
   try {
     const d = new Date(isoString);
-    if (isNaN(d.getTime())) return isoString;
-    return d.toLocaleDateString('en-US', {
+    if (isNaN(d.getTime())) return sanitizePdfText(isoString);
+    const formatted = d.toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
     });
+    return sanitizePdfText(formatted);
   } catch {
-    return isoString;
+    return sanitizePdfText(isoString);
   }
 }
 
@@ -411,6 +502,7 @@ function formatReportDate(isoString?: string): string {
  * Generates a clean, readable, multi-page PDF report for completed workouts.
  */
 export async function exportWorkoutsToPdf(workouts: WorkoutSession[]): Promise<string> {
+  const { PDFDocument, StandardFonts, rgb } = getPdfLib();
   const pdfDoc = await PDFDocument.create();
   const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -438,7 +530,9 @@ export async function exportWorkoutsToPdf(workouts: WorkoutSession[]): Promise<s
   page.drawText('Workout History Report', { x: MARGIN_LEFT, y: currentY, size: 14, font: fontBold, color: colorDark });
   currentY -= 16;
 
-  const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  const dateStr = sanitizePdfText(
+    new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+  );
   page.drawText(`Generated on ${dateStr}  |  Total Workouts: ${workouts.length}`, {
     x: MARGIN_LEFT,
     y: currentY,
@@ -475,7 +569,7 @@ export async function exportWorkoutsToPdf(workouts: WorkoutSession[]): Promise<s
       }
 
       // Workout Title
-      page.drawText(`${wIndex + 1}. ${w.name || 'Completed Workout'}`, {
+      page.drawText(sanitizePdfText(`${wIndex + 1}. ${w.name || 'Completed Workout'}`), {
         x: MARGIN_LEFT,
         y: currentY,
         size: 12,
@@ -486,7 +580,9 @@ export async function exportWorkoutsToPdf(workouts: WorkoutSession[]): Promise<s
 
       const durationMin = w.totalDuration ? Math.round(w.totalDuration / 60) : 0;
       const finishedDate = formatReportDate(w.finishedAt || w.startedAt);
-      const subInfo = `Date: ${finishedDate}  |  Duration: ${durationMin} min  |  Volume: ${w.totalVolume ?? 0} kg`;
+      const subInfo = sanitizePdfText(
+        `Date: ${finishedDate}  |  Duration: ${durationMin} min  |  Volume: ${w.totalVolume ?? 0} kg`
+      );
 
       page.drawText(subInfo, {
         x: MARGIN_LEFT,
@@ -502,14 +598,14 @@ export async function exportWorkoutsToPdf(workouts: WorkoutSession[]): Promise<s
       for (const ex of w.exercises || []) {
         for (const s of ex.actualSets || []) {
           tableRows.push({
-            exercise: ex.exerciseName || 'Exercise',
-            category: ex.categoryName || '-',
+            exercise: sanitizePdfText(ex.exerciseName || 'Exercise'),
+            category: sanitizePdfText(ex.categoryName || '-'),
             setNum: `Set ${s.setNumber}`,
             weight: `${s.weight} kg`,
             reps: `${s.reps} reps`,
             rir: s.rir !== undefined ? `${s.rir}` : '-',
             status: s.completed ? 'Done' : 'Skipped',
-            notes: s.notes || '-',
+            notes: sanitizePdfText(s.notes || '-'),
           });
         }
       }
@@ -621,6 +717,7 @@ export async function exportWorkoutsToPdf(workouts: WorkoutSession[]): Promise<s
  * Generates a clean, readable, multi-page PDF report for saved templates.
  */
 export async function exportTemplatesToPdf(templates: WorkoutTemplate[]): Promise<string> {
+  const { PDFDocument, StandardFonts, rgb } = getPdfLib();
   const pdfDoc = await PDFDocument.create();
   const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -648,7 +745,9 @@ export async function exportTemplatesToPdf(templates: WorkoutTemplate[]): Promis
   page.drawText('Workout Templates Report', { x: MARGIN_LEFT, y: currentY, size: 14, font: fontBold, color: colorDark });
   currentY -= 16;
 
-  const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  const dateStr = sanitizePdfText(
+    new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+  );
   page.drawText(`Generated on ${dateStr}  |  Total Templates: ${templates.length}`, {
     x: MARGIN_LEFT,
     y: currentY,
@@ -684,7 +783,7 @@ export async function exportTemplatesToPdf(templates: WorkoutTemplate[]): Promis
       }
 
       const sessionSuffix = t.sequenceNumber !== undefined ? ` (Session #${t.sequenceNumber})` : '';
-      page.drawText(`${tIndex + 1}. ${t.name || 'Custom Template'}${sessionSuffix}`, {
+      page.drawText(sanitizePdfText(`${tIndex + 1}. ${t.name || 'Custom Template'}${sessionSuffix}`), {
         x: MARGIN_LEFT,
         y: currentY,
         size: 12,
@@ -693,7 +792,9 @@ export async function exportTemplatesToPdf(templates: WorkoutTemplate[]): Promis
       });
       currentY -= 14;
 
-      const subInfo = `Focus: ${t.workoutFocus || 'General'}  |  Configured Exercises: ${t.exercises ? t.exercises.length : 0}`;
+      const subInfo = sanitizePdfText(
+        `Focus: ${t.workoutFocus || 'General'}  |  Configured Exercises: ${t.exercises ? t.exercises.length : 0}`
+      );
       page.drawText(subInfo, {
         x: MARGIN_LEFT,
         y: currentY,
@@ -765,10 +866,10 @@ export async function exportTemplatesToPdf(templates: WorkoutTemplate[]): Promis
         let colX = MARGIN_LEFT + 4;
         const values = [
           String(ex.order),
-          ex.exerciseName || 'Exercise',
-          ex.categoryName || '-',
+          sanitizePdfText(ex.exerciseName || 'Exercise'),
+          sanitizePdfText(ex.categoryName || '-'),
           `${ex.sets} sets`,
-          ex.targetReps || '-',
+          sanitizePdfText(ex.targetReps || '-'),
           `${ex.restTime}s`,
           ex.targetWeight !== undefined ? `${ex.targetWeight} kg` : '-',
         ];

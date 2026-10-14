@@ -10,6 +10,7 @@ import { WebAlertModal, ReleaseNotesModal } from '../src/components/ui';
 import { BottomNavBar } from '../src/components/navigation';
 import { initErrorMonitoring, wrapRootLayout } from '../src/services/monitoring/errorMonitoring';
 import { useThemeStore, useWebThemeSync, useAppTheme } from '../src/features/theme';
+import '../src/features/workout/services/workoutNotificationService';
 
 function useProtectedRoute() {
   const router = typeof useRouter === 'function' ? useRouter() : null;
