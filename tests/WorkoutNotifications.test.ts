@@ -420,7 +420,7 @@ describe('BE BIG 2.0 — Workout & Rest Timer Completion Notifications', () => {
       );
     });
 
-    it('safe no-op when running on Web platform', async () => {
+    it('safe no-op when running on Web platform without Notification API', async () => {
       (Platform as any).OS = 'web';
 
       const res = await workoutNotificationService.scheduleRestTimerNotification({
@@ -437,4 +437,135 @@ describe('BE BIG 2.0 — Workout & Rest Timer Completion Notifications', () => {
       expect(Notifications.cancelScheduledNotificationAsync).not.toHaveBeenCalled();
     });
   });
+
+  describe('6. Web Platform Notification API Support', () => {
+    let originalWindow: any;
+    let originalNavigator: any;
+
+    beforeEach(() => {
+      (Platform as any).OS = 'web';
+      originalWindow = (globalThis as any).window;
+      originalNavigator = (globalThis as any).navigator;
+    });
+
+    afterEach(() => {
+      (globalThis as any).window = originalWindow;
+      (globalThis as any).navigator = originalNavigator;
+    });
+
+    it('reports isSupported=true when window.Notification exists on web', () => {
+      (globalThis as any).window = {
+        Notification: class MockNotification {},
+      };
+      expect(workoutNotificationService.isSupported()).toBe(true);
+    });
+
+    it('reports isSupported=false when window.Notification is missing on web', () => {
+      (globalThis as any).window = {};
+      expect(workoutNotificationService.isSupported()).toBe(false);
+    });
+
+    it('maps web notification permission status correctly', async () => {
+      (globalThis as any).window = {
+        Notification: { permission: 'granted' },
+      };
+      expect(await workoutNotificationService.getPermissionStatus()).toBe(
+        Notifications.PermissionStatus.GRANTED
+      );
+
+      (globalThis as any).window.Notification.permission = 'denied';
+      expect(await workoutNotificationService.getPermissionStatus()).toBe(
+        Notifications.PermissionStatus.DENIED
+      );
+
+      (globalThis as any).window.Notification.permission = 'default';
+      expect(await workoutNotificationService.getPermissionStatus()).toBe(
+        Notifications.PermissionStatus.UNDETERMINED
+      );
+    });
+
+    it('requests web notification permissions via window.Notification.requestPermission', async () => {
+      const mockRequest = jest.fn().mockResolvedValue('granted');
+      (globalThis as any).window = {
+        Notification: {
+          permission: 'default',
+          requestPermission: mockRequest,
+        },
+      };
+
+      const result = await workoutNotificationService.requestPermissions(true);
+      expect(result).toBe(true);
+      expect(mockRequest).toHaveBeenCalled();
+    });
+
+    it('schedules web notification and fires callback when target time arrives', async () => {
+      jest.useFakeTimers();
+      const mockNotificationConstructor = jest.fn();
+      (globalThis as any).window = {
+        Notification: Object.assign(mockNotificationConstructor, {
+          permission: 'granted',
+        }),
+      };
+      const mockVibrate = jest.fn();
+      (globalThis as any).navigator = {
+        vibrate: mockVibrate,
+      };
+
+      const fixedNow = 1700000000000;
+      jest.spyOn(Date, 'now').mockReturnValue(fixedNow);
+
+      const notifId = await workoutNotificationService.scheduleRestTimerNotification({
+        exerciseId: 'ex_bench',
+        exerciseName: 'Barbell Bench Press',
+        setNumber: 1,
+        targetEndTime: fixedNow + 30 * 1000,
+        durationSeconds: 30,
+      });
+
+      expect(notifId).toMatch(/^web_notif_/);
+      expect(mockNotificationConstructor).not.toHaveBeenCalled();
+
+      // Fast-forward 30 seconds
+      jest.advanceTimersByTime(30 * 1000);
+
+      expect(mockNotificationConstructor).toHaveBeenCalledTimes(1);
+      expect(mockNotificationConstructor).toHaveBeenCalledWith('Rest Complete', {
+        body: 'Rest complete for Barbell Bench Press — ready for your next set.',
+        icon: '/favicon.png',
+      });
+      expect(mockVibrate).toHaveBeenCalledWith([250, 150, 250]);
+
+      jest.useRealTimers();
+    });
+
+    it('cancels scheduled web notification timeout on cancelRestTimerNotification', async () => {
+      jest.useFakeTimers();
+      const mockNotificationConstructor = jest.fn();
+      (globalThis as any).window = {
+        Notification: Object.assign(mockNotificationConstructor, {
+          permission: 'granted',
+        }),
+      };
+
+      const fixedNow = 1700000000000;
+      jest.spyOn(Date, 'now').mockReturnValue(fixedNow);
+
+      await workoutNotificationService.scheduleRestTimerNotification({
+        exerciseId: 'ex_bench',
+        exerciseName: 'Barbell Bench Press',
+        setNumber: 1,
+        targetEndTime: fixedNow + 45 * 1000,
+        durationSeconds: 45,
+      });
+
+      // User cancels rest timer before completion
+      await workoutNotificationService.cancelRestTimerNotification();
+
+      jest.advanceTimersByTime(60 * 1000);
+      expect(mockNotificationConstructor).not.toHaveBeenCalled();
+
+      jest.useRealTimers();
+    });
+  });
 });
+

@@ -36,9 +36,51 @@ export class WorkoutNotificationService {
   private lastScheduledPayload: ScheduledTimerPayload | null = null;
   private isChannelConfigured = false;
   private hasPromptedUser = false;
+  private webTimerTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
     this.configureNotificationHandler();
+  }
+
+  /**
+   * Schedules a browser Web Notification on Web/PWA platforms (while browser tab is open).
+   */
+  private scheduleWebNotification(title: string, body: string, delayMs: number): string | null {
+    if (this.webTimerTimeoutId) {
+      clearTimeout(this.webTimerTimeoutId);
+      this.webTimerTimeoutId = null;
+    }
+
+    if (
+      typeof window === 'undefined' ||
+      !('Notification' in window) ||
+      window.Notification.permission !== 'granted'
+    ) {
+      return null;
+    }
+
+    const id = `web_notif_${Date.now()}`;
+    this.webTimerTimeoutId = setTimeout(() => {
+      try {
+        if (
+          typeof window !== 'undefined' &&
+          'Notification' in window &&
+          window.Notification.permission === 'granted'
+        ) {
+          new window.Notification(title, {
+            body,
+            icon: '/favicon.png',
+          });
+          if (typeof navigator !== 'undefined' && navigator.vibrate) {
+            navigator.vibrate([250, 150, 250]);
+          }
+        }
+      } catch (err) {
+        console.warn('[WorkoutNotificationService] Web notification trigger error:', err);
+      }
+    }, Math.max(0, delayMs));
+
+    return id;
   }
 
   /**
@@ -91,7 +133,18 @@ export class WorkoutNotificationService {
    * Checks current notification permissions without prompting the user.
    */
   async getPermissionStatus(): Promise<Notifications.PermissionStatus> {
-    if (Platform.OS === 'web') return Notifications.PermissionStatus.DENIED;
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && 'Notification' in window) {
+        if (window.Notification.permission === 'granted') {
+          return Notifications.PermissionStatus.GRANTED;
+        }
+        if (window.Notification.permission === 'denied') {
+          return Notifications.PermissionStatus.DENIED;
+        }
+        return Notifications.PermissionStatus.UNDETERMINED;
+      }
+      return Notifications.PermissionStatus.DENIED;
+    }
 
     try {
       const settings = await Notifications.getPermissionsAsync();
@@ -111,7 +164,17 @@ export class WorkoutNotificationService {
    * If `userInitiated` is false, it prompts only once per session to avoid nag loops.
    */
   async requestPermissions(userInitiated = false): Promise<boolean> {
-    if (Platform.OS === 'web') return false;
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && 'Notification' in window) {
+        try {
+          const perm = await window.Notification.requestPermission();
+          return perm === 'granted';
+        } catch {
+          return false;
+        }
+      }
+      return false;
+    }
 
     if (!userInitiated && this.hasPromptedUser) {
       const status = await this.getPermissionStatus();
@@ -145,8 +208,6 @@ export class WorkoutNotificationService {
    * If an existing notification is scheduled, it is replaced atomically.
    */
   async scheduleRestTimerNotification(timer: ActiveRestTimer | null): Promise<string | null> {
-    if (Platform.OS === 'web') return null;
-
     // 1. If timer is null, paused, or already expired, cancel any existing alert
     if (!timer || timer.isPaused || timer.targetEndTime <= Date.now()) {
       await this.cancelRestTimerNotification();
@@ -175,6 +236,14 @@ export class WorkoutNotificationService {
       title,
       body,
     };
+
+    if (Platform.OS === 'web') {
+      const delayMs = Math.max(0, timer.targetEndTime - Date.now());
+      const notifId = this.scheduleWebNotification(title, body, delayMs);
+      this.scheduledNotificationId = notifId;
+      this.lastScheduledPayload = payload;
+      return notifId;
+    }
 
     try {
       await this.ensureNotificationChannel();
@@ -227,7 +296,15 @@ export class WorkoutNotificationService {
    * Cleans up both tracked notification ID and any orphan rest_timer alerts.
    */
   async cancelRestTimerNotification(): Promise<void> {
-    if (Platform.OS === 'web') return;
+    if (Platform.OS === 'web') {
+      if (this.webTimerTimeoutId) {
+        clearTimeout(this.webTimerTimeoutId);
+        this.webTimerTimeoutId = null;
+      }
+      this.scheduledNotificationId = null;
+      this.lastScheduledPayload = null;
+      return;
+    }
 
     const idToCancel = this.scheduledNotificationId;
     this.scheduledNotificationId = null;
@@ -259,7 +336,10 @@ export class WorkoutNotificationService {
     body: string;
     targetEndTimeMs: number;
   }): Promise<string | null> {
-    if (Platform.OS === 'web') return null;
+    if (Platform.OS === 'web') {
+      const delayMs = Math.max(0, params.targetEndTimeMs - Date.now());
+      return this.scheduleWebNotification(params.title, params.body, delayMs);
+    }
 
     const secondsRemaining = Math.max(1, Math.ceil((params.targetEndTimeMs - Date.now()) / 1000));
 
@@ -311,7 +391,8 @@ export class WorkoutNotificationService {
    * Returns true if notifications are supported on the current platform.
    */
   isSupported(): boolean {
-    return Platform.OS !== 'web';
+    if (Platform.OS !== 'web') return true;
+    return typeof window !== 'undefined' && 'Notification' in window;
   }
 }
 
