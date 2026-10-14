@@ -128,4 +128,43 @@ describe('profileService Persistence', () => {
     const cached = profileService.getCachedProfile('test-user');
     expect(cached?.display_name).toBe('B');
   });
+
+  it('TEST 4 - CLOUD FIRST HYDRATION: getProfile queries public.profiles and fetches updated avatar_url even if local cache previously had null avatar', async () => {
+    // Populate local storage with a stale profile that has no avatar
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(
+        'bebig.profile.test-user-avatar',
+        JSON.stringify({
+          id: 'test-user-avatar',
+          display_name: 'Stale Local User',
+          avatar_url: null,
+          onboarding_completed: true,
+        })
+      );
+    }
+
+    // Cloud has updated avatar_url
+    const maybeSingleSpy = jest.fn().mockResolvedValue({
+      data: {
+        id: 'test-user-avatar',
+        display_name: 'Cloud User',
+        avatar_url: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48',
+        onboarding_completed: true,
+      },
+      error: null,
+    });
+
+    (supabase.from as jest.Mock).mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        eq: jest.fn().mockReturnValue({
+          maybeSingle: maybeSingleSpy,
+        }),
+      }),
+    });
+
+    const result = await profileService.getProfile('test-user-avatar');
+
+    expect(result?.avatar_url).toBe('https://images.unsplash.com/photo-1534438327276-14e5300c3a48');
+    expect(result?.display_name).toBe('Cloud User');
+  });
 });

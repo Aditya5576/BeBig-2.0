@@ -421,4 +421,45 @@ describe('Milestone 8 — Home Dashboard Integration Tests', () => {
     // Verify completed workout data rendered successfully despite active workout rejection
     expect(getByText('Partial Success Workout')).toBeTruthy();
   });
+
+  // Scenario 12: Tapping Weekly Performance banner card navigates to /workout/progress/weekly
+  it('Scenario 12: Tapping Weekly Performance banner card navigates to /workout/progress/weekly', async () => {
+    const { getByTestId, getByText } = await render(<HomeScreen />);
+
+    await waitFor(
+      () => {
+        expect(getByTestId('home-weekly-performance-card')).toBeTruthy();
+        expect(getByText('Weekly Performance')).toBeTruthy();
+        expect(getByText('Review your weekly training and AI coaching insights.')).toBeTruthy();
+      },
+      { timeout: 3000 },
+    );
+
+    const weeklyCard = getByTestId('home-weekly-performance-card');
+    await act(async () => {
+      fireEvent.press(weeklyCard);
+    });
+
+    expect(mockPush).toHaveBeenCalledWith('/workout/progress/weekly');
+  });
+
+  // Scenario 13: Tapping Weekly Volume tile navigates to /workout/progress/weekly
+  it('Scenario 13: Tapping Weekly Volume tile navigates to /workout/progress/weekly', async () => {
+    const { getByTestId } = await render(<HomeScreen />);
+
+    await waitFor(
+      () => {
+        expect(getByTestId('metric-volume-card')).toBeTruthy();
+        expect(getByTestId('home-weekly-volume-button')).toBeTruthy();
+      },
+      { timeout: 3000 },
+    );
+
+    const volumeBtn = getByTestId('home-weekly-volume-button');
+    await act(async () => {
+      fireEvent.press(volumeBtn);
+    });
+
+    expect(mockPush).toHaveBeenCalledWith('/workout/progress/weekly');
+  });
 });

@@ -532,7 +532,7 @@ export class WorkoutRepository {
     }
 
     // 2. Clear active in-progress draft (Immunity preserved)
-    void nativeRestTimerService.cancelRestTimer();
+    await nativeRestTimerService.cancelRestTimer();
     await workoutStorage.clearActiveWorkout();
 
     // 3. Mark pending metadata (wrapped in try/catch to protect durability)
@@ -566,7 +566,7 @@ export class WorkoutRepository {
    * Discards the active workout draft without saving to history.
    */
   async discardActiveWorkout(): Promise<void> {
-    void nativeRestTimerService.cancelRestTimer();
+    await nativeRestTimerService.cancelRestTimer();
     await workoutStorage.clearActiveWorkout();
   }
 

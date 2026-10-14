@@ -509,5 +509,59 @@ describe('BeBig 2.0 — Weekly Performance Engine & UI (PERF-5G)', () => {
     });
   });
 
+  test('18. Empty current week with previous workout history renders historical context and navigation links', async () => {
+    const workouts: WorkoutSession[] = [
+      {
+        id: 'w_prev_1',
+        name: 'Heavy Legs',
+        startedAt: '2026-09-22T10:00:00.000Z',
+        finishedAt: '2026-09-22T11:00:00.000Z',
+        status: 'completed',
+        totalVolume: 5000,
+        completedSetsCount: 5,
+        exercises: [{ exerciseId: 'ex_squat', exerciseName: 'Back Squat', order: 0, actualSets: [{ id: 's1', setNumber: 1, weight: 100, reps: 5, completed: true }] }],
+      },
+    ];
+
+    const summary = calculateWeeklyPerformance(workouts, refDate);
+    expect(summary.hasCurrentWeekWorkouts).toBe(false);
+    expect(summary.totalHistoricalWorkouts).toBe(1);
+    expect(summary.lastCompletedWorkout?.name).toBe('Heavy Legs');
+
+    const { getByTestId, queryByTestId } = await render(<WeeklyPerformanceCard summary={summary} />);
+
+    expect(getByTestId('weekly-performance-card')).toBeTruthy();
+    expect(getByTestId('weekly-no-workouts-notice')).toBeTruthy();
+    expect(getByTestId('weekly-historical-context')).toBeTruthy();
+    expect(getByTestId('weekly-last-workout-info')).toBeTruthy();
+    expect(getByTestId('weekly-view-history-button')).toBeTruthy();
+
+    fireEvent.press(getByTestId('weekly-view-history-button'));
+    expect(mockPush).toHaveBeenCalledWith('/workout/history');
+  });
+
+  test('19. Truly empty workout history renders starter prompt', async () => {
+    const summary = calculateWeeklyPerformance([], refDate);
+    expect(summary.hasCurrentWeekWorkouts).toBe(false);
+    expect(summary.totalHistoricalWorkouts).toBe(0);
+
+    const { getByTestId, queryByTestId } = await render(<WeeklyPerformanceCard summary={summary} />);
+
+    expect(getByTestId('weekly-performance-card')).toBeTruthy();
+    expect(getByTestId('weekly-no-workouts-notice')).toBeTruthy();
+    expect(queryByTestId('weekly-historical-context')).toBeNull();
+    expect(getByTestId('weekly-no-history-state')).toBeTruthy();
+
+    fireEvent.press(getByTestId('weekly-start-first-workout-button'));
+    expect(mockPush).toHaveBeenCalledWith('/workout/start');
+  });
+
+  test('20. Calendar week range bounds calculation', () => {
+    const week = getCalendarWeekRange(new Date('2026-10-14T10:00:00.000Z'), 0);
+    expect(week.start.getDay()).toBe(1); // Monday
+    expect(week.end.getDay()).toBe(0); // Sunday
+    expect(week.label).toContain('Oct');
+  });
+
 });
 

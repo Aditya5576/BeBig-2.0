@@ -22,6 +22,7 @@ import {
   WorkoutSet,
   ActiveExerciseCard,
   ActiveWorkoutTimer,
+  workoutNotificationService,
 } from '../../src/features/workout';
 import { ExercisePickerModal } from '../../src/features/templates/components/ExercisePickerModal';
 import { buildLastPerformanceMap } from '../../src/features/workout/services/previousPerformanceService';
@@ -178,6 +179,7 @@ export default function ActiveWorkoutScreen() {
   // Load active workout draft
   useEffect(() => {
     let isMounted = true;
+    void workoutNotificationService.ensureNotificationChannel();
 
     async function initActiveWorkout() {
       try {

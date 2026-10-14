@@ -111,6 +111,7 @@ export default wrapRootLayout(function RootLayout() {
           <Stack.Screen name="workout/history" />
           <Stack.Screen name="workout/history/[id]" />
           <Stack.Screen name="workout/progress/prs" />
+          <Stack.Screen name="workout/progress/weekly" />
           <Stack.Screen name="workout/progress/exercise/[id]" />
           <Stack.Screen name="calendar/index" />
           <Stack.Screen name="+not-found" options={{ title: 'Not Found' }} />

@@ -19,6 +19,23 @@ import { profileService, avatarService, UserProfile } from '../src/features/prof
 import { guestStorage } from '../src/lib/storage';
 import { spacing, radii } from '../src/constants/theme';
 import { env } from '../src/config/env';
+import { workoutRepository } from '../src/features/workout/services/workoutRepository';
+import { templateRepository } from '../src/features/templates/services/templateRepository';
+import {
+  ExportFormat,
+  exportWorkoutsToXlsx,
+  exportWorkoutsToPdf,
+  exportWorkoutsToJson,
+  exportWorkoutsToCsv,
+  exportTemplatesToXlsx,
+  exportTemplatesToPdf,
+  exportTemplatesToJson,
+  exportTemplatesToCsv,
+  generateExportFilename,
+  getMimeTypeForFormat,
+  shareOrDownloadExport,
+} from '../src/features/export';
+import { workoutNotificationService } from '../src/features/workout';
 
 export const ATHLETIC_AVATAR_PRESETS = [
   {
@@ -225,6 +242,11 @@ export default function SettingsScreen() {
   const [saving, setSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [exportingType, setExportingType] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [exportSuccess, setExportSuccess] = useState<string | null>(null);
+  const [notificationPermission, setNotificationPermission] = useState<string>('undetermined');
+  const [testingNotification, setTestingNotification] = useState(false);
 
   // Editable draft state
   const [editDisplayName, setEditDisplayName] = useState('');
@@ -300,6 +322,7 @@ export default function SettingsScreen() {
             if (profile.height !== undefined && profile.height !== null) setHeight(profile.height);
             if (profile.weight !== undefined && profile.weight !== null) setWeight(profile.weight);
             setAvatarUrl(profile.avatar_url ?? null);
+            setAvatarLoadError(false);
 
             if (profile.goal) setStoreGoal(profile.goal);
             if (profile.experience_level) setStoreExperience(profile.experience_level);
@@ -341,6 +364,55 @@ export default function SettingsScreen() {
     setStoreStyle,
   ]);
 
+  useEffect(() => {
+    let isMounted = true;
+    async function checkNotificationPermission() {
+      try {
+        const pStatus = await workoutNotificationService.getPermissionStatus();
+        if (isMounted) setNotificationPermission(pStatus);
+      } catch {
+        if (isMounted) setNotificationPermission('unavailable');
+      }
+    }
+    void checkNotificationPermission();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleRequestNotificationPermission = async () => {
+    try {
+      const granted = await workoutNotificationService.requestPermissions(true);
+      setNotificationPermission(granted ? 'granted' : 'denied');
+      if (granted) {
+        Alert.alert('Notifications Enabled', 'You will receive alerts on your lock screen when workout and rest timers finish.');
+      } else {
+        Alert.alert('Permission Denied', 'Please enable notifications for BeBig in your device Settings to receive timer alerts.');
+      }
+    } catch {
+      Alert.alert('Error', 'Unable to request notification permissions.');
+    }
+  };
+
+  const handleTestNotification = async () => {
+    setTestingNotification(true);
+    try {
+      const targetEndTime = Date.now() + 3000;
+      await workoutNotificationService.scheduleRestTimerNotification({
+        exerciseId: 'test_rest',
+        exerciseName: 'Bench Press (Test)',
+        setNumber: 1,
+        targetEndTime,
+        durationSeconds: 3,
+      });
+      Alert.alert('Test Notification Scheduled', 'Lock your screen or switch apps now. A notification will fire in 3 seconds!');
+    } catch {
+      Alert.alert('Error', 'Failed to schedule test notification.');
+    } finally {
+      setTimeout(() => setTestingNotification(false), 3000);
+    }
+  };
+
   const handleStartEdit = () => {
     pendingAvatarFileRef.current = null;
     editDisplayNameRef.current = displayName;
@@ -381,11 +453,13 @@ export default function SettingsScreen() {
 
     setSuccessMessage(null);
     setErrorMessage(null);
+    setAvatarLoadError(false);
     setIsEditing(true);
   };
 
   const handleCancelEdit = () => {
     pendingAvatarFileRef.current = null;
+    setAvatarLoadError(false);
     setIsEditing(false);
     setSuccessMessage(null);
     setErrorMessage(null);
@@ -571,6 +645,81 @@ export default function SettingsScreen() {
         },
       ],
     );
+  };
+
+  const handleExport = async (type: 'workouts' | 'templates', format: ExportFormat) => {
+    const exportKey = `${type}_${format}`;
+    setExportingType(exportKey);
+    setExportError(null);
+    setExportSuccess(null);
+
+    try {
+      if (type === 'workouts') {
+        const workouts = await workoutRepository.getCompletedWorkouts();
+        if (!workouts || workouts.length === 0) {
+          setExportError('No completed workouts found to export.');
+          return;
+        }
+        const filename = generateExportFilename('workouts', format);
+        const mimeType = getMimeTypeForFormat(format);
+        let content: string;
+        let isBase64 = false;
+
+        switch (format) {
+          case 'xlsx':
+            content = exportWorkoutsToXlsx(workouts);
+            isBase64 = true;
+            break;
+          case 'pdf':
+            content = await exportWorkoutsToPdf(workouts);
+            isBase64 = true;
+            break;
+          case 'json':
+            content = exportWorkoutsToJson(workouts);
+            break;
+          case 'csv':
+            content = exportWorkoutsToCsv(workouts);
+            break;
+        }
+
+        await shareOrDownloadExport(filename, content, mimeType, isBase64);
+        setExportSuccess(`Workout history exported successfully (${format.toUpperCase()}).`);
+      } else {
+        const templates = await templateRepository.getTemplates();
+        if (!templates || templates.length === 0) {
+          setExportError('No saved templates found to export.');
+          return;
+        }
+        const filename = generateExportFilename('templates', format);
+        const mimeType = getMimeTypeForFormat(format);
+        let content: string;
+        let isBase64 = false;
+
+        switch (format) {
+          case 'xlsx':
+            content = exportTemplatesToXlsx(templates);
+            isBase64 = true;
+            break;
+          case 'pdf':
+            content = await exportTemplatesToPdf(templates);
+            isBase64 = true;
+            break;
+          case 'json':
+            content = exportTemplatesToJson(templates);
+            break;
+          case 'csv':
+            content = exportTemplatesToCsv(templates);
+            break;
+        }
+
+        await shareOrDownloadExport(filename, content, mimeType, isBase64);
+        setExportSuccess(`Templates exported successfully (${format.toUpperCase()}).`);
+      }
+    } catch (err: any) {
+      setExportError(err?.message || 'Failed to export data.');
+    } finally {
+      setExportingType(null);
+    }
   };
 
   const formatText = (text: string | null | undefined) => {
@@ -1271,6 +1420,178 @@ export default function SettingsScreen() {
           </View>
         </Card>
 
+        {/* Data Export */}
+        <Card style={styles.sectionCard} testID="settings-export-card">
+          <Text variant="label" color="muted" style={styles.sectionHeading}>
+            DATA EXPORT
+          </Text>
+          <Text variant="caption" color="secondary" style={styles.exportDescription}>
+            Export your completed workout logs and saved templates as formatted Excel (.xlsx) workbooks, PDF reports, or open data.
+          </Text>
+
+          {exportError && (
+            <View style={[styles.errorBanner, styles.exportBanner]} testID="export-error-banner">
+              <Text variant="caption" style={styles.errorText}>
+                ⚠ {exportError}
+              </Text>
+            </View>
+          )}
+
+          {exportSuccess && (
+            <View style={[styles.successBanner, styles.exportBanner]} testID="export-success-banner">
+              <Text variant="caption" style={styles.successText}>
+                ✓ {exportSuccess}
+              </Text>
+            </View>
+          )}
+
+          <View style={styles.exportSectionGroup}>
+            <Text variant="label" color="primary" style={styles.exportGroupTitle}>
+              Workout History
+            </Text>
+            <View style={styles.exportButtonsRow}>
+              <Button
+                testID="export-workouts-excel-button"
+                title={exportingType === 'workouts_xlsx' ? 'Exporting...' : 'Export Excel (.xlsx)'}
+                onPress={() => handleExport('workouts', 'xlsx')}
+                variant="primary"
+                size="sm"
+                disabled={exportingType !== null}
+                style={styles.exportBtn}
+              />
+              <Button
+                testID="export-workouts-pdf-button"
+                title={exportingType === 'workouts_pdf' ? 'Exporting...' : 'Export PDF (.pdf)'}
+                onPress={() => handleExport('workouts', 'pdf')}
+                variant="outline"
+                size="sm"
+                disabled={exportingType !== null}
+                style={styles.exportBtn}
+              />
+            </View>
+            <View style={styles.exportButtonsRow}>
+              <Button
+                testID="export-workouts-json-button"
+                title={exportingType === 'workouts_json' ? 'Exporting...' : 'JSON'}
+                onPress={() => handleExport('workouts', 'json')}
+                variant="ghost"
+                size="sm"
+                disabled={exportingType !== null}
+                style={styles.exportBtn}
+              />
+              <Button
+                testID="export-workouts-csv-button"
+                title={exportingType === 'workouts_csv' ? 'Exporting...' : 'CSV'}
+                onPress={() => handleExport('workouts', 'csv')}
+                variant="ghost"
+                size="sm"
+                disabled={exportingType !== null}
+                style={styles.exportBtn}
+              />
+            </View>
+          </View>
+
+          <View style={styles.exportSectionGroup}>
+            <Text variant="label" color="primary" style={styles.exportGroupTitle}>
+              Saved Templates
+            </Text>
+            <View style={styles.exportButtonsRow}>
+              <Button
+                testID="export-templates-excel-button"
+                title={exportingType === 'templates_xlsx' ? 'Exporting...' : 'Export Excel (.xlsx)'}
+                onPress={() => handleExport('templates', 'xlsx')}
+                variant="primary"
+                size="sm"
+                disabled={exportingType !== null}
+                style={styles.exportBtn}
+              />
+              <Button
+                testID="export-templates-pdf-button"
+                title={exportingType === 'templates_pdf' ? 'Exporting...' : 'Export PDF (.pdf)'}
+                onPress={() => handleExport('templates', 'pdf')}
+                variant="outline"
+                size="sm"
+                disabled={exportingType !== null}
+                style={styles.exportBtn}
+              />
+            </View>
+            <View style={styles.exportButtonsRow}>
+              <Button
+                testID="export-templates-json-button"
+                title={exportingType === 'templates_json' ? 'Exporting...' : 'JSON'}
+                onPress={() => handleExport('templates', 'json')}
+                variant="ghost"
+                size="sm"
+                disabled={exportingType !== null}
+                style={styles.exportBtn}
+              />
+              <Button
+                testID="export-templates-csv-button"
+                title={exportingType === 'templates_csv' ? 'Exporting...' : 'CSV'}
+                onPress={() => handleExport('templates', 'csv')}
+                variant="ghost"
+                size="sm"
+                disabled={exportingType !== null}
+                style={styles.exportBtn}
+              />
+            </View>
+          </View>
+        </Card>
+
+        {/* Workout Notifications */}
+        <Card style={styles.sectionCard} testID="settings-notifications-card">
+          <View style={styles.notificationHeaderRow}>
+            <View style={styles.notificationTitleCol}>
+              <Text variant="label" color="muted" style={styles.sectionHeading}>
+                WORKOUT NOTIFICATIONS
+              </Text>
+              <Text variant="caption" color="secondary" style={styles.notificationDescription}>
+                Lock screen alerts for rest and workout timer completion.
+              </Text>
+            </View>
+            <View
+              style={[
+                styles.notificationStatusPill,
+                notificationPermission === 'granted' ? styles.pillGreen : styles.pillMuted,
+              ]}
+              testID="notification-permission-status"
+            >
+              <Text
+                variant="caption"
+                style={[
+                  styles.notificationStatusText,
+                  notificationPermission === 'granted' ? { color: '#10B981' } : { color: colors.textSecondary },
+                ]}
+              >
+                {notificationPermission === 'granted' ? '✓ Enabled' : 'Not Enabled'}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.notificationActionsRow}>
+            {notificationPermission !== 'granted' ? (
+              <Button
+                testID="enable-notifications-button"
+                title="Enable Timer Notifications"
+                onPress={handleRequestNotificationPermission}
+                variant="primary"
+                size="sm"
+                style={styles.notificationActionBtn}
+              />
+            ) : (
+              <Button
+                testID="test-notification-button"
+                title={testingNotification ? 'Firing in 3s...' : 'Test 3s Rest Alert'}
+                onPress={handleTestNotification}
+                variant="outline"
+                size="sm"
+                disabled={testingNotification}
+                style={styles.notificationActionBtn}
+              />
+            )}
+          </View>
+        </Card>
+
         {/* Development & Diagnostic Tools */}
         <Card style={styles.devToolsCard} testID="settings-dev-tools-card">
           <Text variant="caption" color="muted" style={styles.devToolsHeading}>
@@ -1678,5 +1999,65 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   devButton: {
     borderColor: colors.borderLight,
+  },
+  exportDescription: {
+    marginBottom: spacing.xs,
+  },
+  exportBanner: {
+    marginVertical: spacing.xs,
+  },
+  exportSectionGroup: {
+    marginTop: spacing.xs,
+    gap: spacing.xs / 2,
+  },
+  exportGroupTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  exportButtonsRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  exportBtn: {
+    flex: 1,
+  },
+  notificationHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  notificationTitleCol: {
+    flex: 1,
+    gap: 2,
+  },
+  notificationDescription: {
+    marginTop: 2,
+  },
+  notificationStatusPill: {
+    paddingHorizontal: spacing.xs + 2,
+    paddingVertical: 3,
+    borderRadius: radii.full,
+    borderWidth: 1,
+    alignSelf: 'flex-start',
+  },
+  pillGreen: {
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+  },
+  pillMuted: {
+    backgroundColor: colors.surfaceElevated,
+    borderColor: colors.borderLight,
+  },
+  notificationStatusText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  notificationActionsRow: {
+    marginTop: spacing.sm,
+    flexDirection: 'row',
+  },
+  notificationActionBtn: {
+    flex: 1,
   },
 });

@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { render, fireEvent, waitFor, act, cleanup, within } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 import WorkoutHistoryScreen from '../app/workout/history';
@@ -297,5 +297,24 @@ describe('Milestone 9 — Checkpoint 4: Workout History Improvements Unit Tests'
       expect(getByTestId('history-card-w_sep3')).toBeTruthy();
       expect(getByTestId('history-card-w_aug28')).toBeTruthy();
     });
+  });
+
+  it('G. renders Weekly Performance banner and navigates to /workout/progress/weekly', async () => {
+    getCompletedWorkoutsSpy.mockResolvedValueOnce(sampleWorkouts);
+
+    const { getByTestId, getByText } = await render(<WorkoutHistoryScreen />);
+
+    await waitFor(() => {
+      expect(getByTestId('history-weekly-performance-card')).toBeTruthy();
+      expect(getByText('Weekly Performance')).toBeTruthy();
+      expect(getByText('Review your weekly training and AI coaching insights.')).toBeTruthy();
+    });
+
+    const banner = getByTestId('history-weekly-performance-card');
+    await act(async () => {
+      fireEvent.press(banner);
+    });
+
+    expect(mockPush).toHaveBeenCalledWith('/workout/progress/weekly');
   });
 });

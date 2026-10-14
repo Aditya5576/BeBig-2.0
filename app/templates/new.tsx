@@ -18,7 +18,12 @@ import {
 } from '../../src/features/templates';
 import { Exercise } from '../../src/features/exercises';
 import { spacing, radii } from '../../src/constants/theme';
-import { WORKOUT_FOCUS_OPTIONS, deriveWorkoutFocus, getSuggestedSessionNumber } from '../../src/features/templates/utils/templateUtils';
+import {
+  WORKOUT_FOCUS_OPTIONS,
+  deriveWorkoutFocus,
+  getSuggestedSessionNumber,
+  getSuggestedTemplateSessionNumber,
+} from '../../src/features/templates/utils/templateUtils';
 import { WorkoutTemplate } from '../../src/features/templates/types';
 import { workoutRepository, WorkoutSession } from '../../src/features/workout';
 
@@ -75,7 +80,7 @@ export default function CreateTemplateScreen() {
     if (exercises.length === 0) return;
     const focus = deriveWorkoutFocus(exercises);
     if (focus !== activeFocus) {
-      const seq = getSuggestedSessionNumber(allWorkouts, focus);
+      const seq = getSuggestedTemplateSessionNumber(allTemplates, focus);
       setActiveFocus(focus);
       setSequenceNumber(seq);
       // Auto-update name if it's currently generated or empty
@@ -86,7 +91,7 @@ export default function CreateTemplateScreen() {
   }, [exercises, allTemplates]);
 
   const handleFocusChange = (newFocus: string) => {
-    const seq = getSuggestedSessionNumber(allWorkouts, newFocus);
+    const seq = getSuggestedTemplateSessionNumber(allTemplates, newFocus);
     setActiveFocus(newFocus);
     setSequenceNumber(seq);
     setName(`${newFocus} — Session ${seq}`);
