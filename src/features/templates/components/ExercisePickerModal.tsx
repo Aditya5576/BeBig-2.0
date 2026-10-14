@@ -20,6 +20,7 @@ import {
   STANDARD_CATEGORIES,
   STANDARD_EQUIPMENT,
 } from '../../exercises';
+import { getRecentlyUsedExercises } from '../../workout/services/recentExercisesService';
 import { spacing, radii } from '../../../constants/theme';
 
 export interface ExercisePickerModalProps {
@@ -29,6 +30,8 @@ export interface ExercisePickerModalProps {
   onSelectExercises?: (exercises: Exercise[]) => void;
   selectedExerciseIds?: string[];
   multiSelect?: boolean;
+  recentExercises?: Exercise[];
+  showRecentlyUsed?: boolean;
 }
 
 export function ExercisePickerModal({
@@ -38,6 +41,8 @@ export function ExercisePickerModal({
   onSelectExercises,
   selectedExerciseIds = [],
   multiSelect,
+  recentExercises: propsRecentExercises,
+  showRecentlyUsed = true,
 }: ExercisePickerModalProps) {
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -72,6 +77,70 @@ export function ExercisePickerModal({
   const [customEquipment, setCustomEquipment] = useState('Barbell');
   const [customSaving, setCustomSaving] = useState(false);
   const [customError, setCustomError] = useState<string | null>(null);
+
+  // Recently used exercises state derived from workout history
+  const [recentExercisesList, setRecentExercisesList] = useState<Exercise[]>(
+    propsRecentExercises || [],
+  );
+
+  useEffect(() => {
+    if (!visible) {
+      if (!propsRecentExercises) {
+        setRecentExercisesList([]);
+      }
+      return;
+    }
+
+    if (propsRecentExercises) {
+      setRecentExercisesList(propsRecentExercises);
+      return;
+    }
+
+    if (!showRecentlyUsed) {
+      setRecentExercisesList([]);
+      return;
+    }
+
+    let isMounted = true;
+    async function loadRecent() {
+      try {
+        const recent = await getRecentlyUsedExercises({ limit: 10 });
+        if (isMounted) {
+          setRecentExercisesList(recent);
+        }
+      } catch {
+        if (isMounted) {
+          setRecentExercisesList([]);
+        }
+      }
+    }
+
+    void loadRecent();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [visible, propsRecentExercises, showRecentlyUsed]);
+
+  // Filter recently used exercises matching current search & category filters
+  const visibleRecentExercises = useMemo(() => {
+    if (recentExercisesList.length === 0) return [];
+
+    return recentExercisesList.filter((item) => {
+      if (selectedSource === 'custom' && !item.isCustom) return false;
+      if (selectedSource === 'external' && item.isCustom) return false;
+      if (selectedCategory !== 'all' && item.category !== selectedCategory) return false;
+
+      if (searchQuery.trim().length > 0) {
+        const query = searchQuery.trim().toLowerCase();
+        const matchesName = item.name.toLowerCase().includes(query);
+        const matchesCat = item.categoryName.toLowerCase().includes(query);
+        if (!matchesName && !matchesCat) return false;
+      }
+
+      return true;
+    });
+  }, [recentExercisesList, selectedSource, selectedCategory, searchQuery]);
 
   // Reset transient picker state when modal opens or closes
   useEffect(() => {
@@ -260,13 +329,14 @@ export function ExercisePickerModal({
 
   const selectedCount = selectionOrder.length;
 
-  const renderItem = ({ item }: { item: Exercise }) => {
+  const renderExerciseCard = (item: Exercise, testIdPrefix: string = 'picker') => {
     const isAlreadyAdded = selectedExerciseIds.includes(item.id);
     const isSelected = selectedExercisesMap.has(item.id);
 
     return (
       <Pressable
-        testID={`picker-exercise-${item.id}`}
+        key={`${testIdPrefix}_${item.id}`}
+        testID={`${testIdPrefix}-exercise-${item.id}`}
         disabled={isAlreadyAdded}
         onPress={() => handleToggleExercise(item)}
         style={[styles.cardPressable, isAlreadyAdded && styles.cardDisabled]}
@@ -302,14 +372,14 @@ export function ExercisePickerModal({
             </View>
 
             {isAlreadyAdded ? (
-              <View style={styles.addedBadge} testID={`picker-added-badge-${item.id}`}>
+              <View style={styles.addedBadge} testID={`${testIdPrefix}-added-badge-${item.id}`}>
                 <Text variant="caption" color="muted" style={styles.badgeText}>
                   ADDED
                 </Text>
               </View>
             ) : isMultiSelect ? (
               <View
-                testID={`picker-checkbox-${item.id}`}
+                testID={`${testIdPrefix}-checkbox-${item.id}`}
                 style={[
                   styles.checkboxContainer,
                   isSelected ? styles.checkboxSelected : styles.checkboxUnselected,
@@ -335,6 +405,36 @@ export function ExercisePickerModal({
           </View>
         </Card>
       </Pressable>
+    );
+  };
+
+  const renderItem = ({ item }: { item: Exercise }) => renderExerciseCard(item, 'picker');
+
+  const renderListHeader = () => {
+    if (visibleRecentExercises.length === 0) return null;
+
+    return (
+      <View style={styles.recentSection} testID="picker-recent-section">
+        <View style={styles.recentHeaderRow}>
+          <Text variant="caption" color="secondary" style={styles.recentSectionTitle}>
+            RECENTLY USED
+          </Text>
+          <Text variant="caption" color="muted">
+            Based on workout history
+          </Text>
+        </View>
+
+        <View style={styles.recentItemsContainer}>
+          {visibleRecentExercises.map((item) => renderExerciseCard(item, 'picker-recent'))}
+        </View>
+
+        <View style={styles.recentDivider} />
+        {exercises.length > 0 ? (
+          <Text variant="caption" color="secondary" style={styles.librarySectionTitle}>
+            ALL EXERCISES
+          </Text>
+        ) : null}
+      </View>
     );
   };
 
@@ -568,7 +668,7 @@ export function ExercisePickerModal({
               <View style={styles.centerContainer}>
                 <ActivityIndicator size="large" color={colors.primary} />
               </View>
-            ) : exercises.length === 0 ? (
+            ) : exercises.length === 0 && visibleRecentExercises.length === 0 ? (
               <View style={styles.centerContainer}>
                 <Text variant="body" color="muted" style={{ marginBottom: spacing.md }}>
                   No exercises found.
@@ -585,9 +685,10 @@ export function ExercisePickerModal({
               <FlatList
                 testID="picker-exercise-list"
                 data={exercises}
-                extraData={selectedCount}
+                extraData={`${selectedCount}_${visibleRecentExercises.length}`}
                 keyExtractor={(item) => item.id}
                 renderItem={renderItem}
+                ListHeaderComponent={renderListHeader}
                 contentContainerStyle={[
                   styles.listContent,
                   isMultiSelect ? { paddingBottom: 110 } : null,
@@ -874,5 +975,33 @@ const createStyles = (colors: any) =>
       paddingVertical: spacing.md,
       alignItems: 'center',
       justifyContent: 'center',
+    },
+    recentSection: {
+      marginBottom: spacing.sm,
+    },
+    recentHeaderRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: spacing.xs,
+      paddingHorizontal: spacing.xs,
+    },
+    recentSectionTitle: {
+      fontWeight: '700',
+      letterSpacing: 0.8,
+    },
+    recentItemsContainer: {
+      gap: spacing.xs,
+    },
+    recentDivider: {
+      height: 1,
+      backgroundColor: colors.borderLight,
+      marginVertical: spacing.md,
+    },
+    librarySectionTitle: {
+      fontWeight: '700',
+      letterSpacing: 0.8,
+      marginBottom: spacing.sm,
+      paddingHorizontal: spacing.xs,
     },
   });

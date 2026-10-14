@@ -201,8 +201,42 @@ export default function WorkoutHistoryScreen() {
             />
           </Card>
         ) : (
-          /* Month-Grouped Workouts List */
-          <View style={styles.listContainer} testID="history-grouped-list">
+          <>
+            {/* Weekly Performance Navigation Banner */}
+            <Pressable
+              testID="history-weekly-performance-card"
+              onPress={() => router.push('/workout/progress/weekly' as any)}
+              style={styles.weeklyPerformanceBanner}
+              accessibilityRole="button"
+              accessibilityLabel="View Weekly Performance and AI coaching insights"
+            >
+              <View style={styles.weeklyPerformanceBannerLeft}>
+                <View style={styles.weeklyPerformanceIconWrap}>
+                  <Text style={{ fontSize: 16 }}>📊</Text>
+                </View>
+                <View style={styles.weeklyPerformanceTextGroup}>
+                  <View style={styles.weeklyPerformanceBadgeRow}>
+                    <Text variant="titleMedium" color="primary" style={styles.weeklyPerformanceTitle}>
+                      Weekly Performance
+                    </Text>
+                    <View style={styles.weeklyPerformanceAiBadge}>
+                      <Text variant="caption" style={styles.weeklyPerformanceAiBadgeText}>
+                        AI COACH
+                      </Text>
+                    </View>
+                  </View>
+                  <Text variant="caption" color="secondary" style={styles.weeklyPerformanceSubtitle}>
+                    Review your weekly training and AI coaching insights.
+                  </Text>
+                </View>
+              </View>
+              <Text variant="titleMedium" color="accent" style={styles.weeklyPerformanceChevron}>
+                →
+              </Text>
+            </Pressable>
+
+            {/* Month-Grouped Workouts List */}
+            <View style={styles.listContainer} testID="history-grouped-list">
             {monthGroups.map((group) => (
               <View
                 key={group.key}
@@ -395,6 +429,7 @@ export default function WorkoutHistoryScreen() {
               </View>
             ))}
           </View>
+        </>
         )}
       </ScreenScrollView>
     </ScreenContainer>
@@ -613,6 +648,65 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontSize: 11,
     color: colors.primary,
     fontWeight: '600',
+  },
+  weeklyPerformanceBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: spacing.md,
+    borderRadius: radii.md,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderWidth: 1,
+    marginBottom: spacing.xs,
+  },
+  weeklyPerformanceBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm + 2,
+    flex: 1,
+  },
+  weeklyPerformanceIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: radii.sm,
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  weeklyPerformanceTextGroup: {
+    flex: 1,
+    gap: 2,
+  },
+  weeklyPerformanceBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  weeklyPerformanceTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  weeklyPerformanceAiBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: radii.xs,
+    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+  },
+  weeklyPerformanceAiBadgeText: {
+    fontSize: 8.5,
+    fontWeight: '800',
+    color: colors.primary,
+    letterSpacing: 0.5,
+  },
+  weeklyPerformanceSubtitle: {
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  weeklyPerformanceChevron: {
+    fontSize: 15,
+    fontWeight: '700',
+    marginLeft: spacing.xs,
   },
 });
 

@@ -129,9 +129,58 @@ export function getTemplateFocus(template: WorkoutTemplate): string {
 
 export function extractSessionNumberFromName(name: string): number | null {
   if (!name || typeof name !== 'string') return null;
-  const match = name.match(/Session (\d+)/i);
+  // Matches "Session 1", "Session - 1", "Session -1", "Session — 1", "Session: 1", etc.
+  const match = name.match(/Session\s*[-—–:]*\s*(\d+)/i);
   if (match && match[1]) {
     return parseInt(match[1], 10);
   }
   return null;
+}
+
+export function extractBaseTemplateName(name: string): string {
+  if (!name || typeof name !== 'string') return '';
+  // Removes " — Session 1", " - Session - 2", " Session 3", etc.
+  return name.replace(/\s*[-—–:]*\s*Session\s*[-—–:]*\s*\d+/i, '').trim();
+}
+
+export function getSuggestedTemplateSessionNumber(
+  existingTemplates: WorkoutTemplate[] | undefined | null,
+  targetFocusOrBaseName: string,
+): number {
+  if (!existingTemplates || !Array.isArray(existingTemplates) || existingTemplates.length === 0) {
+    return 1;
+  }
+
+  const normalizedTarget = (targetFocusOrBaseName || '').trim().toLowerCase();
+  if (!normalizedTarget) return 1;
+
+  let maxSession = 0;
+
+  for (const tpl of existingTemplates) {
+    if (!tpl || !tpl.name) continue;
+
+    const tplFocus = (tpl.workoutFocus || getTemplateFocus(tpl) || '').trim().toLowerCase();
+    const tplBase = extractBaseTemplateName(tpl.name).toLowerCase();
+    const tplRawName = tpl.name.trim().toLowerCase();
+
+    // Check if template belongs to this series:
+    // 1) Focus matches the target focus/base
+    // 2) Base name matches target focus/base
+    // 3) Target focus/base matches or is contained in base name
+    const matchesSeries =
+      tplFocus === normalizedTarget ||
+      tplBase === normalizedTarget ||
+      tplRawName.startsWith(normalizedTarget);
+
+    if (matchesSeries) {
+      const parsedNum = extractSessionNumberFromName(tpl.name);
+      const sessionNum = parsedNum ?? tpl.sequenceNumber;
+
+      if (typeof sessionNum === 'number' && !isNaN(sessionNum) && sessionNum > maxSession) {
+        maxSession = sessionNum;
+      }
+    }
+  }
+
+  return maxSession > 0 ? maxSession + 1 : 1;
 }

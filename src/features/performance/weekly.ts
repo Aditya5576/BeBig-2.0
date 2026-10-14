@@ -67,6 +67,15 @@ export interface WeeklyPerformanceSummary {
   hasCurrentWeekWorkouts: boolean;
   hasPreviousWeekWorkouts: boolean;
   hasHistoricalComparison: boolean;
+  totalHistoricalWorkouts: number;
+  lastCompletedWorkout?: {
+    id: string;
+    name: string;
+    finishedAt?: string;
+    startedAt: string;
+    totalVolume?: number;
+    completedSetsCount?: number;
+  } | null;
 }
 
 /**
@@ -290,6 +299,26 @@ export function calculateWeeklyPerformance(
     });
   }
 
+  let lastCompletedWorkout: WeeklyPerformanceSummary['lastCompletedWorkout'] = null;
+  if (safeWorkouts.length > 0) {
+    const sortedDesc = [...safeWorkouts].sort((a, b) => {
+      const ta = new Date(a.finishedAt || a.startedAt).getTime() || 0;
+      const tb = new Date(b.finishedAt || b.startedAt).getTime() || 0;
+      return tb - ta;
+    });
+    const latest = sortedDesc[0];
+    if (latest) {
+      lastCompletedWorkout = {
+        id: latest.id,
+        name: latest.name,
+        finishedAt: latest.finishedAt,
+        startedAt: latest.startedAt,
+        totalVolume: latest.totalVolume,
+        completedSetsCount: latest.completedSetsCount,
+      };
+    }
+  }
+
   return {
     currentWeek,
     previousWeek,
@@ -307,5 +336,7 @@ export function calculateWeeklyPerformance(
     hasCurrentWeekWorkouts: currentWeekWorkouts.length > 0,
     hasPreviousWeekWorkouts: previousWeekWorkouts.length > 0,
     hasHistoricalComparison: totalCompared > 0,
+    totalHistoricalWorkouts: safeWorkouts.length,
+    lastCompletedWorkout,
   };
 }

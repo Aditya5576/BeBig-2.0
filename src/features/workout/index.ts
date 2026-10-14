@@ -5,4 +5,6 @@ export * from './utils/analytics';
 export * from './components/ActiveExerciseCard';
 export * from './components/ActiveSetRow';
 export * from './components/ActiveWorkoutTimer';
-
+export * from './services/recentExercisesService';
+export * from './services/nativeRestTimerService';
+export * from './services/workoutNotificationService';

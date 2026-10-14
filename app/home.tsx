@@ -386,20 +386,31 @@ export default function HomeScreen() {
               </Text>
             </Card>
 
-            {/* Weekly Volume */}
+            {/* Weekly Volume (Navigates to Weekly Performance) */}
             <Card style={styles.statTile} testID="metric-volume-card">
-              <View style={styles.statTileHeader}>
-                <Icon name="workout" size={14} color={colors.primary} />
-                <Text variant="caption" color="muted" style={styles.statLabel}>
-                  THIS WEEK
+              <Pressable
+                testID="home-weekly-volume-button"
+                onPress={() => router.push('/workout/progress/weekly' as any)}
+                style={styles.statTilePressable}
+                accessibilityRole="button"
+                accessibilityLabel="View Weekly Performance and AI coaching insights"
+              >
+                <View style={styles.statTileHeader}>
+                  <Icon name="workout" size={14} color={colors.primary} />
+                  <Text variant="caption" color="muted" style={styles.statLabel}>
+                    THIS WEEK
+                  </Text>
+                  <Text variant="caption" color="muted" style={styles.statChevron}>
+                    ›
+                  </Text>
+                </View>
+                <Text variant="titleLarge" color="accent" style={styles.statNumber}>
+                  {`${formatVolume(analytics.weeklyVolume)}`}
                 </Text>
-              </View>
-              <Text variant="titleLarge" color="accent" style={styles.statNumber}>
-                {`${formatVolume(analytics.weeklyVolume)}`}
-              </Text>
-              <Text variant="caption" color="secondary" style={styles.statDetail}>
-                Tonnage lifted
-              </Text>
+                <Text variant="caption" color="secondary" style={styles.statDetail}>
+                  Tonnage lifted
+                </Text>
+              </Pressable>
             </Card>
           </View>
 
@@ -727,7 +738,40 @@ export default function HomeScreen() {
           )}
         </View>
 
-        {/* 6. Exercise Library CTA */}
+        {/* 6. AI Weekly Performance & Coaching Banner */}
+        <Pressable
+          testID="home-weekly-performance-card"
+          onPress={() => router.push('/workout/progress/weekly' as any)}
+          style={styles.weeklyPerformanceTile}
+          accessibilityRole="button"
+          accessibilityLabel="Open Weekly Performance and AI coaching insights"
+        >
+          <View style={styles.weeklyPerformanceLeft}>
+            <View style={styles.weeklyPerformanceIconWrap}>
+              <Icon name="trophy" size={18} color="#F59E0B" />
+            </View>
+            <View style={styles.weeklyPerformanceTextGroup}>
+              <View style={styles.weeklyPerformanceBadgeRow}>
+                <Text variant="titleMedium" color="primary" style={styles.weeklyPerformanceTitle}>
+                  Weekly Performance
+                </Text>
+                <View style={styles.weeklyPerformanceAiBadge}>
+                  <Text variant="caption" style={styles.weeklyPerformanceAiBadgeText}>
+                    AI COACH
+                  </Text>
+                </View>
+              </View>
+              <Text variant="caption" color="secondary" style={styles.weeklyPerformanceSubtitle}>
+                Review your weekly training and AI coaching insights.
+              </Text>
+            </View>
+          </View>
+          <Text variant="titleMedium" color="accent" style={styles.weeklyPerformanceChevron}>
+            →
+          </Text>
+        </Pressable>
+
+        {/* 7. Exercise Library CTA */}
         <Pressable
           testID="browse-exercises-button"
           onPress={() => router.push('/exercises' as any)}
@@ -1138,6 +1182,64 @@ const createStyles = (colors: any) =>
     },
     emptyButton: {
       minWidth: 140,
+    },
+    weeklyPerformanceTile: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: spacing.md,
+      borderRadius: radii.md,
+      backgroundColor: colors.surface,
+      borderColor: colors.border,
+      borderWidth: 1,
+    },
+    weeklyPerformanceLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm + 2,
+      flex: 1,
+    },
+    weeklyPerformanceIconWrap: {
+      width: 36,
+      height: 36,
+      borderRadius: radii.sm,
+      backgroundColor: 'rgba(245, 158, 11, 0.12)',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    weeklyPerformanceTextGroup: {
+      flex: 1,
+      gap: 2,
+    },
+    weeklyPerformanceBadgeRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+    },
+    weeklyPerformanceTitle: {
+      fontSize: 14,
+      fontWeight: '700',
+    },
+    weeklyPerformanceAiBadge: {
+      paddingHorizontal: 6,
+      paddingVertical: 1.5,
+      borderRadius: radii.xs,
+      backgroundColor: 'rgba(56, 189, 248, 0.15)',
+    },
+    weeklyPerformanceAiBadgeText: {
+      fontSize: 8.5,
+      fontWeight: '800',
+      color: colors.primary,
+      letterSpacing: 0.5,
+    },
+    weeklyPerformanceSubtitle: {
+      fontSize: 11,
+      lineHeight: 15,
+    },
+    weeklyPerformanceChevron: {
+      fontSize: 15,
+      fontWeight: '700',
+      marginLeft: spacing.xs,
     },
     exerciseLibraryTile: {
       flexDirection: 'row',

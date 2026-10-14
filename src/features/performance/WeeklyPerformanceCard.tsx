@@ -10,25 +10,114 @@ export interface WeeklyPerformanceCardProps {
   summary: WeeklyPerformanceSummary;
 }
 
+function formatDateLabel(dateStr?: string): string {
+  if (!dateStr) return 'Recent';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return 'Recent';
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch {
+    return 'Recent';
+  }
+}
+
 export function WeeklyPerformanceCard({ summary }: WeeklyPerformanceCardProps) {
   const { colors } = useAppTheme();
   const styles = createStyles(colors);
   const router = useRouter();
 
   if (!summary.hasCurrentWeekWorkouts) {
+    const hasHistory = (summary.totalHistoricalWorkouts || 0) > 0;
+    const lastWorkout = summary.lastCompletedWorkout;
+    const prevWeek = summary.activity.previous;
+
     return (
       <Card style={styles.container} testID="weekly-performance-card">
         <View style={styles.headerBlock}>
           <Text variant="titleMedium" color="primary" style={styles.title} testID="weekly-perf-title">
             Weekly Performance
           </Text>
-          <Text variant="caption" color="muted" style={styles.subtitle}>
+          <Text variant="caption" color="muted" style={styles.subtitle} testID="weekly-perf-week-range">
             {summary.currentWeek.label}
           </Text>
         </View>
-        <Text variant="caption" color="secondary" style={styles.emptyNotice} testID="weekly-no-workouts-notice">
-          No workouts recorded this week.
-        </Text>
+
+        <View style={styles.noticeBox} testID="weekly-no-workouts-notice">
+          <Text variant="caption" color="secondary" style={styles.emptyNotice}>
+            No workouts recorded this week.
+          </Text>
+        </View>
+
+        {hasHistory ? (
+          <View style={styles.historyContextBox} testID="weekly-historical-context">
+            <Text variant="label" color="muted" style={styles.subSectionHeader}>
+              TRAINING HISTORY BENCHMARKS
+            </Text>
+
+            {lastWorkout && (
+              <View style={styles.historyDetailRow} testID="weekly-last-workout-info">
+                <Text variant="caption" color="primary" style={{ fontWeight: '600' }}>
+                  Last workout:{' '}
+                  <Text variant="caption" color="primary" style={{ fontWeight: '700' }}>
+                    {lastWorkout.name}
+                  </Text>
+                </Text>
+                <Text variant="caption" color="muted">
+                  {formatDateLabel(lastWorkout.finishedAt || lastWorkout.startedAt)}
+                  {lastWorkout.totalVolume ? ` • ${Math.round(lastWorkout.totalVolume).toLocaleString()} kg volume` : ''}
+                </Text>
+              </View>
+            )}
+
+            {prevWeek && prevWeek.workouts > 0 && (
+              <View style={styles.historyDetailRow} testID="weekly-prev-week-benchmark">
+                <Text variant="caption" color="secondary">
+                  Previous week ({summary.previousWeek.label}): {prevWeek.workouts} {prevWeek.workouts === 1 ? 'workout' : 'workouts'} • {prevWeek.exercises} exercises • {prevWeek.sets} sets
+                </Text>
+              </View>
+            )}
+
+            <View style={styles.historyActionsRow}>
+              <Pressable
+                testID="weekly-view-history-button"
+                onPress={() => router.push('/workout/history')}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                style={styles.historyLinkButton}
+              >
+                <Text variant="caption" color="accent" style={styles.historyLinkText}>
+                  View Workout History ({summary.totalHistoricalWorkouts}) →
+                </Text>
+              </Pressable>
+
+              <Pressable
+                testID="weekly-start-session-button"
+                onPress={() => router.push('/workout/start')}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                style={styles.historyLinkButton}
+              >
+                <Text variant="caption" color="accent" style={styles.historyLinkText}>
+                  Start Workout →
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.historyContextBox} testID="weekly-no-history-state">
+            <Text variant="caption" color="muted">
+              Complete your first workout to begin tracking progressive overload.
+            </Text>
+            <Pressable
+              testID="weekly-start-first-workout-button"
+              onPress={() => router.push('/workout/start')}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              style={styles.historyLinkButton}
+            >
+              <Text variant="caption" color="accent" style={styles.historyLinkText}>
+                Start Workout →
+              </Text>
+            </Pressable>
+          </View>
+        )}
       </Card>
     );
   }
@@ -335,6 +424,27 @@ const createStyles = (colors: any) =>
       padding: spacing.sm,
       backgroundColor: 'rgba(255, 255, 255, 0.03)',
       borderRadius: radii.xs || 4,
+    },
+    historyContextBox: {
+      gap: spacing.xs + 2,
+      paddingTop: spacing.xs,
+      borderTopWidth: 1,
+      borderTopColor: colors.borderLight || 'rgba(255, 255, 255, 0.06)',
+    },
+    historyDetailRow: {
+      gap: 2,
+    },
+    historyActionsRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.md,
+      marginTop: spacing.xs,
+    },
+    historyLinkButton: {
+      paddingVertical: 4,
+    },
+    historyLinkText: {
+      fontWeight: '700',
     },
     summaryPillsRow: {
       flexDirection: 'row',

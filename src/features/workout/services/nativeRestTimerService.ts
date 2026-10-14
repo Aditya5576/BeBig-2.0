@@ -9,6 +9,7 @@
 
 import { Platform } from 'react-native';
 import { ActiveRestTimer } from '../types';
+import { workoutNotificationService } from './workoutNotificationService';
 
 export interface NativeRestTimerPayload {
   exerciseId: string;
@@ -70,6 +71,13 @@ export class NativeRestTimerService {
 
     this.lastSyncedState = payload;
 
+    // Synchronize local background completion notification
+    if (!timer.isPaused && timer.targetEndTime > Date.now()) {
+      await workoutNotificationService.scheduleRestTimerNotification(timer);
+    } else {
+      await workoutNotificationService.cancelRestTimerNotification();
+    }
+
     try {
       if (Platform.OS === 'ios') {
         await this.updateIOSLiveActivity(payload);
@@ -92,6 +100,7 @@ export class NativeRestTimerService {
     }
 
     this.lastSyncedState = null;
+    await workoutNotificationService.cancelRestTimerNotification();
 
     try {
       if (Platform.OS === 'ios') {

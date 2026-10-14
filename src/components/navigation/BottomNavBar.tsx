@@ -93,6 +93,8 @@ export function BottomNavBar() {
         <Icon name="home" size={20} focused={isHomeActive} />
         <Text
           variant="caption"
+          numberOfLines={1}
+          ellipsizeMode="tail"
           style={[styles.tabLabel, isHomeActive ? styles.tabLabelActive : styles.tabLabelInactive]}
         >
           Home
@@ -112,6 +114,8 @@ export function BottomNavBar() {
         <Icon name="history" size={20} focused={isHistoryActive} />
         <Text
           variant="caption"
+          numberOfLines={1}
+          ellipsizeMode="tail"
           style={[styles.tabLabel, isHistoryActive ? styles.tabLabelActive : styles.tabLabelInactive]}
         >
           History
@@ -133,6 +137,8 @@ export function BottomNavBar() {
         </View>
         <Text
           variant="caption"
+          numberOfLines={1}
+          ellipsizeMode="tail"
           style={[styles.tabLabel, isWorkoutActive ? styles.tabLabelActive : styles.tabLabelInactive]}
         >
           Workout
@@ -152,6 +158,8 @@ export function BottomNavBar() {
         <Icon name="exercises" size={20} focused={isExercisesActive} />
         <Text
           variant="caption"
+          numberOfLines={1}
+          ellipsizeMode="tail"
           style={[styles.tabLabel, isExercisesActive ? styles.tabLabelActive : styles.tabLabelInactive]}
         >
           Exercises
@@ -171,6 +179,8 @@ export function BottomNavBar() {
         <Icon name="profile" size={20} focused={isProfileActive} />
         <Text
           variant="caption"
+          numberOfLines={1}
+          ellipsizeMode="tail"
           style={[styles.tabLabel, isProfileActive ? styles.tabLabelActive : styles.tabLabelInactive]}
         >
           Profile
@@ -200,7 +210,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 48,
-    minWidth: 48,
+    paddingHorizontal: 2,
     gap: 3,
   },
   tabIcon: {
@@ -214,7 +224,8 @@ const createStyles = (colors: any) => StyleSheet.create({
   tabLabel: {
     fontSize: 10,
     fontWeight: '700',
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
+    textAlign: 'center',
   },
   tabLabelActive: {
     color: '#E5A93C',
@@ -228,6 +239,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     justifyContent: 'center',
     marginTop: -18,
     minHeight: 56,
+    paddingHorizontal: 2,
     gap: 3,
   },
   centerButton: {

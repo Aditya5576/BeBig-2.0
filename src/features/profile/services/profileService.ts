@@ -73,30 +73,7 @@ export const profileService: IProfileService = {
   getProfile: async (userId: string): Promise<UserProfile | null> => {
     if (!userId) return null;
 
-    // 1. Fast local storage & memory check first
-    const local = await readLocalProfile(userId);
-    if (local && local.onboarding_completed) {
-      return local;
-    }
-
-    // 2. Check active in-memory auth store user metadata if available
-    let currentUserMeta: any = null;
-    try {
-      const { useAuthStore } = require('../../auth/store/useAuthStore');
-      const currentUser = useAuthStore.getState().user;
-      if (currentUser?.id === userId) {
-        currentUserMeta = currentUser.user_metadata;
-        if (currentUserMeta?.profile) {
-          const metaProfile = currentUserMeta.profile as UserProfile;
-          await writeLocalProfile(userId, metaProfile);
-          return metaProfile;
-        }
-      }
-    } catch {
-      // Silently handled
-    }
-
-    // 3. Query authoritative public.profiles single attempt
+    // 1. Query authoritative public.profiles single attempt when configured
     if (isSupabaseConfigured()) {
       try {
         const { data, error } = await supabase
@@ -113,6 +90,29 @@ export const profileService: IProfileService = {
       } catch {
         // Silently handled network or DB blip
       }
+    }
+
+    // 2. Fast local storage & memory check fallback
+    const local = await readLocalProfile(userId);
+    if (local && local.onboarding_completed) {
+      return local;
+    }
+
+    // 3. Check active in-memory auth store user metadata if available
+    let currentUserMeta: any = null;
+    try {
+      const { useAuthStore } = require('../../auth/store/useAuthStore');
+      const currentUser = useAuthStore.getState().user;
+      if (currentUser?.id === userId) {
+        currentUserMeta = currentUser.user_metadata;
+        if (currentUserMeta?.profile) {
+          const metaProfile = currentUserMeta.profile as UserProfile;
+          await writeLocalProfile(userId, metaProfile);
+          return metaProfile;
+        }
+      }
+    } catch {
+      // Silently handled
     }
 
     return local;

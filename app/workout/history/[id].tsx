@@ -5,7 +5,12 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ScreenContainer, Text, Button, Card, SyncStatusChip } from '../../../src/components/ui';
 import { workoutRepository, WorkoutSession } from '../../../src/features/workout';
 import { templateRepository, WorkoutTemplate } from '../../../src/features/templates';
-import { WORKOUT_FOCUS_OPTIONS, deriveWorkoutFocus, getSuggestedSessionNumber } from '../../../src/features/templates/utils/templateUtils';
+import {
+  WORKOUT_FOCUS_OPTIONS,
+  deriveWorkoutFocus,
+  getSuggestedSessionNumber,
+  getSuggestedTemplateSessionNumber,
+} from '../../../src/features/templates/utils/templateUtils';
 import { convertWorkoutToTemplateInput } from '../summary';
 import { spacing, radii } from '../../../src/constants/theme';
 import {
@@ -78,7 +83,7 @@ export default function WorkoutHistoryDetailScreen() {
   const openSaveModal = () => {
     if (!workout) return;
     const focus = deriveWorkoutFocus(workout.exercises || []);
-    const seq = getSuggestedSessionNumber(allWorkouts, focus);
+    const seq = getSuggestedTemplateSessionNumber(allTemplates, focus);
     const defaultName = `${focus} — Session ${seq}`;
     
     setActiveFocus(focus);
@@ -89,7 +94,7 @@ export default function WorkoutHistoryDetailScreen() {
   };
 
   const handleFocusChange = (newFocus: string) => {
-    const seq = getSuggestedSessionNumber(allWorkouts, newFocus);
+    const seq = getSuggestedTemplateSessionNumber(allTemplates, newFocus);
     setActiveFocus(newFocus);
     setSequenceNumber(seq);
     updateTemplateName(`${newFocus} — Session ${seq}`);
@@ -123,11 +128,15 @@ export default function WorkoutHistoryDetailScreen() {
 
     try {
       const input = convertWorkoutToTemplateInput(workout, trimmedName, activeFocus, sequenceNumber);
-      await templateRepository.createTemplate(input);
+      const created = await templateRepository.createTemplate(input);
 
       if (workout.id) {
         const updated = await workoutRepository.updateCompletedWorkoutName(workout.id, trimmedName);
         setWorkout(updated);
+      }
+
+      if (created) {
+        setAllTemplates((prev) => [...prev, created]);
       }
 
       setTemplateSaved(true);
