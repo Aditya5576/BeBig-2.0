@@ -149,7 +149,9 @@ export class WorkoutNotificationService {
     try {
       const settings = await Notifications.getPermissionsAsync();
       const isGranted =
-        (settings as any)?.granted || settings?.status === Notifications.PermissionStatus.GRANTED;
+        (settings as any)?.granted ||
+        settings?.status === Notifications.PermissionStatus.GRANTED ||
+        (settings as any)?.ios?.status === 3;
       if (isGranted) {
         return Notifications.PermissionStatus.GRANTED;
       }
@@ -264,6 +266,7 @@ export class WorkoutNotificationService {
           title,
           body,
           sound: 'default',
+          interruptionLevel: 'timeSensitive',
           data: {
             type: 'rest_timer',
             exerciseId: timer.exerciseId,
@@ -351,6 +354,7 @@ export class WorkoutNotificationService {
           title: params.title,
           body: params.body,
           sound: 'default',
+          interruptionLevel: 'timeSensitive',
           data: {
             type: 'workout_timer',
             timerId: params.id,

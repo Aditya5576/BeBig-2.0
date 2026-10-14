@@ -112,6 +112,7 @@ describe('BE BIG 2.0 — Workout & Rest Timer Completion Notifications', () => {
       expect(callArgs.content.body).toBe(
         'Rest complete for Barbell Bench Press — ready for your next set.'
       );
+      expect(callArgs.content.interruptionLevel).toBe('timeSensitive');
       expect(callArgs.content.data.type).toBe('rest_timer');
       expect(callArgs.content.data.exerciseId).toBe('ex_bench');
       expect(callArgs.content.data.setNumber).toBe(1);
@@ -379,6 +380,19 @@ describe('BE BIG 2.0 — Workout & Rest Timer Completion Notifications', () => {
       expect(status).toBe(Notifications.PermissionStatus.GRANTED);
     });
 
+    it('resolves iOS provisional authorization status (status=3) as GRANTED', async () => {
+      (Notifications.getPermissionsAsync as jest.Mock).mockResolvedValue({
+        status: Notifications.PermissionStatus.UNDETERMINED,
+        granted: false,
+        ios: {
+          status: 3, // UNAuthorizationStatusProvisional
+        },
+      });
+
+      const status = await workoutNotificationService.getPermissionStatus();
+      expect(status).toBe(Notifications.PermissionStatus.GRANTED);
+    });
+
     it('userInitiated request prompts permissions even if previously prompted', async () => {
       (Notifications.requestPermissionsAsync as jest.Mock).mockResolvedValue({
         status: Notifications.PermissionStatus.GRANTED,
@@ -408,6 +422,7 @@ describe('BE BIG 2.0 — Workout & Rest Timer Completion Notifications', () => {
           content: expect.objectContaining({
             title: 'Workout Timer Finished',
             body: '30-minute EMOM completed!',
+            interruptionLevel: 'timeSensitive',
             data: expect.objectContaining({
               type: 'workout_timer',
               timerId: 'timer_countdown_1',
@@ -415,6 +430,7 @@ describe('BE BIG 2.0 — Workout & Rest Timer Completion Notifications', () => {
           }),
           trigger: expect.objectContaining({
             seconds: 1800,
+            repeats: false,
           }),
         })
       );
