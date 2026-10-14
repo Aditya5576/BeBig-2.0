@@ -12,9 +12,23 @@
 
 import { Platform, Share } from 'react-native';
 import * as XLSX from 'xlsx';
-import { PDFDocument, StandardFonts, rgb, RGB } from 'pdf-lib';
+import type { RGB } from 'pdf-lib';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
+
+/**
+ * Loads pdf-lib from its standalone pre-bundled distribution.
+ * This completely isolates pdf-lib from external tslib resolution issues in Metro web/mobile bundler.
+ */
+function getPdfLib() {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const pdfLib = require('pdf-lib/dist/pdf-lib.min.js');
+  return {
+    PDFDocument: pdfLib.PDFDocument as typeof import('pdf-lib').PDFDocument,
+    StandardFonts: pdfLib.StandardFonts as typeof import('pdf-lib').StandardFonts,
+    rgb: pdfLib.rgb as typeof import('pdf-lib').rgb,
+  };
+}
 import { WorkoutSession } from '../../workout/types';
 import { WorkoutTemplate } from '../../templates/types';
 
@@ -411,6 +425,7 @@ function formatReportDate(isoString?: string): string {
  * Generates a clean, readable, multi-page PDF report for completed workouts.
  */
 export async function exportWorkoutsToPdf(workouts: WorkoutSession[]): Promise<string> {
+  const { PDFDocument, StandardFonts, rgb } = getPdfLib();
   const pdfDoc = await PDFDocument.create();
   const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -621,6 +636,7 @@ export async function exportWorkoutsToPdf(workouts: WorkoutSession[]): Promise<s
  * Generates a clean, readable, multi-page PDF report for saved templates.
  */
 export async function exportTemplatesToPdf(templates: WorkoutTemplate[]): Promise<string> {
+  const { PDFDocument, StandardFonts, rgb } = getPdfLib();
   const pdfDoc = await PDFDocument.create();
   const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);

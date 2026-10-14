@@ -117,7 +117,20 @@ describe('BE BIG 2.0 — Workout & Rest Timer Completion Notifications', () => {
       expect(callArgs.content.data.setNumber).toBe(1);
       expect(callArgs.trigger.type).toBe('timeInterval');
       expect(callArgs.trigger.seconds).toBe(90);
+      expect(callArgs.trigger.repeats).toBe(false);
       expect(callArgs.trigger.channelId).toBe(WORKOUT_NOTIFICATION_CHANNEL_ID);
+    });
+
+    it('configures foreground notification presentation options with alerts and banners enabled', async () => {
+      new WorkoutNotificationService();
+      const handlerCalls = (Notifications.setNotificationHandler as jest.Mock).mock.calls;
+      expect(handlerCalls.length).toBeGreaterThan(0);
+      const config = handlerCalls[handlerCalls.length - 1][0];
+      const result = await config.handleNotification();
+      expect(result.shouldShowAlert).toBe(true);
+      expect(result.shouldShowBanner).toBe(true);
+      expect(result.shouldShowList).toBe(true);
+      expect(result.shouldPlaySound).toBe(true);
     });
 
     it('generates a clean generic message when exerciseName is not provided', async () => {

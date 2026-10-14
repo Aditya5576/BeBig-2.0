@@ -52,11 +52,11 @@ export class WorkoutNotificationService {
     try {
       Notifications.setNotificationHandler({
         handleNotification: async () => ({
-          shouldShowAlert: false, // In-app RestTimerOverlay already provides visual completion banner
+          shouldShowAlert: true,
           shouldPlaySound: true,
           shouldSetBadge: false,
-          shouldShowBanner: false,
-          shouldShowList: false,
+          shouldShowBanner: true,
+          shouldShowList: true,
         }),
       });
     } catch (err) {
@@ -95,6 +95,11 @@ export class WorkoutNotificationService {
 
     try {
       const settings = await Notifications.getPermissionsAsync();
+      const isGranted =
+        (settings as any)?.granted || settings?.status === Notifications.PermissionStatus.GRANTED;
+      if (isGranted) {
+        return Notifications.PermissionStatus.GRANTED;
+      }
       return settings?.status ?? Notifications.PermissionStatus.UNDETERMINED;
     } catch {
       return Notifications.PermissionStatus.UNDETERMINED;
@@ -123,7 +128,8 @@ export class WorkoutNotificationService {
         },
       });
 
-      if (res?.status === Notifications.PermissionStatus.GRANTED) {
+      const isGranted = (res as any)?.granted || res?.status === Notifications.PermissionStatus.GRANTED;
+      if (isGranted) {
         await this.ensureNotificationChannel();
         return true;
       }
@@ -201,6 +207,7 @@ export class WorkoutNotificationService {
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
           seconds: secondsRemaining,
+          repeats: false,
           channelId: WORKOUT_NOTIFICATION_CHANNEL_ID,
         },
       });
@@ -274,6 +281,7 @@ export class WorkoutNotificationService {
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
           seconds: secondsRemaining,
+          repeats: false,
           channelId: WORKOUT_NOTIFICATION_CHANNEL_ID,
         },
       });

@@ -21,20 +21,7 @@ import { spacing, radii } from '../src/constants/theme';
 import { env } from '../src/config/env';
 import { workoutRepository } from '../src/features/workout/services/workoutRepository';
 import { templateRepository } from '../src/features/templates/services/templateRepository';
-import {
-  ExportFormat,
-  exportWorkoutsToXlsx,
-  exportWorkoutsToPdf,
-  exportWorkoutsToJson,
-  exportWorkoutsToCsv,
-  exportTemplatesToXlsx,
-  exportTemplatesToPdf,
-  exportTemplatesToJson,
-  exportTemplatesToCsv,
-  generateExportFilename,
-  getMimeTypeForFormat,
-  shareOrDownloadExport,
-} from '../src/features/export';
+import type { ExportFormat } from '../src/features/export';
 import { workoutNotificationService } from '../src/features/workout';
 
 export const ATHLETIC_AVATAR_PRESETS = [
@@ -654,6 +641,20 @@ export default function SettingsScreen() {
     setExportSuccess(null);
 
     try {
+      const {
+        exportWorkoutsToXlsx,
+        exportWorkoutsToPdf,
+        exportWorkoutsToJson,
+        exportWorkoutsToCsv,
+        exportTemplatesToXlsx,
+        exportTemplatesToPdf,
+        exportTemplatesToJson,
+        exportTemplatesToCsv,
+        generateExportFilename,
+        getMimeTypeForFormat,
+        shareOrDownloadExport,
+      } = await import('../src/features/export');
+
       if (type === 'workouts') {
         const workouts = await workoutRepository.getCompletedWorkouts();
         if (!workouts || workouts.length === 0) {
