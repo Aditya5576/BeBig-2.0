@@ -12,7 +12,7 @@ import {
   Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ScreenContainer, Text, Button, Card } from '../../src/components/ui';
+import { ScreenContainer, Text, Button, Card, useBottomContentInset } from '../../src/components/ui';
 import {
   templateRepository,
   ExercisePickerModal,
@@ -38,6 +38,7 @@ export default function TemplateDetailScreen() {
   const styles = createStyles(colors);
 
   const router = useRouter();
+  const bottomInset = useBottomContentInset();
   const { id } = useLocalSearchParams<{ id: string }>();
 
   const [template, setTemplate] = useState<WorkoutTemplate | null>(null);
@@ -257,7 +258,7 @@ export default function TemplateDetailScreen() {
         keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomInset + spacing.xl }]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"

@@ -25,6 +25,7 @@ jest.mock('expo-router', () => ({
     back: mockBack,
   }),
   useLocalSearchParams: () => mockParams,
+  useFocusEffect: (cb: any) => { require('react').useEffect(cb, []); },
   Link: ({ children }: { children: React.ReactNode }) => children,
   Redirect: () => null,
   Stack: Object.assign(({ children }: { children: React.ReactNode }) => children, {
@@ -336,7 +337,7 @@ describe('BeBig 2.0 — Exercise System Foundation', () => {
           category: 'arms',
           primaryMuscles: [],
         }),
-      ).rejects.toThrow(/Exercise name is required/);
+      ).rejects.toThrow(/Please enter an exercise name|Exercise name is required/);
     });
   });
 

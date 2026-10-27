@@ -8,9 +8,12 @@ import { useSyncLifecycle } from '../src/services/sync';
 import { useAuthStore, resolveAuthenticatedUserRoute } from '../src/features/auth';
 import { WebAlertModal, ReleaseNotesModal } from '../src/components/ui';
 import { BottomNavBar } from '../src/components/navigation';
-import { initErrorMonitoring, wrapRootLayout } from '../src/services/monitoring/errorMonitoring';
+import { initErrorMonitoring, wrapRootLayout, setUserContext } from '../src/services/monitoring/errorMonitoring';
 import { useThemeStore, useWebThemeSync, useAppTheme } from '../src/features/theme';
 import '../src/features/workout/services/workoutNotificationService';
+
+// Initialize monitoring eagerly if configured
+initErrorMonitoring();
 
 function useProtectedRoute() {
   const router = typeof useRouter === 'function' ? useRouter() : null;
@@ -29,6 +32,15 @@ function useProtectedRoute() {
     }
   }, []);
 
+  // 1b. Synchronize user context with error monitoring (anonymous user ID only)
+  useEffect(() => {
+    if (status === 'authenticated' && userId) {
+      setUserContext(userId);
+    } else {
+      setUserContext(null);
+    }
+  }, [status, userId]);
+
   // 2. Route protection: guard protected routes against unauthenticated access
   // and prevent completed authenticated users from entering onboarding
   useEffect(() => {
@@ -38,7 +50,7 @@ function useProtectedRoute() {
 
     const firstSegment = segments[0];
     const secondSegment = segments[1];
-    const isProtected = ['home', 'workout', 'templates', 'exercises', 'settings', 'calendar'].includes(firstSegment);
+    const isProtected = ['home', 'workout', 'templates', 'exercises', 'settings'].includes(firstSegment);
 
     if (status === 'unauthenticated' && isProtected) {
       router.replace('/onboarding/welcome');
@@ -114,7 +126,6 @@ export default wrapRootLayout(function RootLayout() {
           <Stack.Screen name="workout/progress/prs" />
           <Stack.Screen name="workout/progress/weekly" />
           <Stack.Screen name="workout/progress/exercise/[id]" />
-          <Stack.Screen name="calendar/index" />
           <Stack.Screen name="+not-found" options={{ title: 'Not Found' }} />
         </Stack>
         <BottomNavBar />

@@ -83,7 +83,9 @@ jest.mock('../src/features/auth', () => {
 
 // Silence sync-engine side effects that are irrelevant to this unit
 jest.mock('../src/services/sync', () => ({
+  getRecordKey: (entityType: string, id: string) => `${entityType}:${id}`,
   syncMetadataStore: {
+    getState: jest.fn().mockResolvedValue({ records: {} }),
     markPendingUpload: jest.fn().mockResolvedValue(undefined),
     getRecord: jest.fn().mockResolvedValue(null),
     removeRecord: jest.fn().mockResolvedValue(undefined),
@@ -94,11 +96,6 @@ jest.mock('../src/services/sync', () => ({
   },
 }));
 
-jest.mock('../src/features/scheduling/services/scheduledWorkoutRepository', () => ({
-  scheduledWorkoutRepository: {
-    updateScheduledWorkout: jest.fn().mockResolvedValue(undefined),
-  },
-}));
 
 jest.mock('../src/features/workout/services/nativeRestTimerService', () => ({
   nativeRestTimerService: {

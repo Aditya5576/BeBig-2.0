@@ -5,4 +5,6 @@ export * from './providers/wger/wgerMapper';
 export * from './providers/wger/WgerExerciseProvider';
 export * from './storage/customExerciseStorage';
 export * from './storage/exerciseCacheStorage';
+export * from './storage/exercisePhotoStorage';
 export * from './services/exerciseRepository';
+export * from './services/exercisePhotoCloudService';

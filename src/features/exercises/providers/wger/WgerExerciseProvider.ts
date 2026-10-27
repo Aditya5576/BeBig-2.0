@@ -74,15 +74,39 @@ export class WgerExerciseProvider implements IExerciseProvider {
         throw new Error(`Wger API error: HTTP ${res.status} ${res.statusText}`);
       }
 
-      const data = (await res.json()) as WgerExerciseInfoResponse;
-      const exercises = (data.results || []).map(mapWgerToExercise);
+      let raw: any;
+      try {
+        raw = await res.json();
+      } catch {
+        throw new Error('Malformed Wger response: invalid JSON');
+      }
+
+      if (!raw || typeof raw !== 'object') {
+        return {
+          exercises: [],
+          totalCount: 0,
+          hasMore: false,
+        };
+      }
+
+      const data = raw as WgerExerciseInfoResponse;
+      const rawResults = Array.isArray(data.results) ? data.results : [];
+      const exercises: Exercise[] = [];
+      for (const item of rawResults) {
+        try {
+          const mapped = mapWgerToExercise(item);
+          if (mapped) exercises.push(mapped);
+        } catch {
+          // Skip individually malformed item without failing the entire batch
+        }
+      }
 
       const nextOffset = data.next ? offset + limit : undefined;
       const hasMore = Boolean(data.next);
 
       return {
         exercises,
-        totalCount: data.count || 0,
+        totalCount: typeof data.count === 'number' ? data.count : exercises.length,
         hasMore,
         nextOffset,
       };
@@ -110,8 +134,18 @@ export class WgerExerciseProvider implements IExerciseProvider {
         throw new Error(`Wger API error: HTTP ${res.status}`);
       }
 
-      const item = (await res.json()) as WgerExerciseInfoItem;
-      return mapWgerToExercise(item);
+      let item: any;
+      try {
+        item = await res.json();
+      } catch {
+        return null;
+      }
+
+      if (!item || typeof item !== 'object' || item.id == null) {
+        return null;
+      }
+
+      return mapWgerToExercise(item as WgerExerciseInfoItem);
     } catch (err: any) {
       if (err.name === 'AbortError') {
         throw new Error('Exercise request timed out. Please check your network connection.');

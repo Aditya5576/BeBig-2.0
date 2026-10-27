@@ -10,7 +10,6 @@ import { WorkoutSession, WorkoutExercise, WorkoutSet, ActiveRestTimer } from '..
 import { workoutStorage } from '../storage/workoutStorage';
 import { getCurrentUserScope, UserScope } from '../../auth/utils/userScope';
 import { syncMetadataStore, syncLifecycleManager, getRecordKey } from '../../../services/sync';
-import { scheduledWorkoutRepository } from '../../scheduling/services/scheduledWorkoutRepository';
 import { nativeRestTimerService } from './nativeRestTimerService';
 
 export class WorkoutRepository {
@@ -513,23 +512,6 @@ export class WorkoutRepository {
 
     // 1. Save completed workout locally (Source of Truth)
     await workoutStorage.saveCompletedWorkout(completedSession);
-
-    // 1.5. Link to Scheduled Workout if applicable
-    if (completedSession.sourceScheduledWorkoutId) {
-      try {
-        const scope = getCurrentUserScope();
-        await scheduledWorkoutRepository.updateScheduledWorkout({
-          id: completedSession.sourceScheduledWorkoutId,
-          status: 'completed',
-          completedSessionId: completedSession.id
-        }, scope || undefined);
-      } catch (err) {
-        // We log but do not fail the workout completion. 
-        // Sync retry or next launch will eventually correct it if local failed,
-        // though local should practically never fail if storage is available.
-        console.warn('Failed to link completed workout to schedule locally', err);
-      }
-    }
 
     // 2. Clear active in-progress draft (Immunity preserved)
     await nativeRestTimerService.cancelRestTimer();

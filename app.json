@@ -13,7 +13,8 @@
       "userInterfaceStyle": "automatic",
       "usesAppleSignIn": true,
       "infoPlist": {
-        "NSSupportsLiveActivities": true
+        "NSSupportsLiveActivities": true,
+        "NSPhotoLibraryUsageDescription": "The app accesses your photos to let you attach photos to custom exercises."
       }
     },
     "android": {
@@ -49,6 +50,12 @@
       ],
       "expo-web-browser",
       "expo-sharing",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "The app accesses your photos to let you attach photos to custom exercises."
+        }
+      ],
       [
         "expo-notifications",
         {

@@ -129,6 +129,7 @@ export class CustomExerciseCloudService {
       primary_muscles: exercise.primaryMuscles || [],
       secondary_muscles: exercise.secondaryMuscles || [],
       equipment: exercise.equipment || [],
+      photo_path: exercise.photoPath || null,
       client_updated_at: exercise.clientUpdatedAt || new Date().toISOString(),
       deleted_at: exercise.deletedAt || null,
     };
@@ -169,6 +170,7 @@ export class CustomExerciseCloudService {
         primary_muscles: e.primaryMuscles || [],
         secondary_muscles: e.secondaryMuscles || [],
         equipment: e.equipment || [],
+        photo_path: e.photoPath || null,
         client_updated_at: e.clientUpdatedAt || new Date().toISOString(),
         deleted_at: e.deletedAt || null,
       };

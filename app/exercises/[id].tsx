@@ -1,9 +1,19 @@
 import { useAppTheme } from '../../src/features/theme';
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Image, ActivityIndicator, Alert } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, StyleSheet, ScrollView, Image, ActivityIndicator, Alert, Platform, Pressable } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ScreenContainer, Text, Button, Card } from '../../src/components/ui';
-import { exerciseRepository, Exercise } from '../../src/features/exercises';
+import { ScreenContainer, Text, Button, Card, useBottomContentInset } from '../../src/components/ui';
+import * as FileSystem from 'expo-file-system/legacy';
+import {
+  exerciseRepository,
+  exercisePhotoStorage,
+  exercisePhotoCloudService,
+  pickExercisePhoto,
+  base64ToUint8Array,
+  PhotoSyncStatusInfo,
+  Exercise,
+} from '../../src/features/exercises';
+import { useAuthStore } from '../../src/features/auth';
 import { spacing, radii } from '../../src/constants/theme';
 import { useEntitySyncStatus } from '../../src/services/sync';
 import { SyncStatusChip } from '../../src/components/ui';
@@ -14,16 +24,80 @@ function CustomExerciseSyncStatus({ exerciseId, isCustom }: { exerciseId: string
   return <SyncStatusChip status={status} />;
 }
 
+function CustomExercisePhotoSyncChip({
+  status,
+  onRetry,
+}: {
+  status: PhotoSyncStatusInfo;
+  onRetry?: () => void;
+}) {
+  let label = 'Photo: Local Only';
+  let badgeColor = '#666';
+
+  if (status.state === 'syncing') {
+    label = 'Photo: Syncing...';
+    badgeColor = '#3B82F6';
+  } else if (status.state === 'synced') {
+    label = 'Photo: Synced';
+    badgeColor = '#10B981';
+  } else if (status.state === 'sync_failed') {
+    label = 'Photo: Sync Failed';
+    badgeColor = '#EF4444';
+  }
+
+  return (
+    <View style={{ gap: 4 }} testID="photo-sync-chip">
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <View
+          style={{
+            paddingHorizontal: 8,
+            paddingVertical: 2,
+            borderRadius: radii.full,
+            backgroundColor: badgeColor + '22',
+            borderWidth: 1,
+            borderColor: badgeColor,
+          }}
+        >
+          <Text variant="caption" style={{ color: badgeColor, fontWeight: '600' }}>
+            {label}
+          </Text>
+        </View>
+        {status.state === 'sync_failed' && onRetry ? (
+          <Pressable testID="retry-photo-sync-button" onPress={onRetry}>
+            <Text variant="caption" color="accent" style={{ textDecorationLine: 'underline' }}>
+              Retry
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
+      {status.state === 'sync_failed' && status.errorMessage ? (
+        <Text
+          variant="caption"
+          color="muted"
+          testID="photo-sync-error-message"
+          style={{ fontSize: 11, maxWidth: 280 }}
+        >
+          {status.errorMessage}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 export default function ExerciseDetailScreen() {
   const { colors } = useAppTheme();
   const styles = createStyles(colors);
 
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const bottomInset = useBottomContentInset();
 
   const [exercise, setExercise] = useState<Exercise | null>(null);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
+  const [updatingPhoto, setUpdatingPhoto] = useState(false);
+  const [photoSyncStatus, setPhotoSyncStatus] = useState<PhotoSyncStatusInfo>({ state: 'local_only' });
+  const fileInputRef = useRef<any>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -38,6 +112,11 @@ export default function ExerciseDetailScreen() {
         const item = await exerciseRepository.getExerciseById(id);
         if (isMounted) {
           setExercise(item);
+          if (item?.id && item.isCustom) {
+            void exercisePhotoCloudService.getSyncStatus(item.id).then((status) => {
+              if (isMounted) setPhotoSyncStatus(status);
+            });
+          }
         }
       } catch (err: any) {
         if (isMounted) {
@@ -56,6 +135,188 @@ export default function ExerciseDetailScreen() {
       isMounted = false;
     };
   }, [id]);
+
+  const handlePickPhoto = async () => {
+    if (!exercise || updatingPhoto) return;
+    try {
+      const picked = await pickExercisePhoto();
+      if (picked.canceled) {
+        if (picked.error) {
+          Alert.alert('Permission Required', picked.error);
+        }
+        return;
+      }
+      if (picked.error) {
+        Alert.alert('Invalid Photo', picked.error);
+        return;
+      }
+      if (!picked.uri) return;
+
+      await handleApplyPhoto({
+        uri: picked.uri,
+        base64: picked.base64,
+        mimeType: picked.mimeType,
+      });
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Could not select photo.');
+    }
+  };
+
+  const handleApplyPhoto = async (photo: {
+    uri: string;
+    base64?: string;
+    mimeType?: string;
+    file?: any;
+  }) => {
+    if (!exercise) return;
+    setUpdatingPhoto(true);
+    try {
+      const mimeType = photo.mimeType || 'image/jpeg';
+
+      // 1. Local durable save first (offline-first)
+      const localUri = await exercisePhotoStorage.saveLocalPhoto(exercise.id, {
+        uri: photo.uri,
+        mimeType,
+        base64: photo.base64,
+      });
+
+      // 2. Update exercise locally immediately
+      const updatedExercise = await exerciseRepository.updateCustomExercise({
+        id: exercise.id,
+        images: [{ id: `photo_${exercise.id}`, url: localUri, isMain: true }],
+      });
+      setExercise(updatedExercise);
+
+      // 3. Upload to private cloud if authenticated
+      const user = useAuthStore.getState().user;
+      if (user) {
+        try {
+          const uploadPayload =
+            photo.file ||
+            (photo.base64 ? base64ToUint8Array(photo.base64) : null);
+          if (uploadPayload) {
+            const uploadRes = await exercisePhotoCloudService.uploadPhoto(
+              user.id,
+              exercise.id,
+              uploadPayload,
+              mimeType,
+            );
+            const withCloud = await exerciseRepository.updateCustomExercise({
+              id: exercise.id,
+              photoPath: uploadRes.storagePath,
+            });
+            setExercise(withCloud);
+            setPhotoSyncStatus({ state: 'synced', storagePath: uploadRes.storagePath });
+          } else {
+            setPhotoSyncStatus({ state: 'local_only' });
+          }
+        } catch (uploadErr: any) {
+          if (typeof __DEV__ !== 'undefined' && __DEV__) {
+            console.warn('[ExerciseDetail] Photo cloud upload failed:', uploadErr?.message);
+          }
+          setPhotoSyncStatus({
+            state: 'sync_failed',
+            errorMessage: uploadErr?.message || 'Upload failed. Local copy preserved.',
+          });
+        }
+      } else {
+        setPhotoSyncStatus({ state: 'local_only' });
+      }
+    } catch (err: any) {
+      Alert.alert('Photo Error', err?.message || 'Failed to update exercise photo.');
+    } finally {
+      setUpdatingPhoto(false);
+    }
+  };
+
+  const handlePhotoRemovePrompt = () => {
+    Alert.alert(
+      'Remove Photo?',
+      'Are you sure you want to remove the photo from this custom exercise?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Remove', style: 'destructive', onPress: handlePhotoRemove },
+      ],
+    );
+  };
+
+  const handlePhotoRemove = async () => {
+    if (!exercise) return;
+    setUpdatingPhoto(true);
+    try {
+      const user = useAuthStore.getState().user;
+      if (user && exercise.photoPath) {
+        void exercisePhotoCloudService.deletePhoto(user.id, exercise.photoPath).catch(() => {});
+      }
+      await exercisePhotoStorage.deleteLocalPhoto(exercise.id);
+      const updated = await exerciseRepository.updateCustomExercise({
+        id: exercise.id,
+        images: [],
+        photoPath: null,
+      });
+      setExercise(updated);
+      setPhotoSyncStatus({ state: 'local_only' });
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Failed to remove photo.');
+    } finally {
+      setUpdatingPhoto(false);
+    }
+  };
+
+  const handleRetryPhotoSync = async () => {
+    if (!exercise) return;
+    const user = useAuthStore.getState().user;
+    if (!user) return;
+
+    setPhotoSyncStatus({ state: 'syncing' });
+    try {
+      const localPhoto = await exercisePhotoStorage.getLocalPhoto(exercise.id);
+      if (!localPhoto) {
+        setPhotoSyncStatus({ state: 'local_only' });
+        return;
+      }
+      let payload: any = localPhoto;
+      if (typeof localPhoto === 'string' && localPhoto.startsWith('data:')) {
+        const commaIdx = localPhoto.indexOf(',');
+        payload = base64ToUint8Array(commaIdx !== -1 ? localPhoto.slice(commaIdx + 1) : localPhoto);
+      } else if (typeof localPhoto === 'string' && (localPhoto.startsWith('file://') || localPhoto.startsWith('/'))) {
+        try {
+          const base64Content = await FileSystem.readAsStringAsync(localPhoto, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+          payload = base64ToUint8Array(base64Content);
+        } catch {
+          if (typeof fetch !== 'undefined') {
+            const resp = await fetch(localPhoto);
+            payload = await resp.blob();
+          }
+        }
+      }
+      const mimeType = localPhoto.endsWith('.png')
+        ? 'image/png'
+        : localPhoto.endsWith('.webp')
+          ? 'image/webp'
+          : 'image/jpeg';
+
+      const uploadRes = await exercisePhotoCloudService.uploadPhoto(
+        user.id,
+        exercise.id,
+        payload,
+        mimeType,
+      );
+      const withCloud = await exerciseRepository.updateCustomExercise({
+        id: exercise.id,
+        photoPath: uploadRes.storagePath,
+      });
+      setExercise(withCloud);
+      setPhotoSyncStatus({ state: 'synced', storagePath: uploadRes.storagePath });
+    } catch (err: any) {
+      setPhotoSyncStatus({
+        state: 'sync_failed',
+        errorMessage: err?.message || 'Retry failed. Check network connection.',
+      });
+    }
+  };
 
   const handleDeletePrompt = () => {
     Alert.alert(
@@ -142,7 +403,14 @@ export default function ExerciseDetailScreen() {
 
   return (
     <ScreenContainer>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        testID="exercise-detail-scroll-view"
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: bottomInset + spacing.lg },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Navigation Bar */}
         <View style={styles.navBar}>
           <Button
@@ -164,6 +432,67 @@ export default function ExerciseDetailScreen() {
               resizeMode="contain"
               testID="exercise-detail-image"
             />
+          </View>
+        ) : null}
+
+        {/* Custom Exercise Photo Actions */}
+        {exercise.isCustom ? (
+          <View style={styles.photoActionsContainer} testID="custom-exercise-photo-actions">
+            {mainImage?.url ? (
+              <View style={styles.photoControlsRow}>
+                <Button
+                  testID="replace-photo-button"
+                  title="Replace Photo"
+                  variant="secondary"
+                  size="sm"
+                  loading={updatingPhoto}
+                  disabled={updatingPhoto}
+                  onPress={handlePickPhoto}
+                />
+                <Button
+                  testID="remove-photo-button"
+                  title="Remove Photo"
+                  variant="ghost"
+                  size="sm"
+                  disabled={updatingPhoto}
+                  onPress={handlePhotoRemovePrompt}
+                />
+              </View>
+            ) : (
+              <View style={styles.photoControlsRow}>
+                <Button
+                  testID="add-photo-button"
+                  title="📷 Add Exercise Photo"
+                  variant="secondary"
+                  size="sm"
+                  loading={updatingPhoto}
+                  disabled={updatingPhoto}
+                  onPress={handlePickPhoto}
+                />
+              </View>
+            )}
+            <CustomExercisePhotoSyncChip status={photoSyncStatus} onRetry={handleRetryPhotoSync} />
+            {Platform.OS === 'web' && typeof document !== 'undefined' && (
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                style={{ display: 'none' }}
+                ref={fileInputRef}
+                onChange={(e: any) => {
+                  const file = e.target?.files?.[0];
+                  if (file) {
+                    const validation = exercisePhotoStorage.validatePhotoFile(file);
+                    if (!validation.valid) {
+                      Alert.alert('Invalid Photo', validation.error || 'Please select a valid image file.');
+                      return;
+                    }
+                    const previewUrl = typeof URL !== 'undefined' && URL.createObjectURL ? URL.createObjectURL(file) : '';
+                    void handleApplyPhoto({ uri: previewUrl, file, mimeType: file.type || 'image/jpeg' });
+                  }
+                  e.target.value = '';
+                }}
+              />
+            )}
           </View>
         ) : null}
 
@@ -382,5 +711,14 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   deleteButton: {
     borderColor: colors.error || '#EF4444',
+  },
+  photoActionsContainer: {
+    gap: spacing.xs,
+    paddingVertical: spacing.xs,
+  },
+  photoControlsRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    alignItems: 'center',
   },
 });

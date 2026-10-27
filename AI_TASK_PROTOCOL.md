@@ -1,8 +1,31 @@
-# AI Task Protocol
+# AI TASK PROTOCOL
 
-This protocol defines the task execution lifecycle (Analyze → Locate → Plan → Implement → Verify → Report).
+## Phase A — Understand
+Extract:
+- desired outcome
+- constraints
+- acceptance criteria
 
-**Authoritative Rules**: See [AI_RULES.md](file:///c:/Users/adity/Desktop/ADI/BeBig%202.0/AI_RULES.md) & [AI_BRAIN.md](file:///c:/Users/adity/Desktop/ADI/BeBig%202.0/AI_BRAIN.md)
-- **RULE 4 (Task Sizing)**: Classify task scale (TINY / SMALL / MEDIUM / LARGE) to scope exploration.
-- **RULE 9 (No Blind Editing)**: Identify root cause and smallest safe change before modifying code.
-- **RULE 10 (Scope Control)**: Do not fix unrelated issues unless they block the task or threaten security.
+## Phase B — Locate
+Search exact identifiers and inspect only relevant code.
+
+## Phase C — Plan
+For SMALL tasks: 1–3 bullets.
+For MEDIUM/LARGE tasks: concise file-level plan.
+
+## Phase D — Implement
+Make the smallest coherent change.
+Preserve existing patterns unless there is evidence they are wrong.
+
+## Phase E — Verify
+Run targeted checks first, then broader checks if needed.
+
+## Phase F — Record
+Update memory only when useful to future sessions.
+
+## Phase G — Report
+Return:
+- what changed
+- files affected
+- verification result
+- remaining blocker, if any

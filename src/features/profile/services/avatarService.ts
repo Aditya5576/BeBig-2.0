@@ -64,8 +64,13 @@ export class AvatarService implements IAvatarService {
    * Generates a user-isolated path in the format: `${userId}/avatar_${timestamp}.${ext}`.
    */
   getAvatarStoragePath(userId: string, mimeType?: string): string {
-    if (!userId) {
+    if (!userId || typeof userId !== 'string' || userId.trim().length === 0) {
       throw new Error('User ID is required to generate avatar storage path.');
+    }
+
+    const cleanUserId = userId.trim().replace(/[^a-zA-Z0-9_-]/g, '');
+    if (!cleanUserId) {
+      throw new Error('Invalid user ID provided for avatar storage path.');
     }
 
     let ext = 'jpg';
@@ -78,7 +83,7 @@ export class AvatarService implements IAvatarService {
     }
 
     const timestamp = Date.now();
-    return `${userId}/avatar_${timestamp}.${ext}`;
+    return `${cleanUserId}/avatar_${timestamp}.${ext}`;
   }
 
   /**

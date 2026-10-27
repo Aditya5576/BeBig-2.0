@@ -63,50 +63,76 @@ export function normalizeCategory(categoryName: string | undefined): {
   return { category: 'other', categoryName: categoryName };
 }
 
-function mapMuscle(m: WgerMuscle): ExerciseMuscle {
+function mapMuscle(m: any): ExerciseMuscle | null {
+  if (!m || typeof m !== 'object') return null;
   return {
-    id: String(m.id),
-    name: m.name_en && m.name_en.trim().length > 0 ? m.name_en : m.name,
-    isFront: m.is_front,
+    id: String(m.id ?? ''),
+    name: m.name_en && String(m.name_en).trim().length > 0 ? String(m.name_en) : String(m.name || 'Muscle'),
+    isFront: Boolean(m.is_front),
   };
 }
 
-function mapImage(img: WgerImage): ExerciseImage {
+function mapImage(img: any): ExerciseImage | null {
+  if (!img || typeof img !== 'object' || !img.image) return null;
   return {
-    id: String(img.id),
-    url: img.image,
-    thumbnailUrl: img.thumbnails?.medium || img.thumbnails?.small || img.image,
-    isMain: img.is_main ?? false,
+    id: String(img.id ?? ''),
+    url: String(img.image),
+    thumbnailUrl: String(img.thumbnails?.medium || img.thumbnails?.small || img.image),
+    isMain: Boolean(img.is_main),
   };
 }
 
 /**
  * Maps a single Wger exerciseinfo item into a provider-agnostic BeBig Exercise model.
  */
-export function mapWgerToExercise(item: WgerExerciseInfoItem): Exercise {
+export function mapWgerToExercise(item: any): Exercise {
+  if (!item || typeof item !== 'object') {
+    throw new Error('Invalid Wger item: expected an object');
+  }
+
+  if (item.id == null || String(item.id).trim() === '') {
+    throw new Error('Invalid Wger item: missing or empty id');
+  }
+
+  const itemId = String(item.id).trim();
+  const translations = Array.isArray(item.translations) ? item.translations : [];
   // English translation is language ID 2 in Wger
-  const englishTrans = item.translations.find((t) => t.language === 2);
-  const fallbackTrans = item.translations[0];
+  const englishTrans = translations.find((t: any) => t && t.language === 2);
+  const fallbackTrans = translations[0];
   const activeTrans = englishTrans || fallbackTrans;
 
-  const name = activeTrans?.name?.trim() || `Exercise #${item.id}`;
+  const name = activeTrans?.name?.trim() || `Exercise #${itemId}`;
   const rawDescription = activeTrans?.description_source || activeTrans?.description || '';
   const description = stripHtml(rawDescription);
 
-  const { category, categoryName } = normalizeCategory(item.category?.name);
+  const rawCategoryName =
+    item.category && typeof item.category === 'object'
+      ? item.category.name
+      : typeof item.category === 'string'
+        ? item.category
+        : undefined;
+  const { category, categoryName } = normalizeCategory(rawCategoryName);
 
-  const primaryMuscles: ExerciseMuscle[] = (item.muscles || []).map(mapMuscle);
-  const secondaryMuscles: ExerciseMuscle[] = (item.muscles_secondary || []).map(mapMuscle);
+  const primaryMuscles: ExerciseMuscle[] = (Array.isArray(item.muscles) ? item.muscles : [])
+    .map(mapMuscle)
+    .filter((m: any): m is ExerciseMuscle => m !== null);
+  const secondaryMuscles: ExerciseMuscle[] = (Array.isArray(item.muscles_secondary) ? item.muscles_secondary : [])
+    .map(mapMuscle)
+    .filter((m: any): m is ExerciseMuscle => m !== null);
 
-  const equipment: ExerciseEquipment[] = (item.equipment || []).map((eq) => ({
-    id: String(eq.id),
-    name: eq.name,
-  }));
+  const equipment: ExerciseEquipment[] = (Array.isArray(item.equipment) ? item.equipment : [])
+    .filter((eq: any) => eq && typeof eq === 'object')
+    .map((eq: any) => ({
+      id: String(eq.id ?? ''),
+      name: String(eq.name ?? ''),
+    }));
 
-  const images: ExerciseImage[] = (item.images || []).map(mapImage);
+  const images: ExerciseImage[] = (Array.isArray(item.images) ? item.images : [])
+    .map(mapImage)
+    .filter((img: any): img is ExerciseImage => img !== null);
 
   return {
-    id: `wger_${item.id}`,
+    id: `wger_${itemId}`,
     name,
     description,
     category,
@@ -116,7 +142,7 @@ export function mapWgerToExercise(item: WgerExerciseInfoItem): Exercise {
     equipment,
     images,
     sourceProvider: 'wger',
-    sourceExerciseId: String(item.id),
+    sourceExerciseId: itemId,
     isCustom: false,
   };
 }

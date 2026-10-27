@@ -45,6 +45,7 @@ export interface Exercise {
   sourceProvider: ExerciseSourceProvider;
   sourceExerciseId?: string;
   isCustom: boolean;
+  photoPath?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -56,6 +57,8 @@ export interface CreateCustomExerciseInput {
   primaryMuscles: string[];
   secondaryMuscles?: string[];
   equipment?: string[];
+  images?: ExerciseImage[];
+  photoPath?: string | null;
 }
 
 export interface UpdateCustomExerciseInput {
@@ -66,4 +69,6 @@ export interface UpdateCustomExerciseInput {
   primaryMuscles?: string[];
   secondaryMuscles?: string[];
   equipment?: string[];
+  images?: ExerciseImage[];
+  photoPath?: string | null;
 }

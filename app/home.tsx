@@ -14,7 +14,6 @@ import {
 } from '../src/features/workout';
 import { templateRepository, WorkoutTemplate } from '../src/features/templates';
 import { profileService, getInitials } from '../src/features/profile';
-import { scheduledWorkoutRepository, ScheduledWorkout, ScheduledWorkoutPreviewModal } from '../src/features/scheduling';
 import { guestStorage } from '../src/lib/storage';
 import { spacing, radii } from '../src/constants/theme';
 import { env } from '../src/config/env';
@@ -41,9 +40,6 @@ export default function HomeScreen() {
   const [completedWorkouts, setCompletedWorkouts] = useState<WorkoutSession[]>([]);
   const [activeWorkout, setActiveWorkout] = useState<WorkoutSession | null>(null);
   const [templates, setTemplates] = useState<WorkoutTemplate[]>([]);
-  const [todaySchedules, setTodaySchedules] = useState<ScheduledWorkout[]>([]);
-  const [previewWorkout, setPreviewWorkout] = useState<ScheduledWorkout | null>(null);
-  const [previewVisible, setPreviewVisible] = useState(false);
   const [profileDisplayName, setProfileDisplayName] = useState<string | null>(null);
   const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(null);
   const [avatarLoadError, setAvatarLoadError] = useState(false);
@@ -95,22 +91,19 @@ export default function HomeScreen() {
         }
       }
 
-      const [workoutsResult, activeResult, templatesResult, schedulesResult] = await Promise.allSettled([
+      const [workoutsResult, activeResult, templatesResult] = await Promise.allSettled([
         workoutRepository.getCompletedWorkouts(),
         workoutRepository.getActiveWorkout(),
         templateRepository.getTemplates(),
-        scheduledWorkoutRepository.getTodayScheduledWorkouts(),
       ]);
 
       setCompletedWorkouts(workoutsResult.status === 'fulfilled' ? workoutsResult.value : []);
       setActiveWorkout(activeResult.status === 'fulfilled' ? activeResult.value : null);
       setTemplates(templatesResult.status === 'fulfilled' ? templatesResult.value : []);
-      setTodaySchedules(schedulesResult.status === 'fulfilled' ? schedulesResult.value : []);
     } catch {
       setCompletedWorkouts([]);
       setActiveWorkout(null);
       setTemplates([]);
-      setTodaySchedules([]);
     }
   }, []);
 
@@ -159,50 +152,6 @@ export default function HomeScreen() {
     } catch (err: any) {
       Alert.alert('Error', err?.message || 'Failed to start workout.');
     }
-  };
-
-  const handleStartScheduledWorkout = async (scheduledWorkout: ScheduledWorkout) => {
-    try {
-      if (activeWorkout) {
-        Alert.alert(
-          'Active Workout in Progress',
-          'You already have an active workout in progress. Discard it to start this scheduled workout?',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Resume Active',
-              onPress: () => router.push('/workout/active' as any),
-            },
-            {
-              text: 'Discard & Start New',
-              style: 'destructive',
-              onPress: async () => {
-                await workoutRepository.discardActiveWorkout();
-                setActiveWorkout(null);
-                await startScheduled(scheduledWorkout);
-                router.push('/workout/active' as any);
-              },
-            },
-          ],
-        );
-        return;
-      }
-      await startScheduled(scheduledWorkout);
-      router.push('/workout/active' as any);
-    } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Failed to start scheduled workout.');
-    }
-  };
-
-  const startScheduled = async (scheduledWorkout: ScheduledWorkout) => {
-    if (scheduledWorkout.templateId) {
-      const tpl = await templateRepository.getTemplateById(scheduledWorkout.templateId);
-      if (tpl) {
-        await workoutRepository.startWorkoutFromTemplate(tpl, scheduledWorkout.name, scheduledWorkout.id);
-        return;
-      }
-    }
-    await workoutRepository.startEmptyWorkout(scheduledWorkout.name, scheduledWorkout.id);
   };
 
   const handleStartEmptyWorkout = async () => {
@@ -516,76 +465,6 @@ export default function HomeScreen() {
           </Card>
         </View>
 
-        {/* 3.5 Scheduled Today Card (if available) */}
-        {todaySchedules.length > 0 && (
-          <Card style={styles.scheduledTodayCard} testID="scheduled-today-card">
-            <View style={styles.scheduledTodayHeader}>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Icon name="calendar" size={14} color="#F59E0B" />
-                <Text variant="label" color="accent" style={{ marginLeft: 6, fontWeight: '800', letterSpacing: 0.8 }}>
-                  SCHEDULED TODAY
-                </Text>
-              </View>
-              <Pressable
-                onPress={() => router.push('/calendar' as any)}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                accessibilityLabel="View Calendar"
-                accessibilityRole="button"
-              >
-                <Text variant="caption" color="accent" style={{ fontWeight: '700', fontSize: 12 }}>
-                  View Calendar ›
-                </Text>
-              </Pressable>
-            </View>
-
-            <View style={{ marginTop: 4 }}>
-              {todaySchedules.map((item) => (
-                <View key={item.id} style={styles.scheduledItemRow}>
-                  <View style={{ flex: 1, marginRight: 8 }}>
-                    <Text variant="titleMedium" color="primary" style={{ fontWeight: '700', fontSize: 14 }}>
-                      {item.name}
-                    </Text>
-                    {item.scheduledTime ? (
-                      <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>
-                        {`⏰ ${item.scheduledTime}`}
-                      </Text>
-                    ) : null}
-                    <Pressable
-                      onPress={() => {
-                        setPreviewWorkout(item);
-                        setPreviewVisible(true);
-                      }}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      style={styles.homePreviewBtn}
-                    >
-                      <Icon name="search" size={12} color="#F59E0B" />
-                      <Text style={styles.homePreviewText}>VIEW WORKOUT</Text>
-                    </Pressable>
-                  </View>
-
-                  <View
-                    style={[
-                      styles.schedStatusBadge,
-                      item.status === 'completed' && { backgroundColor: 'rgba(16, 185, 129, 0.15)', borderColor: '#10B981' },
-                      item.status === 'skipped' && { backgroundColor: 'rgba(156, 163, 175, 0.15)', borderColor: '#9CA3AF' },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.schedStatusText,
-                        item.status === 'completed' && { color: '#10B981' },
-                        item.status === 'skipped' && { color: '#9CA3AF' },
-                      ]}
-                    >
-                      {item.status.toUpperCase()}
-                    </Text>
-                  </View>
-                </View>
-              ))}
-            </View>
-          </Card>
-        )}
-
         {/* 4. My Workouts (Home Preview) */}
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeaderRow}>
@@ -598,7 +477,7 @@ export default function HomeScreen() {
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <Text variant="label" color="accent" style={styles.sectionActionText}>
-                {`View all (${templates.length}) →`}
+                View all →
               </Text>
             </Pressable>
           </View>
@@ -606,14 +485,14 @@ export default function HomeScreen() {
           {templates.length === 0 ? (
             <Card style={styles.emptyCard} testID="templates-empty-state">
               <Text variant="titleMedium" color="primary" style={styles.emptyTitle}>
-                No saved workouts yet.
+                No workout templates yet.
               </Text>
               <Text variant="caption" color="secondary" style={styles.emptySubtext}>
-                Create reusable workout templates for quick starts.
+                Create structured routines to speed up your workouts.
               </Text>
               <Button
-                testID="create-template-button"
-                title="+ Create Template"
+                testID="empty-templates-create-button"
+                title="Create Template"
                 onPress={() => router.push('/templates/new' as any)}
                 variant="secondary"
                 size="sm"
@@ -626,24 +505,22 @@ export default function HomeScreen() {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.horizontalScroll}
             >
-              {templates.slice(0, 3).map((tpl) => {
+              {templates.slice(0, 5).map((tpl, index) => {
                 const totalSets = tpl.exercises?.reduce((sum, e) => sum + (e.sets || 3), 0) || 0;
                 return (
-                  <Card key={tpl.id} style={styles.workoutPlanCard}>
+                  <Card key={tpl.id} style={styles.workoutPlanCard} testID={`template-card-${tpl.id}`}>
                     <Pressable
                       onPress={() => router.push(`/templates/${tpl.id}` as any)}
                       style={styles.workoutPlanContent}
                     >
                       <View style={styles.workoutPlanHeader}>
                         <View style={styles.focusDot} />
-                        <Text variant="caption" color="muted" style={styles.workoutFocusText}>
-                          {(tpl.workoutFocus || 'ROUTINE').toUpperCase()}
+                        <Text variant="caption" color="secondary" style={styles.workoutFocusText}>
+                          {tpl.workoutFocus || 'FULL BODY'}
                         </Text>
-                        {tpl.sequenceNumber ? (
-                          <Text variant="caption" color="muted" style={styles.workoutSessionText}>
-                            {`• Session ${tpl.sequenceNumber}`}
-                          </Text>
-                        ) : null}
+                        <Text variant="caption" color="muted" style={styles.workoutSessionText}>
+                          {`• Session #${index + 1}`}
+                        </Text>
                       </View>
 
                       <Text variant="titleMedium" color="primary" numberOfLines={1} style={styles.workoutPlanName}>
@@ -800,17 +677,6 @@ export default function HomeScreen() {
           </Text>
         </View>
       </ScreenScrollView>
-
-      {/* Scheduled Workout Read-Only Preview Modal */}
-      <ScheduledWorkoutPreviewModal
-        visible={previewVisible}
-        scheduledWorkout={previewWorkout}
-        onClose={() => setPreviewVisible(false)}
-        onStart={(workout) => {
-          setPreviewVisible(false);
-          handleStartScheduledWorkout(workout);
-        }}
-      />
     </ScreenContainer>
   );
 }
@@ -894,7 +760,7 @@ const createStyles = (colors: any) =>
     statTileHeader: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 4,
+      justifyContent: 'space-between',
     },
     statLabel: {
       fontSize: 10,
@@ -903,14 +769,12 @@ const createStyles = (colors: any) =>
     },
     statChevron: {
       fontSize: 13,
-      marginLeft: 'auto',
       fontWeight: '700',
     },
     statNumber: {
-      fontSize: 15,
-      lineHeight: 20,
+      fontSize: 17,
       fontWeight: '800',
-      marginTop: 2,
+      marginVertical: 1,
     },
     statDetail: {
       fontSize: 11,
@@ -1007,50 +871,6 @@ const createStyles = (colors: any) =>
     blueprintLinkText: {
       fontSize: 11,
       fontWeight: '600',
-    },
-    scheduledTodayCard: {
-      padding: spacing.md,
-      borderRadius: radii.lg,
-      backgroundColor: colors.surface,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    scheduledTodayHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: spacing.xs,
-    },
-    scheduledItemRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      paddingVertical: spacing.xs,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: colors.border,
-      marginTop: spacing.xs,
-    },
-    schedStatusBadge: {
-      paddingHorizontal: spacing.sm,
-      paddingVertical: 2,
-      borderRadius: radii.sm,
-      borderWidth: 1,
-    },
-    schedStatusText: {
-      fontSize: 10,
-      fontWeight: '800',
-    },
-    homePreviewBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginTop: 4,
-      gap: 4,
-    },
-    homePreviewText: {
-      fontSize: 10,
-      fontWeight: '800',
-      color: colors.primary,
-      letterSpacing: 0.5,
     },
     sectionContainer: {
       gap: spacing.xs + 2,

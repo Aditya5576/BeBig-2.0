@@ -3,6 +3,8 @@ import { ExerciseFilterOptions, ExerciseListResult, IExerciseProvider } from '..
 import { WgerExerciseProvider } from '../providers/wger/WgerExerciseProvider';
 import { customExerciseStorage } from '../storage/customExerciseStorage';
 import { exerciseCacheStorage } from '../storage/exerciseCacheStorage';
+import { exercisePhotoStorage } from '../storage/exercisePhotoStorage';
+import { exercisePhotoCloudService } from './exercisePhotoCloudService';
 import { normalizeCategory } from '../providers/wger/wgerMapper';
 import { getCurrentUserScope, UserScope } from '../../auth/utils/userScope';
 import { syncMetadataStore, syncLifecycleManager } from '../../../services/sync';
@@ -185,6 +187,7 @@ export class ExerciseRepository {
       }
 
       // Query provider with timeout
+      let primarySearchFailed = false;
       try {
         const providerResult = await withTimeout(
           this.provider.listExercises({
@@ -209,14 +212,15 @@ export class ExerciseRepository {
           this.candidateCache.set(targetCategory, candidatePool);
         }
       } catch {
+        primarySearchFailed = true;
         // Continue with cached candidate pool
       }
 
       // Rank candidate pool
       let ranked = filterAndRankExercises(candidatePool, rawQuery, options.category);
 
-      // If ranked is empty, attempt fallback candidate retrieval (e.g. token splitting)
-      if (ranked.length === 0) {
+      // If ranked is empty and network is healthy, attempt fallback candidate retrieval (e.g. token splitting)
+      if (ranked.length === 0 && !primarySearchFailed) {
         const qTokens = rawQuery!.split(/\s+/).filter((t) => t.length >= 3);
         const searchTokens = [...qTokens, rawQuery!.replace(/\s+/g, '')];
 
@@ -285,7 +289,19 @@ export class ExerciseRepository {
     // Check custom exercises first
     if (id.startsWith('custom_')) {
       const customs = await customExerciseStorage.getCustomExercises(scope);
-      return customs.find((e) => e.id === id) || null;
+      const found = customs.find((e) => e.id === id);
+      if (found) {
+        // Self-heal: if images array is empty but photoPath exists and local photo exists on disk, attach it
+        if ((!found.images || found.images.length === 0) && found.photoPath) {
+          const localPhoto = await exercisePhotoStorage.getLocalPhoto(id);
+          if (localPhoto) {
+            found.images = [{ id: `photo_${id}`, url: localPhoto, isMain: true }];
+            void customExerciseStorage.saveCustomExercise(found, scope);
+          }
+        }
+        return found;
+      }
+      return null;
     }
 
     // Check local exercise cache first
@@ -372,7 +388,8 @@ export class ExerciseRepository {
       primaryMuscles,
       secondaryMuscles,
       equipment,
-      images: [],
+      images: input.images || [],
+      photoPath: input.photoPath || null,
       sourceProvider: 'custom',
       isCustom: true,
       createdAt: now,
@@ -462,6 +479,8 @@ export class ExerciseRepository {
       primaryMuscles,
       secondaryMuscles,
       equipment,
+      images: input.images !== undefined ? input.images : existing.images,
+      photoPath: input.photoPath !== undefined ? input.photoPath : existing.photoPath,
       isCustom: true,
       updatedAt: now,
     };
@@ -498,8 +517,29 @@ export class ExerciseRepository {
    */
   async deleteCustomExercise(id: string, scope?: UserScope | null): Promise<void> {
     const resolvedScope = scope !== undefined ? scope : getCurrentUserScope();
+
+    // 1. Capture existing exercise details before local deletion removes it
+    const existingList = await customExerciseStorage.getCustomExercises(resolvedScope);
+    const existing = existingList.find((e) => e.id === id);
+    const cloudPhotoPath = existing?.photoPath;
+    const isAuth = Boolean(resolvedScope && resolvedScope.ownerType === 'authenticated' && resolvedScope.ownerId);
+
     try {
-      if (resolvedScope && resolvedScope.ownerType === 'authenticated') {
+      // 2. If authenticated and has a cloud photo, trigger user-scoped cloud photo cleanup
+      if (isAuth && cloudPhotoPath && resolvedScope?.ownerId) {
+        try {
+          const deleteSuccess = await exercisePhotoCloudService.deletePhoto(resolvedScope.ownerId, cloudPhotoPath);
+          if (!deleteSuccess && typeof __DEV__ !== 'undefined' && __DEV__) {
+            console.warn(`[ExerciseRepository] Cloud photo cleanup did not complete for ${cloudPhotoPath}`);
+          }
+        } catch (photoErr: any) {
+          if (typeof __DEV__ !== 'undefined' && __DEV__) {
+            console.warn(`[ExerciseRepository] Error during cloud photo cleanup:`, photoErr?.message);
+          }
+        }
+      }
+
+      if (isAuth) {
         const existingMeta = await syncMetadataStore.getRecord('custom_exercise', id, resolvedScope);
         const isUnsyncedLocalCreate =
           (!existingMeta || existingMeta.syncStatus === 'pending_upload') &&
@@ -528,6 +568,7 @@ export class ExerciseRepository {
         await customExerciseStorage.deleteCustomExercise(id, resolvedScope);
       }
     } finally {
+      void exercisePhotoStorage.deleteLocalPhoto(id).catch(() => {});
       this.invalidateCandidateCache(id);
     }
   }
