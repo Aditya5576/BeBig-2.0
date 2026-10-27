@@ -8,3 +8,6 @@ export * from './storage/exerciseCacheStorage';
 export * from './storage/exercisePhotoStorage';
 export * from './services/exerciseRepository';
 export * from './services/exercisePhotoCloudService';
+export * from './services/exerciseMediaService';
+export * from './data/curatedMediaCatalog';
+export * from './components/ExerciseThumbnail';

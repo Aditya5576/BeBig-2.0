@@ -219,36 +219,45 @@ export class ExerciseRepository {
       // Rank candidate pool
       let ranked = filterAndRankExercises(candidatePool, rawQuery, options.category);
 
-      // If ranked is empty and network is healthy, attempt fallback candidate retrieval (e.g. token splitting)
+      // If ranked is empty and network is healthy, attempt concurrent fallback candidate retrieval
       if (ranked.length === 0 && !primarySearchFailed) {
         const qTokens = rawQuery!.split(/\s+/).filter((t) => t.length >= 3);
-        const searchTokens = [...qTokens, rawQuery!.replace(/\s+/g, '')];
+        const searchTokens = Array.from(new Set([...qTokens, rawQuery!.replace(/\s+/g, '')])).slice(0, 2);
 
-        for (const token of searchTokens) {
-          try {
-            const fallbackResult = await withTimeout(
-              this.provider.listExercises({
-                ...options,
-                query: token,
-                limit: 50,
-              }),
-              2500,
-            );
-            if (fallbackResult.exercises.length > 0) {
-              void exerciseCacheStorage.saveToCatalog(fallbackResult.exercises);
-              const newlyRanked = filterAndRankExercises(
-                fallbackResult.exercises,
-                rawQuery,
-                options.category,
-              );
-              if (newlyRanked.length > 0) {
-                ranked = newlyRanked;
-                break;
-              }
+        const fallbackPromises = searchTokens.map((token) =>
+          withTimeout(
+            this.provider.listExercises({
+              ...options,
+              query: token,
+              limit: 50,
+            }),
+            2000,
+          ),
+        );
+
+        try {
+          const results = await Promise.allSettled(fallbackPromises);
+          const newlyFetched: Exercise[] = [];
+
+          for (const res of results) {
+            if (res.status === 'fulfilled' && res.value.exercises.length > 0) {
+              newlyFetched.push(...res.value.exercises);
             }
-          } catch {
-            // Ignore fallback errors
           }
+
+          if (newlyFetched.length > 0) {
+            void exerciseCacheStorage.saveToCatalog(newlyFetched);
+            const newlyRanked = filterAndRankExercises(
+              newlyFetched,
+              rawQuery,
+              options.category,
+            );
+            if (newlyRanked.length > 0) {
+              ranked = newlyRanked;
+            }
+          }
+        } catch {
+          // Ignore fallback errors
         }
       }
 

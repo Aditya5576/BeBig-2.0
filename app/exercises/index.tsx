@@ -1,5 +1,5 @@
 import { useAppTheme } from '../../src/features/theme';
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -8,10 +8,11 @@ import {
   Pressable,
   ActivityIndicator,
   ScrollView,
+  Platform,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { ScreenContainer, ScreenScrollView, ScreenFlatList, Text, Button, Card } from '../../src/components/ui';
-import { exerciseRepository, Exercise, STANDARD_CATEGORIES } from '../../src/features/exercises';
+import { exerciseRepository, Exercise, STANDARD_CATEGORIES, ExerciseThumbnail } from '../../src/features/exercises';
 import { spacing, radii } from '../../src/constants/theme';
 import { useEntitySyncStatus } from '../../src/services/sync';
 import { SyncStatusChip } from '../../src/components/ui';
@@ -22,6 +23,66 @@ function CustomExerciseSyncStatus({ exerciseId, isCustom }: { exerciseId: string
   return <SyncStatusChip status={status} />;
 }
 
+interface ExerciseListItemProps {
+  item: Exercise;
+  onPress: (id: string) => void;
+  styles: any;
+}
+
+const ExerciseListItem = React.memo(function ExerciseListItem({
+  item,
+  onPress,
+  styles,
+}: ExerciseListItemProps) {
+  const equipmentText =
+    item.equipment.length > 0 ? item.equipment.map((e) => e.name).join(', ') : 'Bodyweight';
+  const muscleText =
+    item.primaryMuscles.length > 0
+      ? item.primaryMuscles.map((m) => m.name).join(', ')
+      : 'Full Body';
+
+  return (
+    <Pressable
+      testID={`exercise-item-${item.id}`}
+      onPress={() => onPress(item.id)}
+      style={styles.cardPressable}
+    >
+      <Card style={styles.exerciseCard}>
+        <View style={styles.cardHeader}>
+          <ExerciseThumbnail exercise={item} size={40} />
+          <View style={styles.titleContainer}>
+            <Text variant="bodyBold" color="primary" numberOfLines={1}>
+              {item.name}
+            </Text>
+            <Text variant="caption" color="secondary" numberOfLines={1}>
+              {item.categoryName} • {equipmentText}
+            </Text>
+          </View>
+
+          <View style={styles.badgeRow}>
+            {item.isCustom && (
+              <View style={styles.customBadge} testID="custom-badge">
+                <Text variant="caption" color="accent" style={styles.badgeText}>
+                  CUSTOM
+                </Text>
+              </View>
+            )}
+            <CustomExerciseSyncStatus exerciseId={item.id} isCustom={item.isCustom} />
+          </View>
+        </View>
+
+        <View style={styles.muscleRow}>
+          <Text variant="caption" color="muted">
+            Target:{' '}
+            <Text variant="caption" color="accent">
+              {muscleText}
+            </Text>
+          </Text>
+        </View>
+      </Card>
+    </Pressable>
+  );
+});
 
 export default function ExerciseListScreen() {
   const { colors } = useAppTheme();
@@ -52,6 +113,9 @@ export default function ExerciseListScreen() {
   const [hasMore, setHasMore] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [isCachedOnly, setIsCachedOnly] = useState(false);
+  const searchReqIdRef = useRef(0);
+  const searchQueryRef = useRef(searchQuery);
+  searchQueryRef.current = searchQuery;
 
   // 0. Refresh list whenever screen comes into focus (e.g. returning after deleting a custom exercise)
   useFocusEffect(
@@ -60,7 +124,7 @@ export default function ExerciseListScreen() {
       async function refreshOnFocus() {
         try {
           const result = await exerciseRepository.getExercises({
-            query: searchQuery.trim() || undefined,
+            query: searchQueryRef.current.trim() || undefined,
             category: selectedCategory !== 'all' ? selectedCategory : undefined,
             limit: 20,
             offset: 0,
@@ -79,13 +143,18 @@ export default function ExerciseListScreen() {
       return () => {
         isMounted = false;
       };
-    }, [searchQuery, selectedCategory, selectedSource])
+    }, [selectedCategory, selectedSource])
   );
 
-  // 1. Instant local search against cache whenever query or category changes
+  // 1. Instant local search against cache whenever query, category, or source changes
   useEffect(() => {
+    const trimmedQuery = searchQuery.trim();
+    // Immediately reset pagination state on filter/query transitions so stale browse offsets cannot trigger
+    setHasMore(false);
+    setNextOffset(undefined);
+
     const cached = exerciseRepository.getCachedExercises({
-      query: searchQuery.trim() || undefined,
+      query: trimmedQuery || undefined,
       category: selectedCategory !== 'all' ? selectedCategory : undefined,
       source: selectedSource,
     });
@@ -96,9 +165,12 @@ export default function ExerciseListScreen() {
     }
   }, [searchQuery, selectedCategory, selectedSource]);
 
-  // 2. Background API refresh with debounce
+  // 2. Background API refresh with debounce and request sequencing
   useEffect(() => {
     let isMounted = true;
+    const reqId = ++searchReqIdRef.current;
+    const trimmedQuery = searchQuery.trim();
+
     const timeoutId = setTimeout(async () => {
       // If we don't already have exercises rendered, indicate loading
       if (exercises.length === 0) {
@@ -108,24 +180,24 @@ export default function ExerciseListScreen() {
 
       try {
         const result = await exerciseRepository.getExercises({
-          query: searchQuery.trim() || undefined,
+          query: trimmedQuery || undefined,
           category: selectedCategory !== 'all' ? selectedCategory : undefined,
           limit: 20,
           offset: 0,
           source: selectedSource,
         });
 
-        if (isMounted) {
+        if (isMounted && reqId === searchReqIdRef.current) {
           setExercises(result.exercises);
           setHasMore(result.hasMore);
           setNextOffset(result.nextOffset);
           setIsCachedOnly(false);
         }
       } catch (err: any) {
-        if (isMounted) {
+        if (isMounted && reqId === searchReqIdRef.current) {
           // If we have cached results, keep displaying them gracefully
           const cached = exerciseRepository.getCachedExercises({
-            query: searchQuery.trim() || undefined,
+            query: trimmedQuery || undefined,
             category: selectedCategory !== 'all' ? selectedCategory : undefined,
             source: selectedSource,
           });
@@ -137,11 +209,11 @@ export default function ExerciseListScreen() {
           }
         }
       } finally {
-        if (isMounted) {
+        if (isMounted && reqId === searchReqIdRef.current) {
           setLoading(false);
         }
       }
-    }, 250);
+    }, trimmedQuery ? 250 : 0);
 
     return () => {
       isMounted = false;
@@ -149,24 +221,86 @@ export default function ExerciseListScreen() {
     };
   }, [searchQuery, selectedCategory, refreshTrigger, selectedSource]);
 
+  const handleSearchChange = (text: string) => {
+    setSearchQuery(text);
+    searchQueryRef.current = text;
+    setHasMore(false);
+    setNextOffset(undefined);
+
+    // Instant synchronous local search against cache on keystroke
+    const trimmed = text.trim();
+    const cached = exerciseRepository.getCachedExercises({
+      query: trimmed || undefined,
+      category: selectedCategory !== 'all' ? selectedCategory : undefined,
+      source: selectedSource,
+    });
+
+    if (cached.length > 0) {
+      setExercises(cached);
+      setLoading(false);
+      setError(null);
+    }
+  };
+
   const handleCategorySelect = (categoryId: string) => {
     setSelectedCategory(categoryId);
+    setHasMore(false);
+    setNextOffset(undefined);
+
+    // Instant synchronous cache response on category chip tap
+    const cached = exerciseRepository.getCachedExercises({
+      query: searchQueryRef.current.trim() || undefined,
+      category: categoryId !== 'all' ? categoryId : undefined,
+      source: selectedSource,
+    });
+    if (cached.length > 0) {
+      setExercises(cached);
+      setLoading(false);
+      setError(null);
+    }
+  };
+
+  const handleSourceSelect = (source: 'all' | 'custom' | 'external') => {
+    setSelectedSource(source);
+    setHasMore(false);
+    setNextOffset(undefined);
+
+    // Instant synchronous cache response on source chip tap
+    const cached = exerciseRepository.getCachedExercises({
+      query: searchQueryRef.current.trim() || undefined,
+      category: selectedCategory !== 'all' ? selectedCategory : undefined,
+      source,
+    });
+    if (cached.length > 0) {
+      setExercises(cached);
+      setLoading(false);
+      setError(null);
+    }
   };
 
   const handleLoadMore = async () => {
+    // Search results are non-paginated in BeBig 2.0; never paginate while searching
+    if (searchQueryRef.current.trim().length > 0 || searchQuery.trim().length > 0) return;
     if (loading || loadingMore || !hasMore || nextOffset === undefined) return;
     setLoadingMore(true);
 
     try {
       const result = await exerciseRepository.getExercises({
-        query: searchQuery.trim() || undefined,
+        query: undefined,
         category: selectedCategory !== 'all' ? selectedCategory : undefined,
         limit: 20,
         offset: nextOffset,
         source: selectedSource,
       });
 
-      setExercises((prev) => [...prev, ...result.exercises]);
+      // Guard against search having started while pagination was in flight
+      if (searchQueryRef.current.trim().length > 0) return;
+
+      setExercises((prev) => {
+        const existingIds = new Set(prev.map((e) => e.id));
+        const newItems = result.exercises.filter((e) => !existingIds.has(e.id));
+        return [...prev, ...newItems];
+      });
       setHasMore(result.hasMore);
       setNextOffset(result.nextOffset);
     } catch {
@@ -176,55 +310,21 @@ export default function ExerciseListScreen() {
     }
   };
 
-  const renderItem = useCallback(({ item }: { item: Exercise }) => {
-    const equipmentText =
-      item.equipment.length > 0 ? item.equipment.map((e) => e.name).join(', ') : 'Bodyweight';
-    const muscleText =
-      item.primaryMuscles.length > 0
-        ? item.primaryMuscles.map((m) => m.name).join(', ')
-        : 'Full Body';
+  const handleItemPress = useCallback(
+    (id: string) => {
+      router.push(`/exercises/${id}` as any);
+    },
+    [router]
+  );
 
-    return (
-      <Pressable
-        testID={`exercise-item-${item.id}`}
-        onPress={() => router.push(`/exercises/${item.id}` as any)}
-        style={styles.cardPressable}
-      >
-        <Card style={styles.exerciseCard}>
-          <View style={styles.cardHeader}>
-            <View style={styles.titleContainer}>
-              <Text variant="bodyBold" color="primary" numberOfLines={1}>
-                {item.name}
-              </Text>
-              <Text variant="caption" color="secondary" numberOfLines={1}>
-                {item.categoryName} • {equipmentText}
-              </Text>
-            </View>
+  const renderItem = useCallback(
+    ({ item }: { item: Exercise }) => (
+      <ExerciseListItem item={item} onPress={handleItemPress} styles={styles} />
+    ),
+    [handleItemPress, styles]
+  );
 
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                {item.isCustom && (
-                  <View style={styles.customBadge} testID="custom-badge">
-                    <Text variant="caption" color="accent" style={styles.badgeText}>
-                      CUSTOM
-                    </Text>
-                  </View>
-                )}
-                <CustomExerciseSyncStatus exerciseId={item.id} isCustom={item.isCustom} />
-              </View>
-          </View>
-
-          <View style={styles.muscleRow}>
-            <Text variant="caption" color="muted">
-              Target:{' '}
-              <Text variant="caption" color="accent">
-                {muscleText}
-              </Text>
-            </Text>
-          </View>
-        </Card>
-      </Pressable>
-    );
-  }, [router, styles]);
+  const keyExtractor = useCallback((item: Exercise) => item.id, []);
 
   return (
     <ScreenContainer>
@@ -258,7 +358,7 @@ export default function ExerciseListScreen() {
             placeholder="Search exercises by name..."
             placeholderTextColor={colors.textMuted}
             value={searchQuery}
-            onChangeText={setSearchQuery}
+            onChangeText={handleSearchChange}
             autoCapitalize="none"
             autoCorrect={false}
             clearButtonMode="while-editing"
@@ -274,7 +374,7 @@ export default function ExerciseListScreen() {
               <Pressable
                 key={src}
                 testID={`source-filter-${src}`}
-                onPress={() => setSelectedSource(src)}
+                onPress={() => handleSourceSelect(src)}
                 style={[styles.sourceChip, isActive && styles.sourceChipActive]}
               >
                 <Text
@@ -390,11 +490,12 @@ export default function ExerciseListScreen() {
         <ScreenFlatList
           testID="exercise-list"
           data={exercises}
-          keyExtractor={(item) => item.id}
+          keyExtractor={keyExtractor}
           renderItem={renderItem}
-          initialNumToRender={10}
+          initialNumToRender={12}
           maxToRenderPerBatch={10}
           windowSize={5}
+          removeClippedSubviews={Platform.OS !== 'web'}
           contentContainerStyle={styles.listContent}
           onEndReached={handleLoadMore}
           onEndReachedThreshold={0.5}
@@ -494,8 +595,13 @@ const createStyles = (colors: any) => StyleSheet.create({
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: spacing.sm,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   titleContainer: {
     flex: 1,

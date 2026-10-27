@@ -19,6 +19,7 @@ import {
   ExerciseCategory,
   STANDARD_CATEGORIES,
   STANDARD_EQUIPMENT,
+  ExerciseThumbnail,
 } from '../../exercises';
 import { getRecentlyUsedExercises } from '../../workout/services/recentExercisesService';
 import { spacing, radii } from '../../../constants/theme';
@@ -348,6 +349,7 @@ export function ExercisePickerModal({
           ]}
         >
           <View style={styles.cardHeader}>
+            <ExerciseThumbnail exercise={item} size={40} testID={`${testIdPrefix}-thumbnail-${item.id}`} />
             <View style={styles.titleContainer}>
               <View style={styles.titleWithBadge}>
                 <Text
