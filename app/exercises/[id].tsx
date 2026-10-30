@@ -12,6 +12,9 @@ import {
   base64ToUint8Array,
   PhotoSyncStatusInfo,
   Exercise,
+  resolveExerciseDemonstration,
+  hasCustomPhoto,
+  getCustomPhotoUri,
 } from '../../src/features/exercises';
 import { useAuthStore } from '../../src/features/auth';
 import { spacing, radii } from '../../src/constants/theme';
@@ -86,14 +89,17 @@ function CustomExercisePhotoSyncChip({
 
 export default function ExerciseDetailScreen() {
   const { colors } = useAppTheme();
-  const styles = createStyles(colors);
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
 
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const bottomInset = useBottomContentInset();
 
-  const [exercise, setExercise] = useState<Exercise | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [exercise, setExercise] = useState<Exercise | null>(() => {
+    if (!id) return null;
+    return exerciseRepository.getCachedExerciseByIdSync(id);
+  });
+  const [loading, setLoading] = useState<boolean>(() => !exercise);
   const [deleting, setDeleting] = useState(false);
   const [updatingPhoto, setUpdatingPhoto] = useState(false);
   const [photoSyncStatus, setPhotoSyncStatus] = useState<PhotoSyncStatusInfo>({ state: 'local_only' });
@@ -105,7 +111,9 @@ export default function ExerciseDetailScreen() {
 
     async function loadExercise() {
       if (!id) return;
-      setLoading(true);
+      if (!exercise) {
+        setLoading(true);
+      }
       setError(null);
 
       try {
@@ -119,7 +127,7 @@ export default function ExerciseDetailScreen() {
           }
         }
       } catch (err: any) {
-        if (isMounted) {
+        if (isMounted && !exercise) {
           setError(err?.message || 'Failed to load exercise details.');
         }
       } finally {
@@ -379,9 +387,36 @@ export default function ExerciseDetailScreen() {
     );
   }
 
-  const mainImage = exercise.images && exercise.images.length > 0
+  // Media priority:
+  // 1. User's custom photo for custom exercises
+  // 2. Approved curated Wger demonstration
+  // 3. Existing provider image fallback
+  // 4. Clean fallback when no media exists
+  const customPhotoUri = exercise.isCustom && hasCustomPhoto(exercise)
+    ? getCustomPhotoUri(exercise)
+    : null;
+
+  const curatedResolution = !exercise.isCustom
+    ? resolveExerciseDemonstration(exercise)
+    : null;
+
+  const approvedCuratedDemo = curatedResolution?.status === 'approved'
+    ? curatedResolution.demonstration
+    : null;
+
+  const rawProviderImage = !customPhotoUri && !approvedCuratedDemo && exercise.images && exercise.images.length > 0
     ? exercise.images.find((img) => img.isMain) || exercise.images[0]
     : null;
+
+  const displayImageUri =
+    customPhotoUri ||
+    approvedCuratedDemo?.demonstrationUri ||
+    approvedCuratedDemo?.thumbnailUri ||
+    rawProviderImage?.url ||
+    null;
+
+  const hasCustomExercisePhoto =
+    exercise.isCustom && (Boolean(customPhotoUri) || Boolean(exercise.images && exercise.images.length > 0));
 
   const primaryMusclesText =
     exercise.primaryMuscles && exercise.primaryMuscles.length > 0
@@ -423,22 +458,31 @@ export default function ExerciseDetailScreen() {
           />
         </View>
 
-        {/* Exercise Image */}
-        {mainImage?.url ? (
-          <View style={styles.imageContainer}>
-            <Image
-              source={{ uri: mainImage.url }}
-              style={styles.exerciseImage}
-              resizeMode="contain"
-              testID="exercise-detail-image"
-            />
+        {/* Exercise Demonstration Image & Attribution */}
+        {displayImageUri ? (
+          <View style={styles.mediaWrapper}>
+            <View style={styles.imageContainer}>
+              <Image
+                source={{ uri: displayImageUri }}
+                style={styles.exerciseImage}
+                resizeMode="contain"
+                testID="exercise-detail-image"
+              />
+            </View>
+            {approvedCuratedDemo ? (
+              <View style={styles.attributionContainer} testID="exercise-detail-attribution">
+                <Text variant="caption" color="muted" style={styles.attributionText}>
+                  Demonstration: {approvedCuratedDemo.license.author} • {approvedCuratedDemo.license.type}
+                </Text>
+              </View>
+            ) : null}
           </View>
         ) : null}
 
         {/* Custom Exercise Photo Actions */}
         {exercise.isCustom ? (
           <View style={styles.photoActionsContainer} testID="custom-exercise-photo-actions">
-            {mainImage?.url ? (
+            {hasCustomExercisePhoto ? (
               <View style={styles.photoControlsRow}>
                 <Button
                   testID="replace-photo-button"
@@ -634,6 +678,19 @@ const createStyles = (colors: any) => StyleSheet.create({
   errorSubtext: {
     textAlign: 'center',
     marginBottom: spacing.sm,
+  },
+  mediaWrapper: {
+    width: '100%',
+    gap: spacing.xs,
+  },
+  attributionContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
+  },
+  attributionText: {
+    fontSize: 11,
+    textAlign: 'center',
   },
   imageContainer: {
     width: '100%',

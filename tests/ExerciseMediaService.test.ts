@@ -10,7 +10,10 @@ import {
   ExerciseDemonstration,
   ExerciseMediaLicense,
 } from '../src/features/exercises/types';
-import { CuratedMediaCatalog } from '../src/features/exercises/data/curatedMediaCatalog';
+import {
+  CuratedMediaCatalog,
+  CURATED_EXERCISE_MEDIA_CATALOG,
+} from '../src/features/exercises/data/curatedMediaCatalog';
 import {
   resolveExerciseDemonstration,
   hasCustomPhoto,
@@ -164,6 +167,36 @@ describe('ExerciseMediaService', () => {
       expect(result.demonstration).toBeUndefined();
     });
 
+    it('6a. supports CC-BY-SA-3.0 and CC-BY-SA-4.0 with required author attribution', () => {
+      const validSaDemo: ExerciseDemonstration = {
+        ...approvedBenchDemo,
+        license: {
+          type: 'CC-BY-SA-3.0',
+          author: 'Everkinetic',
+          sourceUrl: 'https://wger.de/en/exercise/73/view/',
+          licenseUrl: 'https://creativecommons.org/licenses/by-sa/3.0/deed.en',
+        },
+      };
+      const result = resolveExerciseDemonstration('seed-bench-press', {
+        'seed-bench-press': validSaDemo,
+      });
+      expect(result.status).toBe('approved');
+      expect(result.demonstration?.license.type).toBe('CC-BY-SA-3.0');
+
+      // Rejects CC-BY-SA without author
+      const missingSaAuthor: ExerciseDemonstration = {
+        ...validSaDemo,
+        license: {
+          ...validSaDemo.license,
+          author: '   ',
+        },
+      };
+      const resultMissing = resolveExerciseDemonstration('seed-bench-press', {
+        'seed-bench-press': missingSaAuthor,
+      });
+      expect(resultMissing.status).toBe('missing_attribution');
+    });
+
     it('6b. rejects assets that lack required source URL attribution', () => {
       const missingSourceUrlDemo: ExerciseDemonstration = {
         ...approvedBenchDemo,
@@ -259,5 +292,38 @@ describe('ExerciseMediaService', () => {
       expect(result.status).toBe('not_found');
       expect(result.demonstration).toBeUndefined();
     });
+  });
+
+  describe('Curated Media Catalog — Verified 10-Batch', () => {
+    const verifiedBatchExerciseIds = [
+      'wger_73', // Bench Press
+      'wger_75', // Benchpress Dumbbells
+      'wger_538', // Incline Bench Press - Barbell
+      'wger_257', // Front Squats
+      'wger_91', // Biceps Curls With Barbell
+      'wger_272', // Hammer Curls
+      'wger_566', // Shoulder Press, Barbell
+      'wger_348', // Lateral Raises
+      'wger_197', // Dips Between Two Benches
+      'wger_84', // Bent Over Rowing Reverse
+      'seed-bench-press', // Barbell Bench Press (seed)
+      'seed-lateral-raise', // Dumbbell Lateral Raise (seed)
+    ];
+
+    it.each(verifiedBatchExerciseIds)(
+      'resolves verified, approved demonstration for %s from production catalog',
+      (exerciseId) => {
+        const result = resolveExerciseDemonstration(exerciseId, CURATED_EXERCISE_MEDIA_CATALOG);
+        expect(result.status).toBe('approved');
+        expect(result.demonstration).toBeDefined();
+        expect(result.demonstration?.exerciseId).toBe(exerciseId);
+        expect(result.demonstration?.isApproved).toBe(true);
+        expect(result.demonstration?.thumbnailUri).toMatch(/^https?:\/\//);
+        expect(result.demonstration?.demonstrationUri).toMatch(/^https?:\/\//);
+        expect(result.demonstration?.license.type).toMatch(/^CC/);
+        expect(result.demonstration?.license.author.trim().length).toBeGreaterThan(0);
+        expect(result.demonstration?.license.sourceUrl.trim().length).toBeGreaterThan(0);
+      }
+    );
   });
 });

@@ -366,7 +366,7 @@ describe('Milestone 8 — Home Dashboard Integration Tests', () => {
         expect(getByTestId('start-quick-workout-button')).toBeTruthy();
         expect(getByTestId('workout-history-button')).toBeTruthy();
         expect(getByTestId('my-templates-button')).toBeTruthy();
-        expect(getByTestId('browse-exercises-button')).toBeTruthy();
+        expect(queryByTestId('browse-exercises-button')).toBeNull();
         expect(queryByTestId('reset-onboarding-button')).toBeNull();
       },
       { timeout: 3000 },
@@ -430,7 +430,7 @@ describe('Milestone 8 — Home Dashboard Integration Tests', () => {
       () => {
         expect(getByTestId('home-weekly-performance-card')).toBeTruthy();
         expect(getByText('Weekly Performance')).toBeTruthy();
-        expect(getByText('Review your weekly training and AI coaching insights.')).toBeTruthy();
+        expect(getByText('Review your weekly training and progressive overload.')).toBeTruthy();
       },
       { timeout: 3000 },
     );

@@ -8,7 +8,6 @@ import { calculateWeeklyPerformance, calculateProgressAnalytics, AnalyticsPeriod
 import { WeeklyPerformanceCard } from '../../../src/features/performance/WeeklyPerformanceCard';
 import { ProgressOverviewCard } from '../../../src/features/performance/components/ProgressOverviewCard';
 import { FocusProgressSection } from '../../../src/features/performance/components/FocusProgressSection';
-import { AIWeeklyAnalysisCard, coachService, AIWeeklyAnalysisResult } from '../../../src/features/coach';
 import { spacing } from '../../../src/constants/theme';
 
 const useFocusEffect =
@@ -26,47 +25,17 @@ export default function WeeklyPerformanceScreen() {
 
   const [workouts, setWorkouts] = useState<WorkoutSession[]>([]);
   const [loading, setLoading] = useState(true);
-  const [analysis, setAnalysis] = useState<AIWeeklyAnalysisResult | null>(null);
-  const [analysisLoading, setAnalysisLoading] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<AnalyticsPeriod>('week');
-
-  const fetchAnalysis = useCallback(async (currentWorkouts: WorkoutSession[]) => {
-    setAnalysisLoading(true);
-    try {
-      const res = await coachService.generateWeeklyWorkoutAnalysis(currentWorkouts);
-      setAnalysis(res);
-    } catch {
-      setAnalysis(null);
-    } finally {
-      setAnalysisLoading(false);
-    }
-  }, []);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const data = await workoutRepository.getCompletedWorkouts();
       setWorkouts(data);
-      void fetchAnalysis(data);
     } catch {
       setWorkouts([]);
-      setAnalysis(null);
     } finally {
       setLoading(false);
-    }
-  }, [fetchAnalysis]);
-
-  const handleRefresh = useCallback(async () => {
-    setAnalysisLoading(true);
-    try {
-      const data = await workoutRepository.getCompletedWorkouts();
-      setWorkouts(data);
-      const res = await coachService.generateWeeklyWorkoutAnalysis(data, { forceRefresh: true });
-      setAnalysis(res);
-    } catch {
-      setAnalysis(null);
-    } finally {
-      setAnalysisLoading(false);
     }
   }, []);
 
@@ -144,14 +113,7 @@ export default function WeeklyPerformanceScreen() {
               allExercises={progressAnalytics.allExercises}
             />
 
-            {/* 3. AI Weekly Analysis Card */}
-            <AIWeeklyAnalysisCard
-              analysis={analysis}
-              loading={analysisLoading}
-              onRefresh={handleRefresh}
-            />
-
-            {/* 4. Factual Set and Exercise Performance Card */}
+            {/* 3. Factual Set and Exercise Performance Card */}
             <WeeklyPerformanceCard summary={weeklyPerformance} />
           </>
         )}

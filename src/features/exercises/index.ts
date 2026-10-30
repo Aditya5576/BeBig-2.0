@@ -10,4 +10,7 @@ export * from './services/exerciseRepository';
 export * from './services/exercisePhotoCloudService';
 export * from './services/exerciseMediaService';
 export * from './data/curatedMediaCatalog';
+export * from './data/gymEquipmentFilter';
 export * from './components/ExerciseThumbnail';
+export * from './components/ExerciseCard';
+export * from './components/CustomExerciseForm';

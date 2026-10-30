@@ -307,7 +307,7 @@ describe('Milestone 9 — Checkpoint 4: Workout History Improvements Unit Tests'
     await waitFor(() => {
       expect(getByTestId('history-weekly-performance-card')).toBeTruthy();
       expect(getByText('Weekly Performance')).toBeTruthy();
-      expect(getByText('Review your weekly training and AI coaching insights.')).toBeTruthy();
+      expect(getByText('Review your weekly training and progressive overload.')).toBeTruthy();
     });
 
     const banner = getByTestId('history-weekly-performance-card');

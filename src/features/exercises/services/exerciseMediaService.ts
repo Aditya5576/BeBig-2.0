@@ -58,8 +58,13 @@ function validateDemonstrationAsset(
     return 'missing_attribution';
   }
 
-  // Attribution validation: author is mandatory for CC-BY attribution licenses
-  if (license.type === 'CC-BY-3.0' || license.type === 'CC-BY-4.0') {
+  // Attribution validation: author is mandatory for CC-BY and CC-BY-SA attribution licenses
+  if (
+    license.type === 'CC-BY-3.0' ||
+    license.type === 'CC-BY-4.0' ||
+    license.type === 'CC-BY-SA-3.0' ||
+    license.type === 'CC-BY-SA-4.0'
+  ) {
     if (!license.author || license.author.trim().length === 0) {
       return 'missing_attribution';
     }
@@ -112,17 +117,47 @@ export function hasCustomPhoto(exercise: Exercise | null | undefined): boolean {
   if (!exercise || exercise.isCustom !== true) {
     return false;
   }
+  // 1. Direct renderable local or data image in exercise.images
+  if (exercise.images && exercise.images.length > 0) {
+    const hasValidImg = exercise.images.some(
+      (img) => typeof img?.url === 'string' && img.url.trim().length > 0
+    );
+    if (hasValidImg) return true;
+  }
+
+  // 2. Cloud photo path (stored in Supabase)
   const photo = exercise.photoPath;
   return typeof photo === 'string' && photo.trim().length > 0;
 }
 
 /**
- * Retrieves the custom photo path or URI for an exercise if present.
- * Does not mutate or convert the photo path into a demonstration asset.
+ * Retrieves the renderable custom photo URI for an exercise if present.
+ * Prioritizes local file or data URI from images array over relative cloud paths.
  */
 export function getCustomPhotoUri(exercise: Exercise | null | undefined): string | null {
-  if (!hasCustomPhoto(exercise)) {
+  if (!hasCustomPhoto(exercise) || !exercise) {
     return null;
   }
-  return exercise?.photoPath?.trim() || null;
+
+  // 1. Prefer local file or data URI from images array
+  if (exercise.images && exercise.images.length > 0) {
+    const mainImg = exercise.images.find((img) => img.isMain) || exercise.images[0];
+    if (mainImg?.url && typeof mainImg.url === 'string' && mainImg.url.trim().length > 0) {
+      return mainImg.url.trim();
+    }
+  }
+
+  // 2. Fall back to photoPath if it is a fully qualified URL or file URI
+  const photoPath = exercise.photoPath?.trim();
+  if (
+    photoPath &&
+    (photoPath.startsWith('http://') ||
+      photoPath.startsWith('https://') ||
+      photoPath.startsWith('file://') ||
+      photoPath.startsWith('data:'))
+  ) {
+    return photoPath;
+  }
+
+  return null;
 }

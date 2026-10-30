@@ -59,16 +59,24 @@ export const ExerciseThumbnail = React.memo(function ExerciseThumbnail({
   const mediaUri = useMemo(() => {
     if (!exercise) return null;
 
-    // 1. Check curated demonstration catalog
+    // 1. User-uploaded custom exercise photo (absolute priority)
+    if (hasCustomPhoto(exercise)) {
+      const customUri = getCustomPhotoUri(exercise);
+      if (customUri) return customUri;
+    }
+
+    // 2. Check approved curated demonstration catalog
     const resolution = resolveExerciseDemonstration(exercise, catalog);
     if (resolution.status === 'approved' && resolution.demonstration?.thumbnailUri) {
       return resolution.demonstration.thumbnailUri;
     }
 
-    // 2. Check user-owned custom exercise photo
-    if (hasCustomPhoto(exercise)) {
-      const customUri = getCustomPhotoUri(exercise);
-      if (customUri) return customUri;
+    // 3. Provider image fallback for standard library exercises
+    if (!exercise.isCustom && exercise.images && exercise.images.length > 0) {
+      const main = exercise.images.find((img) => img.isMain) || exercise.images[0];
+      if (main?.thumbnailUrl || main?.url) {
+        return main.thumbnailUrl || main.url;
+      }
     }
 
     return null;
@@ -102,6 +110,7 @@ export const ExerciseThumbnail = React.memo(function ExerciseThumbnail({
           source={{ uri: mediaUri }}
           style={[styles.image, { width: size, height: size, borderRadius }]}
           resizeMode="cover"
+          fadeDuration={0}
           onError={(_e: NativeSyntheticEvent<ImageErrorEventData>) => setImageError(true)}
         />
       </View>

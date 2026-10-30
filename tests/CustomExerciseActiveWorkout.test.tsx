@@ -98,7 +98,7 @@ describe('BeBig 2.0 — Issue #9: Custom Exercise During Active Workout', () => 
     // Verify existing active workout state is rendered
     await waitFor(() => {
       expect(getByText('Bench Press')).toBeTruthy();
-      expect(getByText('✓ Set 1 Completed')).toBeTruthy();
+      expect(getByTestId('complete-set-wger_bench-1')).toBeTruthy();
     });
 
     // 3. Open Add Exercise modal

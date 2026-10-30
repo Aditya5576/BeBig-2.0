@@ -20,6 +20,8 @@ import {
   STANDARD_CATEGORIES,
   STANDARD_EQUIPMENT,
   ExerciseThumbnail,
+  ExerciseCard,
+  CustomExerciseForm,
 } from '../../exercises';
 import { getRecentlyUsedExercises } from '../../workout/services/recentExercisesService';
 import { spacing, radii } from '../../../constants/theme';
@@ -73,11 +75,6 @@ export function ExercisePickerModal({
 
   // Custom exercise creation state inside picker
   const [isCreatingCustom, setIsCreatingCustom] = useState(false);
-  const [customName, setCustomName] = useState('');
-  const [customCategory, setCustomCategory] = useState<ExerciseCategory>('chest');
-  const [customEquipment, setCustomEquipment] = useState('Barbell');
-  const [customSaving, setCustomSaving] = useState(false);
-  const [customError, setCustomError] = useState<string | null>(null);
 
   // Recently used exercises state derived from workout history
   const [recentExercisesList, setRecentExercisesList] = useState<Exercise[]>(
@@ -149,8 +146,6 @@ export function ExercisePickerModal({
       setSelectedExercisesMap(new Map());
       setSelectionOrder([]);
       setIsCreatingCustom(false);
-      setCustomName('');
-      setCustomError(null);
       setHasMore(false);
       setNextOffset(undefined);
       return;
@@ -293,124 +288,31 @@ export function ExercisePickerModal({
     onClose();
   }, [selectionOrder, selectedExercisesMap, onSelectExercises, onSelectExercise, onClose]);
 
-  const handleCreateCustomExercise = async () => {
-    const trimmed = customName.trim();
-    if (!trimmed) {
-      setCustomError('Exercise name is required.');
-      return;
-    }
-
-    setCustomSaving(true);
-    setCustomError(null);
-
-    try {
-      const created = await exerciseRepository.createCustomExercise({
-        name: trimmed,
-        category: customCategory,
-        equipment: customEquipment ? [customEquipment] : [],
-        primaryMuscles: ['General'],
-      });
-
-      setCustomName('');
-      setIsCreatingCustom(false);
-      setCustomSaving(false);
-
-      // Auto select newly created custom exercise for workout/template session
-      if (onSelectExercises) {
-        onSelectExercises([created]);
-      } else if (onSelectExercise) {
-        onSelectExercise(created);
-      }
-      onClose();
-    } catch (err: any) {
-      setCustomError(err?.message || 'Failed to create custom exercise.');
-      setCustomSaving(false);
-    }
-  };
-
   const selectedCount = selectionOrder.length;
 
-  const renderExerciseCard = (item: Exercise, testIdPrefix: string = 'picker') => {
+  const renderExerciseCard = useCallback((item: Exercise, testIdPrefix: string = 'picker') => {
     const isAlreadyAdded = selectedExerciseIds.includes(item.id);
     const isSelected = selectedExercisesMap.has(item.id);
 
     return (
-      <Pressable
+      <ExerciseCard
         key={`${testIdPrefix}_${item.id}`}
         testID={`${testIdPrefix}-exercise-${item.id}`}
-        disabled={isAlreadyAdded}
-        onPress={() => handleToggleExercise(item)}
-        style={[styles.cardPressable, isAlreadyAdded && styles.cardDisabled]}
-      >
-        <Card
-          style={[
-            styles.exerciseCard,
-            isMultiSelect && isSelected ? styles.exerciseCardSelected : null,
-          ]}
-        >
-          <View style={styles.cardHeader}>
-            <ExerciseThumbnail exercise={item} size={40} testID={`${testIdPrefix}-thumbnail-${item.id}`} />
-            <View style={styles.titleContainer}>
-              <View style={styles.titleWithBadge}>
-                <Text
-                  variant="bodyBold"
-                  color={isAlreadyAdded ? 'muted' : isSelected ? 'accent' : 'primary'}
-                  numberOfLines={2}
-                  style={styles.cardTitle}
-                >
-                  {item.name}
-                </Text>
-                {item.isCustom ? (
-                  <View style={styles.customInlineBadge}>
-                    <Text variant="caption" color="accent" style={styles.inlineBadgeText}>
-                      CUSTOM
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
-              <Text variant="caption" color="secondary" numberOfLines={1}>
-                {item.categoryName}
-              </Text>
-            </View>
-
-            {isAlreadyAdded ? (
-              <View style={styles.addedBadge} testID={`${testIdPrefix}-added-badge-${item.id}`}>
-                <Text variant="caption" color="muted" style={styles.badgeText}>
-                  ADDED
-                </Text>
-              </View>
-            ) : isMultiSelect ? (
-              <View
-                testID={`${testIdPrefix}-checkbox-${item.id}`}
-                style={[
-                  styles.checkboxContainer,
-                  isSelected ? styles.checkboxSelected : styles.checkboxUnselected,
-                ]}
-              >
-                {isSelected ? (
-                  <Text style={styles.checkIcon}>✓</Text>
-                ) : null}
-              </View>
-            ) : item.isCustom ? (
-              <View style={styles.customBadge}>
-                <Text variant="caption" color="accent" style={styles.badgeText}>
-                  CUSTOM
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.selectBadge}>
-                <Text variant="caption" color="primary" style={styles.badgeText}>
-                  + ADD
-                </Text>
-              </View>
-            )}
-          </View>
-        </Card>
-      </Pressable>
+        thumbnailTestID={`${testIdPrefix}-thumbnail-${item.id}`}
+        exercise={item}
+        mode="select"
+        isSelected={isSelected}
+        isAlreadyAdded={isAlreadyAdded}
+        isMultiSelect={isMultiSelect}
+        onPress={handleToggleExercise}
+      />
     );
-  };
+  }, [selectedExerciseIds, selectedExercisesMap, isMultiSelect, handleToggleExercise]);
 
-  const renderItem = ({ item }: { item: Exercise }) => renderExerciseCard(item, 'picker');
+  const renderItem = useCallback(
+    ({ item }: { item: Exercise }) => renderExerciseCard(item, 'picker'),
+    [renderExerciseCard]
+  );
 
   const renderListHeader = () => {
     if (visibleRecentExercises.length === 0) return null;
@@ -444,121 +346,21 @@ export function ExercisePickerModal({
     <Modal visible={visible} animationType="slide" onRequestClose={handleCancelAndClose}>
       <ScreenContainer style={[styles.container, { paddingTop: Math.max(insets.top, spacing.xs) }]}>
         {isCreatingCustom ? (
-          /* Custom Exercise Creation Form View */
-          <ScrollView
-            contentContainerStyle={styles.createFormContent}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
-            <View style={styles.headerTitleRow}>
-              <Text variant="titleMedium" color="primary" style={styles.modalTitle}>
-                New Custom Exercise
-              </Text>
-              <Button
-                testID="custom-exercise-cancel-button"
-                title="Cancel"
-                onPress={() => setIsCreatingCustom(false)}
-                variant="ghost"
-                size="sm"
-                style={styles.closeButton}
-              />
-            </View>
-
-            {customError ? (
-              <Card style={styles.errorCard} testID="custom-exercise-error">
-                <Text variant="caption" color="primary">
-                  {customError}
-                </Text>
-              </Card>
-            ) : null}
-
-            <View style={styles.formGroup}>
-              <Text variant="label" color="secondary">
-                EXERCISE NAME *
-              </Text>
-              <TextInput
-                testID="custom-exercise-name-input"
-                style={styles.searchInput}
-                placeholder="e.g. Cable Lateral Raise"
-                placeholderTextColor={colors.textMuted}
-                value={customName}
-                onChangeText={setCustomName}
-                autoFocus
-              />
-            </View>
-
-            <View style={styles.formGroup}>
-              <Text variant="label" color="secondary">
-                TARGET CATEGORY *
-              </Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.categoryScroll}
-              >
-                {STANDARD_CATEGORIES.map((cat) => {
-                  const isSelected = customCategory === cat.id;
-                  return (
-                    <Pressable
-                      key={cat.id}
-                      testID={`category-select-${cat.id}`}
-                      onPress={() => setCustomCategory(cat.id)}
-                      style={[styles.categoryChip, isSelected && styles.categoryChipActive]}
-                    >
-                      <Text
-                        variant="caption"
-                        color={isSelected ? 'accent' : 'secondary'}
-                        style={styles.chipText}
-                      >
-                        {cat.name}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
-            </View>
-
-            <View style={styles.formGroup}>
-              <Text variant="label" color="secondary">
-                EQUIPMENT
-              </Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.categoryScroll}
-              >
-                {STANDARD_EQUIPMENT.map((eq) => {
-                  const isSelected = customEquipment === eq;
-                  return (
-                    <Pressable
-                      key={eq}
-                      testID={`equipment-select-${eq}`}
-                      onPress={() => setCustomEquipment(eq)}
-                      style={[styles.categoryChip, isSelected && styles.categoryChipActive]}
-                    >
-                      <Text
-                        variant="caption"
-                        color={isSelected ? 'accent' : 'secondary'}
-                        style={styles.chipText}
-                      >
-                        {eq}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
-            </View>
-
-            <Button
-              testID="save-custom-exercise-button"
-              title="Create & Add to Workout"
-              onPress={handleCreateCustomExercise}
-              variant="primary"
-              size="lg"
-              loading={customSaving}
-              style={styles.createSubmitButton}
-            />
-          </ScrollView>
+          <CustomExerciseForm
+            isModal={true}
+            submitButtonTitle="Create & Add to Workout"
+            cancelButtonTitle="Cancel"
+            onSuccess={(created) => {
+              setIsCreatingCustom(false);
+              if (onSelectExercises) {
+                onSelectExercises([created]);
+              } else if (onSelectExercise) {
+                onSelectExercise(created);
+              }
+              onClose();
+            }}
+            onCancel={() => setIsCreatingCustom(false)}
+          />
         ) : (
           /* Exercise Picker List View */
           <>
@@ -570,7 +372,7 @@ export function ExercisePickerModal({
                 </Text>
                 <Button
                   testID="picker-create-custom-button"
-                  title="+ Custom"
+                  title="+ New"
                   onPress={() => setIsCreatingCustom(true)}
                   variant="outline"
                   size="sm"
@@ -597,6 +399,8 @@ export function ExercisePickerModal({
                 autoCapitalize="none"
                 autoCorrect={false}
                 clearButtonMode="while-editing"
+                returnKeyType="search"
+                blurOnSubmit={false}
               />
 
               {/* Source Filter Chips */}
@@ -665,53 +469,56 @@ export function ExercisePickerModal({
               </ScrollView>
             </View>
 
-            {/* Content */}
-            {loading ? (
-              <View style={styles.centerContainer}>
-                <ActivityIndicator size="large" color={colors.primary} />
-              </View>
-            ) : exercises.length === 0 && visibleRecentExercises.length === 0 ? (
-              <View style={styles.centerContainer}>
-                <Text variant="body" color="muted" style={{ marginBottom: spacing.md }}>
-                  No exercises found.
-                </Text>
-                <Button
-                  testID="picker-create-custom-empty-button"
-                  title="+ Create Custom Exercise"
-                  onPress={() => setIsCreatingCustom(true)}
-                  variant="primary"
-                  size="md"
-                />
-              </View>
-            ) : (
-              <FlatList
-                testID="picker-exercise-list"
-                data={exercises}
-                extraData={`${selectedCount}_${visibleRecentExercises.length}`}
-                keyExtractor={(item) => item.id}
-                renderItem={renderItem}
-                ListHeaderComponent={renderListHeader}
-                contentContainerStyle={[
-                  styles.listContent,
-                  isMultiSelect ? { paddingBottom: 110 } : null,
-                ]}
-                keyboardDismissMode="on-drag"
-                keyboardShouldPersistTaps="handled"
-                initialNumToRender={15}
-                maxToRenderPerBatch={15}
-                windowSize={5}
-                removeClippedSubviews={Platform.OS !== 'web'}
-                onEndReached={handleLoadMore}
-                onEndReachedThreshold={0.5}
-                ListFooterComponent={
-                  loadingMore ? (
-                    <View style={styles.loadingMoreContainer}>
-                      <ActivityIndicator size="small" color={colors.primary} />
-                    </View>
-                  ) : null
-                }
-              />
-            )}
+            {/* Content — Permanently mounted to preserve virtual keyboard and search focus */}
+            <FlatList
+              testID="picker-exercise-list"
+              data={exercises}
+              extraData={`${selectedCount}_${visibleRecentExercises.length}`}
+              keyExtractor={(item) => item.id}
+              renderItem={renderItem}
+              ListHeaderComponent={renderListHeader}
+              ListEmptyComponent={
+                loading ? (
+                  <View style={styles.centerContainer}>
+                    <ActivityIndicator size="large" color={colors.primary} />
+                  </View>
+                ) : (
+                  <View style={styles.centerContainer}>
+                    <Text variant="body" color="muted" style={{ marginBottom: spacing.md }}>
+                      No exercises found.
+                    </Text>
+                    <Button
+                      testID="picker-create-custom-empty-button"
+                      title="+ Create Custom Exercise"
+                      onPress={() => setIsCreatingCustom(true)}
+                      variant="primary"
+                      size="md"
+                    />
+                  </View>
+                )
+              }
+              contentContainerStyle={[
+                styles.listContent,
+                isMultiSelect ? { paddingBottom: 110 } : null,
+                exercises.length === 0 && visibleRecentExercises.length === 0 && { flexGrow: 1, justifyContent: 'center' },
+              ]}
+              keyboardDismissMode="on-drag"
+              keyboardShouldPersistTaps="handled"
+              initialNumToRender={12}
+              maxToRenderPerBatch={10}
+              windowSize={7}
+              updateCellsBatchingPeriod={50}
+              removeClippedSubviews={Platform.OS !== 'web'}
+              onEndReached={handleLoadMore}
+              onEndReachedThreshold={0.5}
+              ListFooterComponent={
+                loadingMore ? (
+                  <View style={styles.loadingMoreContainer}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  </View>
+                ) : null
+              }
+            />
 
             {/* Sticky Bottom Action Bar for Multi-select */}
             {isMultiSelect && (

@@ -208,7 +208,7 @@ export default function WorkoutHistoryScreen() {
               onPress={() => router.push('/workout/progress/weekly' as any)}
               style={styles.weeklyPerformanceBanner}
               accessibilityRole="button"
-              accessibilityLabel="View Weekly Performance and AI coaching insights"
+              accessibilityLabel="View Weekly Performance and progressive overload"
             >
               <View style={styles.weeklyPerformanceBannerLeft}>
                 <View style={styles.weeklyPerformanceIconWrap}>
@@ -219,14 +219,9 @@ export default function WorkoutHistoryScreen() {
                     <Text variant="titleMedium" color="primary" style={styles.weeklyPerformanceTitle}>
                       Weekly Performance
                     </Text>
-                    <View style={styles.weeklyPerformanceAiBadge}>
-                      <Text variant="caption" style={styles.weeklyPerformanceAiBadgeText}>
-                        AI COACH
-                      </Text>
-                    </View>
                   </View>
                   <Text variant="caption" color="secondary" style={styles.weeklyPerformanceSubtitle}>
-                    Review your weekly training and AI coaching insights.
+                    Review your weekly training and progressive overload.
                   </Text>
                 </View>
               </View>
@@ -686,18 +681,6 @@ const createStyles = (colors: any) => StyleSheet.create({
   weeklyPerformanceTitle: {
     fontSize: 14,
     fontWeight: '700',
-  },
-  weeklyPerformanceAiBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 1.5,
-    borderRadius: radii.xs,
-    backgroundColor: 'rgba(56, 189, 248, 0.15)',
-  },
-  weeklyPerformanceAiBadgeText: {
-    fontSize: 8.5,
-    fontWeight: '800',
-    color: colors.primary,
-    letterSpacing: 0.5,
   },
   weeklyPerformanceSubtitle: {
     fontSize: 11,

@@ -342,7 +342,7 @@ export default function HomeScreen() {
                 onPress={() => router.push('/workout/progress/weekly' as any)}
                 style={styles.statTilePressable}
                 accessibilityRole="button"
-                accessibilityLabel="View Weekly Performance and AI coaching insights"
+                accessibilityLabel="View Weekly Performance and progressive overload"
               >
                 <View style={styles.statTileHeader}>
                   <Icon name="workout" size={14} color={colors.primary} />
@@ -615,13 +615,13 @@ export default function HomeScreen() {
           )}
         </View>
 
-        {/* 6. AI Weekly Performance & Coaching Banner */}
+        {/* 6. Weekly Performance Banner */}
         <Pressable
           testID="home-weekly-performance-card"
           onPress={() => router.push('/workout/progress/weekly' as any)}
           style={styles.weeklyPerformanceTile}
           accessibilityRole="button"
-          accessibilityLabel="Open Weekly Performance and AI coaching insights"
+          accessibilityLabel="Open Weekly Performance and progressive overload"
         >
           <View style={styles.weeklyPerformanceLeft}>
             <View style={styles.weeklyPerformanceIconWrap}>
@@ -632,40 +632,13 @@ export default function HomeScreen() {
                 <Text variant="titleMedium" color="primary" style={styles.weeklyPerformanceTitle}>
                   Weekly Performance
                 </Text>
-                <View style={styles.weeklyPerformanceAiBadge}>
-                  <Text variant="caption" style={styles.weeklyPerformanceAiBadgeText}>
-                    AI COACH
-                  </Text>
-                </View>
               </View>
               <Text variant="caption" color="secondary" style={styles.weeklyPerformanceSubtitle}>
-                Review your weekly training and AI coaching insights.
+                Review your weekly training and progressive overload.
               </Text>
             </View>
           </View>
           <Text variant="titleMedium" color="accent" style={styles.weeklyPerformanceChevron}>
-            →
-          </Text>
-        </Pressable>
-
-        {/* 7. Exercise Library CTA */}
-        <Pressable
-          testID="browse-exercises-button"
-          onPress={() => router.push('/exercises' as any)}
-          style={styles.exerciseLibraryTile}
-        >
-          <View style={styles.exerciseLibraryLeft}>
-            <Icon name="exercises" size={16} color={colors.primary} />
-            <View style={styles.exerciseLibraryTextGroup}>
-              <Text variant="titleMedium" color="primary" style={styles.exerciseLibraryTitle}>
-                Exercise Library
-              </Text>
-              <Text variant="caption" color="secondary" style={styles.exerciseLibrarySubtitle}>
-                Browse exercises and find new movements
-              </Text>
-            </View>
-          </View>
-          <Text variant="titleMedium" color="muted" style={styles.exerciseLibraryChevron}>
             →
           </Text>
         </Pressable>
@@ -1040,56 +1013,12 @@ const createStyles = (colors: any) =>
       fontSize: 14,
       fontWeight: '700',
     },
-    weeklyPerformanceAiBadge: {
-      paddingHorizontal: 6,
-      paddingVertical: 1.5,
-      borderRadius: radii.xs,
-      backgroundColor: 'rgba(56, 189, 248, 0.15)',
-    },
-    weeklyPerformanceAiBadgeText: {
-      fontSize: 8.5,
-      fontWeight: '800',
-      color: colors.primary,
-      letterSpacing: 0.5,
-    },
     weeklyPerformanceSubtitle: {
       fontSize: 11,
       lineHeight: 15,
     },
     weeklyPerformanceChevron: {
       fontSize: 15,
-      fontWeight: '700',
-      marginLeft: spacing.xs,
-    },
-    exerciseLibraryTile: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      padding: spacing.sm + 2,
-      borderRadius: radii.md,
-      backgroundColor: colors.surface,
-      borderColor: colors.border,
-      borderWidth: 1,
-    },
-    exerciseLibraryLeft: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: spacing.sm,
-      flex: 1,
-    },
-    exerciseLibraryTextGroup: {
-      flex: 1,
-      gap: 1,
-    },
-    exerciseLibraryTitle: {
-      fontSize: 13,
-      fontWeight: '700',
-    },
-    exerciseLibrarySubtitle: {
-      fontSize: 11,
-    },
-    exerciseLibraryChevron: {
-      fontSize: 14,
       fontWeight: '700',
       marginLeft: spacing.xs,
     },

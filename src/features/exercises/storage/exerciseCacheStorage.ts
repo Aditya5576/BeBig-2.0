@@ -262,6 +262,9 @@ class ExerciseCacheStorage {
   private memoryCatalog: Map<string, Exercise> = new Map();
   private isHydrated: boolean = false;
   private inFlightHydration: Promise<void> | null = null;
+  private catalogRevision: number = 0;
+  private lastSearchKey: string = '';
+  private lastSearchResult: Exercise[] = [];
 
   constructor() {
     // Pre-populate memory with seed exercises synchronously
@@ -274,6 +277,15 @@ class ExerciseCacheStorage {
    */
   getCachedCatalogSync(): Exercise[] {
     return Array.from(this.memoryCatalog.values());
+  }
+
+  /**
+   * Synchronously return a cached exercise by ID if present in memory.
+   * Enables 0ms render when navigating to Exercise Detail.
+   */
+  getCachedExerciseByIdSync(id: string): Exercise | null {
+    if (!id) return null;
+    return this.memoryCatalog.get(id) || null;
   }
 
   /**
@@ -340,6 +352,11 @@ class ExerciseCacheStorage {
       }
     }
 
+    // Invalidate cached query results on catalog updates
+    this.catalogRevision++;
+    this.lastSearchKey = '';
+    this.lastSearchResult = [];
+
     const allExercises = Array.from(this.memoryCatalog.values());
 
     try {
@@ -363,33 +380,46 @@ class ExerciseCacheStorage {
   }
 
   /**
-   * Instant local search against cached catalog.
+   * Instant local search against cached catalog with query-memoization.
    */
   searchCached(options: { query?: string; category?: string; limit?: number } = {}): Exercise[] {
-    const all = Array.from(this.memoryCatalog.values());
-    const query = options.query?.trim();
-    const category = options.category && options.category !== 'all' ? options.category : undefined;
+    const query = options.query?.trim() || '';
+    const category = options.category && options.category !== 'all' ? options.category : '';
+    const cacheKey = `${this.catalogRevision}::${category}::${query.toLowerCase()}`;
 
-    let filtered = all;
-    if (category) {
-      filtered = filtered.filter((e) => e.category === category);
-    }
+    let baseResults: Exercise[];
+    if (this.lastSearchKey === cacheKey) {
+      baseResults = this.lastSearchResult;
+    } else {
+      const all = Array.from(this.memoryCatalog.values());
+      let filtered = all;
+      if (category) {
+        filtered = filtered.filter((e) => e.category === category);
+      }
 
-    if (query) {
-      filtered = filterAndRankExercises(filtered, query, category as ExerciseCategory);
+      if (query) {
+        filtered = filterAndRankExercises(filtered, query, category as ExerciseCategory);
+      }
+
+      this.lastSearchKey = cacheKey;
+      this.lastSearchResult = filtered;
+      baseResults = filtered;
     }
 
     if (options.limit && options.limit > 0) {
-      return filtered.slice(0, options.limit);
+      return baseResults.slice(0, options.limit);
     }
 
-    return filtered;
+    return baseResults;
   }
 
   /**
    * Clear cache (useful for dev tools / testing).
    */
   async clearCache(): Promise<void> {
+    this.catalogRevision++;
+    this.lastSearchKey = '';
+    this.lastSearchResult = [];
     this.memoryCatalog.clear();
     SEED_EXERCISES.forEach((ex) => this.memoryCatalog.set(ex.id, ex));
     try {

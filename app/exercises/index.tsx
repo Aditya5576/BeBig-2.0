@@ -12,77 +12,11 @@ import {
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { ScreenContainer, ScreenScrollView, ScreenFlatList, Text, Button, Card } from '../../src/components/ui';
-import { exerciseRepository, Exercise, STANDARD_CATEGORIES, ExerciseThumbnail } from '../../src/features/exercises';
+import { exerciseRepository, Exercise, STANDARD_CATEGORIES, ExerciseThumbnail, ExerciseCard } from '../../src/features/exercises';
 import { spacing, radii } from '../../src/constants/theme';
 import { useEntitySyncStatus } from '../../src/services/sync';
 import { SyncStatusChip } from '../../src/components/ui';
 
-function CustomExerciseSyncStatus({ exerciseId, isCustom }: { exerciseId: string; isCustom: boolean }) {
-  const status = useEntitySyncStatus('custom_exercise', exerciseId);
-  if (!isCustom) return null;
-  return <SyncStatusChip status={status} />;
-}
-
-interface ExerciseListItemProps {
-  item: Exercise;
-  onPress: (id: string) => void;
-  styles: any;
-}
-
-const ExerciseListItem = React.memo(function ExerciseListItem({
-  item,
-  onPress,
-  styles,
-}: ExerciseListItemProps) {
-  const equipmentText =
-    item.equipment.length > 0 ? item.equipment.map((e) => e.name).join(', ') : 'Bodyweight';
-  const muscleText =
-    item.primaryMuscles.length > 0
-      ? item.primaryMuscles.map((m) => m.name).join(', ')
-      : 'Full Body';
-
-  return (
-    <Pressable
-      testID={`exercise-item-${item.id}`}
-      onPress={() => onPress(item.id)}
-      style={styles.cardPressable}
-    >
-      <Card style={styles.exerciseCard}>
-        <View style={styles.cardHeader}>
-          <ExerciseThumbnail exercise={item} size={40} />
-          <View style={styles.titleContainer}>
-            <Text variant="bodyBold" color="primary" numberOfLines={1}>
-              {item.name}
-            </Text>
-            <Text variant="caption" color="secondary" numberOfLines={1}>
-              {item.categoryName} • {equipmentText}
-            </Text>
-          </View>
-
-          <View style={styles.badgeRow}>
-            {item.isCustom && (
-              <View style={styles.customBadge} testID="custom-badge">
-                <Text variant="caption" color="accent" style={styles.badgeText}>
-                  CUSTOM
-                </Text>
-              </View>
-            )}
-            <CustomExerciseSyncStatus exerciseId={item.id} isCustom={item.isCustom} />
-          </View>
-        </View>
-
-        <View style={styles.muscleRow}>
-          <Text variant="caption" color="muted">
-            Target:{' '}
-            <Text variant="caption" color="accent">
-              {muscleText}
-            </Text>
-          </Text>
-        </View>
-      </Card>
-    </Pressable>
-  );
-});
 
 export default function ExerciseListScreen() {
   const { colors } = useAppTheme();
@@ -116,10 +50,26 @@ export default function ExerciseListScreen() {
   const searchReqIdRef = useRef(0);
   const searchQueryRef = useRef(searchQuery);
   searchQueryRef.current = searchQuery;
+  const isInitialMountRef = useRef(true);
+  const lastCustomVersionRef = useRef(exerciseRepository.getCustomExercisesVersion());
 
-  // 0. Refresh list whenever screen comes into focus (e.g. returning after deleting a custom exercise)
+  // 0. Refresh list on focus ONLY if custom exercises actually changed while away
   useFocusEffect(
     useCallback(() => {
+      // Skip the initial mount run because the background refresh effect handles initial fetch
+      if (isInitialMountRef.current) {
+        isInitialMountRef.current = false;
+        lastCustomVersionRef.current = exerciseRepository.getCustomExercisesVersion();
+        return;
+      }
+
+      const currentVersion = exerciseRepository.getCustomExercisesVersion();
+      if (currentVersion === lastCustomVersionRef.current) {
+        // No custom exercises created/updated/deleted: preserve list, scroll position, and state completely!
+        return;
+      }
+      lastCustomVersionRef.current = currentVersion;
+
       let isMounted = true;
       async function refreshOnFocus() {
         try {
@@ -311,20 +261,29 @@ export default function ExerciseListScreen() {
   };
 
   const handleItemPress = useCallback(
-    (id: string) => {
-      router.push(`/exercises/${id}` as any);
+    (ex: Exercise) => {
+      router.push(`/exercises/${ex.id}` as any);
     },
     [router]
   );
 
   const renderItem = useCallback(
     ({ item }: { item: Exercise }) => (
-      <ExerciseListItem item={item} onPress={handleItemPress} styles={styles} />
+      <ExerciseCard exercise={item} onPress={handleItemPress} mode="browse" />
     ),
-    [handleItemPress, styles]
+    [handleItemPress]
   );
 
   const keyExtractor = useCallback((item: Exercise) => item.id, []);
+
+  const getItemLayout = useCallback(
+    (_data: any, index: number) => ({
+      length: 107,
+      offset: 107 * index,
+      index,
+    }),
+    []
+  );
 
   return (
     <ScreenContainer>
@@ -362,6 +321,8 @@ export default function ExerciseListScreen() {
             autoCapitalize="none"
             autoCorrect={false}
             clearButtonMode="while-editing"
+            returnKeyType="search"
+            blurOnSubmit={false}
           />
         </View>
 
@@ -440,76 +401,82 @@ export default function ExerciseListScreen() {
         </View>
       )}
 
-      {/* Main Content Area */}
-      {loading ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator
-            testID="exercise-loading-indicator"
-            size="large"
-            color={colors.primary}
-          />
-          <Text variant="caption" color="muted" style={styles.loadingText}>
-            Loading exercises...
-          </Text>
-        </View>
-      ) : error ? (
-        <View style={styles.centerContainer} testID="exercise-error-state">
-          <Text variant="bodyBold" color="primary">
-            Unable to load exercises
-          </Text>
-          <Text variant="caption" color="muted" style={styles.errorSubtext}>
-            {error}
-          </Text>
-          <Button
-            testID="exercise-retry-button"
-            title="Try Again"
-            onPress={() => setRefreshTrigger((c) => c + 1)}
-            variant="secondary"
-            size="md"
-            style={styles.retryButton}
-          />
-        </View>
-      ) : exercises.length === 0 ? (
-        <View style={styles.centerContainer} testID="exercise-empty-state">
-          <Text variant="bodyBold" color="primary">
-            No exercises found
-          </Text>
-          <Text variant="caption" color="muted" style={styles.errorSubtext}>
-            Try changing your search term or category filter, or create a custom exercise.
-          </Text>
-          <Button
-            testID="empty-create-exercise-button"
-            title="Create Custom Exercise"
-            onPress={() => router.push('/exercises/new' as any)}
-            variant="outline"
-            size="md"
-            style={styles.retryButton}
-          />
-        </View>
-      ) : (
-        <ScreenFlatList
-          testID="exercise-list"
-          data={exercises}
-          keyExtractor={keyExtractor}
-          renderItem={renderItem}
-          initialNumToRender={12}
-          maxToRenderPerBatch={10}
-          windowSize={5}
-          removeClippedSubviews={Platform.OS !== 'web'}
-          contentContainerStyle={styles.listContent}
-          onEndReached={handleLoadMore}
-          onEndReachedThreshold={0.5}
-          keyboardDismissMode="on-drag"
-          keyboardShouldPersistTaps="handled"
-          ListFooterComponent={
-            loadingMore ? (
-              <View style={styles.footerLoading}>
-                <ActivityIndicator size="small" color={colors.primary} />
-              </View>
-            ) : null
-          }
-        />
-      )}
+      {/* Main Content Area — Permanently mounted to preserve virtual keyboard and search focus */}
+      <ScreenFlatList
+        testID="exercise-list"
+        data={exercises}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
+        ListEmptyComponent={
+          loading ? (
+            <View style={styles.centerContainer}>
+              <ActivityIndicator
+                testID="exercise-loading-indicator"
+                size="large"
+                color={colors.primary}
+              />
+              <Text variant="caption" color="muted" style={styles.loadingText}>
+                Loading exercises...
+              </Text>
+            </View>
+          ) : error ? (
+            <View style={styles.centerContainer} testID="exercise-error-state">
+              <Text variant="bodyBold" color="primary">
+                Unable to load exercises
+              </Text>
+              <Text variant="caption" color="muted" style={styles.errorSubtext}>
+                {error}
+              </Text>
+              <Button
+                testID="exercise-retry-button"
+                title="Try Again"
+                onPress={() => setRefreshTrigger((c) => c + 1)}
+                variant="secondary"
+                size="md"
+                style={styles.retryButton}
+              />
+            </View>
+          ) : (
+            <View style={styles.centerContainer} testID="exercise-empty-state">
+              <Text variant="bodyBold" color="primary">
+                No exercises found
+              </Text>
+              <Text variant="caption" color="muted" style={styles.errorSubtext}>
+                Try changing your search term or category filter, or create a custom exercise.
+              </Text>
+              <Button
+                testID="empty-create-exercise-button"
+                title="Create Custom Exercise"
+                onPress={() => router.push('/exercises/new' as any)}
+                variant="outline"
+                size="md"
+                style={styles.retryButton}
+              />
+            </View>
+          )
+        }
+        initialNumToRender={12}
+        maxToRenderPerBatch={10}
+        windowSize={7}
+        updateCellsBatchingPeriod={50}
+        getItemLayout={getItemLayout}
+        removeClippedSubviews={Platform.OS !== 'web'}
+        contentContainerStyle={[
+          styles.listContent,
+          exercises.length === 0 && { flexGrow: 1, justifyContent: 'center' },
+        ]}
+        onEndReached={handleLoadMore}
+        onEndReachedThreshold={0.5}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
+        ListFooterComponent={
+          loadingMore ? (
+            <View style={styles.footerLoading}>
+              <ActivityIndicator size="small" color={colors.primary} />
+            </View>
+          ) : null
+        }
+      />
     </ScreenContainer>
   );
 }
