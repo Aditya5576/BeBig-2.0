@@ -17,6 +17,17 @@ export interface ReleaseNoteItem {
 }
 
 export const CURRENT_RELEASE_NOTES: Record<string, ReleaseNoteItem> = {
+  '2.2.0': {
+    version: '2.2.0',
+    title: "What's New in BeBig 2.2",
+    highlights: [
+      'Exercise Demonstration Media: 10 verified core exercise demonstrations and 2 seed mappings with author attribution and CC-BY-SA licensing.',
+      'Unified Custom Exercise Creation: Identical creation workflow across Exercise Library and Ongoing Workout, with persistent custom photo support.',
+      'Indian Commercial Gym Catalogue: Refined exercise catalogue prioritized for standard gym equipment with duplicate movement suppression.',
+      'Search & Navigation Responsiveness: Stable virtual keyboard typing during exercise search and smooth list scrolling with cached exercise hydration.',
+      'Factual Weekly Performance: Clean, deterministic weekly training trends and progressive overload analytics following the retirement of the legacy AI coach.',
+    ],
+  },
   '2.1.1': {
     version: '2.1.1',
     title: "What's New in BeBig 2.0",
@@ -75,12 +86,12 @@ export const CURRENT_RELEASE_NOTES: Record<string, ReleaseNoteItem> = {
 };
 
 export const defaultReleaseHighlights: string[] = [
-  'Automatic Session Numbering for workout templates',
-  'Recently Used Exercises at the top of the exercise picker',
+  'Verified Exercise Demonstration Media with licensing attribution',
+  'Unified Custom Exercise Creation with photo persistence',
+  'Exercise catalogue refined for Indian commercial gym equipment',
+  'Smooth exercise library navigation and stable search typing',
+  'Factual Weekly Performance and progressive overload analytics',
   'Data Export to Excel (.xlsx) and PDF (.pdf)',
-  'Profile photo persistence across web and mobile',
-  'Progress Analytics 2.0 with AI weekly performance analysis',
-  'Reliable workout and rest timer notifications',
 ];
 
 export class ReleaseNotesService {

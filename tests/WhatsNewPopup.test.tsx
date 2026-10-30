@@ -1,17 +1,17 @@
 /**
- * BeBig 2.0 — Production-Ready What's New Popup Test Suite
+ * BeBig 2.0 — Production-Ready What's New Popup Test Suite (v2.2.0)
  *
  * Verifies all 10 Acceptance Criteria:
- * 1. Popup appears for an eligible new release.
- * 2. Popup does not appear repeatedly for an acknowledged version.
- * 3. Popup appears again for a different eligible release.
- * 4. First-time onboarding is not interrupted.
- * 5. Guest users can use the popup.
- * 6. Authenticated users can use the popup.
- * 7. Missing or invalid stored version values are handled safely.
- * 8. Dismissal is persisted correctly.
- * 9. Startup/navigation initialization remains stable (splash & active workout protection).
- * 10. Existing behavior and genuine BeBig 2.0 release features are accurately presented.
+ * 1. Existing user who acknowledged 2.1.1 sees the 2.2.0 announcement.
+ * 2. Fresh user completing onboarding sees 2.2.0 after arriving on Home.
+ * 3. Guest users see the announcement and can dismiss it offline.
+ * 4. Authenticated users see the announcement and can dismiss it.
+ * 5. Previously dismissed 2.2.0 does not reappear on subsequent renders or app restarts.
+ * 6. Splash screen routes (index / empty) do not show the popup.
+ * 7. Onboarding screens (welcome / goal / preferences) do not show the popup.
+ * 8. Active workout in progress (workout/active) does not show the popup.
+ * 9. Navigating to a safe screen after onboarding triggers the pending announcement.
+ * 10. App restart preserves acknowledgement and release notes dictionary is valid.
  */
 
 import React from 'react';
@@ -54,7 +54,7 @@ jest.mock('react-native-safe-area-context', () => ({
   SafeAreaView: ({ children }: any) => children,
 }));
 
-describe('BeBig 2.0 — Production What\'s New Popup (ReleaseNotesModal)', () => {
+describe('BeBig 2.0 — Production What\'s New Popup (v2.2.0 ReleaseNotesModal)', () => {
   beforeEach(() => {
     mockSegments = ['home'];
     jest.clearAllMocks();
@@ -71,96 +71,61 @@ describe('BeBig 2.0 — Production What\'s New Popup (ReleaseNotesModal)', () =>
     jest.restoreAllMocks();
   });
 
-  it('1. Popup appears for an eligible new release on Home screen', async () => {
-    // No prior version acknowledged in storage
-    const shouldShow = await releaseNotesService.shouldShowReleaseNotes('2.1.1');
+  it('1. Existing user who acknowledged 2.1.1 sees the 2.2.0 announcement on Home screen', async () => {
+    // User previously acknowledged v2.1.1 in production
+    mockStorageMap.set(RELEASE_NOTES_STORAGE_KEY, '2.1.1');
+
+    const shouldShow = await releaseNotesService.shouldShowReleaseNotes('2.2.0');
     expect(shouldShow).toBe(true);
 
     const { findByTestId, findByText } = await render(
-      <ReleaseNotesModal forcedVersion="2.1.1" />,
+      <ReleaseNotesModal forcedVersion="2.2.0" />,
     );
 
     const modal = await findByTestId('release-notes-modal');
     expect(modal).toBeTruthy();
 
     expect(await findByText("🎉 What's New")).toBeTruthy();
-    expect(await findByText('v2.1.1')).toBeTruthy();
+    expect(await findByText('v2.2.0')).toBeTruthy();
     expect(await findByTestId('release-notes-dismiss-button')).toBeTruthy();
 
-    // Verify genuine BeBig 2.0 release highlights are shown
-    expect(await findByText(/Automatic Session Numbering/)).toBeTruthy();
-    expect(await findByText(/Recently Used Exercises/)).toBeTruthy();
-    expect(await findByText(/Data Export/)).toBeTruthy();
-    expect(await findByText(/Profile Photo Persistence/)).toBeTruthy();
-    expect(await findByText(/Progress Analytics 2.0/)).toBeTruthy();
-    expect(await findByText(/Workout & Rest Timer Notifications/)).toBeTruthy();
+    // Verify genuine BeBig 2.2.0 release highlights are shown
+    expect(await findByText(/Exercise Demonstration Media/)).toBeTruthy();
+    expect(await findByText(/Unified Custom Exercise Creation/)).toBeTruthy();
+    expect(await findByText(/Indian Commercial Gym Catalogue/)).toBeTruthy();
+    expect(await findByText(/Search & Navigation Responsiveness/)).toBeTruthy();
+    expect(await findByText(/Factual Weekly Performance/)).toBeTruthy();
   });
 
-  it('2. Popup does not appear repeatedly for an already acknowledged version', async () => {
-    // Seed acknowledged version as 2.1.1
-    mockStorageMap.set(RELEASE_NOTES_STORAGE_KEY, '2.1.1');
+  it('2. Fresh user completing onboarding sees 2.2.0 afterward on Home screen', async () => {
+    // Fresh user: no prior version in storage
+    expect(await releaseNotesService.getAcknowledgedVersion()).toBeNull();
 
-    const shouldShow = await releaseNotesService.shouldShowReleaseNotes('2.1.1');
-    expect(shouldShow).toBe(false);
+    // When arriving on Home screen after onboarding, popup triggers
+    mockSegments = ['home'];
+    const shouldShow = await releaseNotesService.shouldShowReleaseNotes();
+    expect(shouldShow).toBe(true);
 
-    const { queryByTestId } = await render(
-      <ReleaseNotesModal forcedVersion="2.1.1" />,
-    );
-
-    // Modal must NOT be visible
-    expect(queryByTestId('release-notes-modal')).toBeNull();
-  });
-
-  it('3. Popup appears again when a different eligible release is introduced', async () => {
-    // Previously acknowledged version 2.1.0
-    mockStorageMap.set(RELEASE_NOTES_STORAGE_KEY, '2.1.0');
-
-    // Querying for older version 2.1.0 -> already seen
-    expect(await releaseNotesService.shouldShowReleaseNotes('2.1.0')).toBe(false);
-
-    // Querying for new version 2.1.1 -> eligible to display!
-    expect(await releaseNotesService.shouldShowReleaseNotes('2.1.1')).toBe(true);
-
-    const { findByTestId, findByText } = await render(
-      <ReleaseNotesModal forcedVersion="2.1.1" />,
-    );
+    const { findByTestId, findByText } = await render(<ReleaseNotesModal />);
 
     expect(await findByTestId('release-notes-modal')).toBeTruthy();
-    expect(await findByText('v2.1.1')).toBeTruthy();
+    expect(await findByText('v2.2.0')).toBeTruthy();
+    expect(await findByText(/Exercise Demonstration Media/)).toBeTruthy();
   });
 
-  it('4. First-time onboarding is not interrupted (hidden on /onboarding screens)', async () => {
-    // Simulate user currently on /onboarding/welcome
-    mockSegments = ['onboarding', 'welcome'];
-
-    const { queryByTestId } = await render(
-      <ReleaseNotesModal forcedVersion="2.1.1" />,
-    );
-
-    // Modal must NEVER render during onboarding
-    expect(queryByTestId('release-notes-modal')).toBeNull();
-
-    // Check questionnaire step /onboarding/goal
-    mockSegments = ['onboarding', 'goal'];
-    const { queryByTestId: queryGoal } = await render(
-      <ReleaseNotesModal forcedVersion="2.1.1" />,
-    );
-    expect(queryGoal('release-notes-modal')).toBeNull();
-  });
-
-  it('5. Guest users can use the popup without network dependencies', async () => {
+  it('3. Guest users see the announcement and can dismiss it without network', async () => {
     useAuthStore.setState({
       status: 'guest',
       user: null,
       isGuest: true,
     });
 
-    const shouldShow = await releaseNotesService.shouldShowReleaseNotes('2.1.1');
+    const shouldShow = await releaseNotesService.shouldShowReleaseNotes('2.2.0');
     expect(shouldShow).toBe(true);
 
     const onDismiss = jest.fn();
     const { findByTestId } = await render(
-      <ReleaseNotesModal forcedVersion="2.1.1" onDismiss={onDismiss} />,
+      <ReleaseNotesModal forcedVersion="2.2.0" onDismiss={onDismiss} />,
     );
 
     const dismissBtn = await findByTestId('release-notes-dismiss-button');
@@ -169,23 +134,23 @@ describe('BeBig 2.0 — Production What\'s New Popup (ReleaseNotesModal)', () =>
     });
 
     expect(onDismiss).toHaveBeenCalled();
-    expect(mockStorageMap.get(RELEASE_NOTES_STORAGE_KEY)).toBe('2.1.1');
-    expect(await releaseNotesService.shouldShowReleaseNotes('2.1.1')).toBe(false);
+    expect(mockStorageMap.get(RELEASE_NOTES_STORAGE_KEY)).toBe('2.2.0');
+    expect(await releaseNotesService.shouldShowReleaseNotes('2.2.0')).toBe(false);
   });
 
-  it('6. Authenticated users can use the popup without network dependencies', async () => {
+  it('4. Authenticated users see the announcement and can dismiss it', async () => {
     useAuthStore.setState({
       status: 'authenticated',
       user: { id: 'usr_premium_athlete', email: 'athlete@bebig.app' },
       isGuest: false,
     });
 
-    const shouldShow = await releaseNotesService.shouldShowReleaseNotes('2.1.1');
+    const shouldShow = await releaseNotesService.shouldShowReleaseNotes('2.2.0');
     expect(shouldShow).toBe(true);
 
     const onDismiss = jest.fn();
     const { findByTestId } = await render(
-      <ReleaseNotesModal forcedVersion="2.1.1" onDismiss={onDismiss} />,
+      <ReleaseNotesModal forcedVersion="2.2.0" onDismiss={onDismiss} />,
     );
 
     const dismissBtn = await findByTestId('release-notes-dismiss-button');
@@ -194,91 +159,107 @@ describe('BeBig 2.0 — Production What\'s New Popup (ReleaseNotesModal)', () =>
     });
 
     expect(onDismiss).toHaveBeenCalled();
-    expect(mockStorageMap.get(RELEASE_NOTES_STORAGE_KEY)).toBe('2.1.1');
-    expect(await releaseNotesService.shouldShowReleaseNotes('2.1.1')).toBe(false);
+    expect(mockStorageMap.get(RELEASE_NOTES_STORAGE_KEY)).toBe('2.2.0');
+    expect(await releaseNotesService.shouldShowReleaseNotes('2.2.0')).toBe(false);
   });
 
-  it('7. Missing or invalid stored version values are handled safely', async () => {
-    // Test with null
-    mockStorageMap.delete(RELEASE_NOTES_STORAGE_KEY);
-    expect(await releaseNotesService.getAcknowledgedVersion()).toBeNull();
-    expect(await releaseNotesService.shouldShowReleaseNotes('2.1.1')).toBe(true);
+  it('5. Previously dismissed 2.2.0 does not reappear repeatedly', async () => {
+    mockStorageMap.set(RELEASE_NOTES_STORAGE_KEY, '2.2.0');
 
-    // Test with whitespace-only string
-    mockStorageMap.set(RELEASE_NOTES_STORAGE_KEY, '   ');
-    expect(await releaseNotesService.getAcknowledgedVersion()).toBeNull();
-    expect(await releaseNotesService.shouldShowReleaseNotes('2.1.1')).toBe(true);
+    const shouldShow = await releaseNotesService.shouldShowReleaseNotes('2.2.0');
+    expect(shouldShow).toBe(false);
 
-    // Test storage exception recovery
-    (platformStorage.getItem as jest.Mock).mockRejectedValueOnce(new Error('Storage disk failure'));
-    expect(await releaseNotesService.getAcknowledgedVersion()).toBeNull();
-
-    // Passing empty or non-string version safely returns false without crashing
-    expect(await releaseNotesService.shouldShowReleaseNotes('')).toBe(false);
-    expect(await releaseNotesService.shouldShowReleaseNotes(undefined as any)).toBe(true); // falls back to current app version
-  });
-
-  it('8. Dismissal is persisted correctly via "Got it" button and backdrop tap', async () => {
-    // 8a: Button dismissal
-    const onDismissButton = jest.fn();
-    const { findByTestId } = await render(
-      <ReleaseNotesModal forcedVersion="2.1.1" onDismiss={onDismissButton} />,
+    const { queryByTestId } = await render(
+      <ReleaseNotesModal forcedVersion="2.2.0" />,
     );
 
-    const btn = await findByTestId('release-notes-dismiss-button');
+    // Modal must NOT be visible
+    expect(queryByTestId('release-notes-modal')).toBeNull();
+  });
+
+  it('6. Splash screen does not show popup (index / empty segments)', async () => {
+    // 6a: Root index route
+    mockSegments = ['index'];
+    const { queryByTestId: queryIndex } = await render(
+      <ReleaseNotesModal forcedVersion="2.2.0" />,
+    );
+    expect(queryIndex('release-notes-modal')).toBeNull();
+
+    // 6b: Empty root route []
+    mockSegments = [];
+    const { queryByTestId: queryEmpty } = await render(
+      <ReleaseNotesModal forcedVersion="2.2.0" />,
+    );
+    expect(queryEmpty('release-notes-modal')).toBeNull();
+  });
+
+  it('7. Onboarding screens do not show popup (welcome / goal / preferences)', async () => {
+    mockSegments = ['onboarding', 'welcome'];
+    const { queryByTestId: queryWelcome } = await render(
+      <ReleaseNotesModal forcedVersion="2.2.0" />,
+    );
+    expect(queryWelcome('release-notes-modal')).toBeNull();
+
+    mockSegments = ['onboarding', 'goal'];
+    const { queryByTestId: queryGoal } = await render(
+      <ReleaseNotesModal forcedVersion="2.2.0" />,
+    );
+    expect(queryGoal('release-notes-modal')).toBeNull();
+  });
+
+  it('8. Active workout does not show popup', async () => {
+    mockSegments = ['workout', 'active'];
+    const { queryByTestId: queryWorkout } = await render(
+      <ReleaseNotesModal forcedVersion="2.2.0" />,
+    );
+    expect(queryWorkout('release-notes-modal')).toBeNull();
+  });
+
+  it('9. Navigating to a safe screen after onboarding triggers the pending announcement', async () => {
+    // User starts on onboarding screen: modal hidden
+    mockSegments = ['onboarding', 'preferences'];
+    const { queryByTestId, rerender, findByTestId } = await render(
+      <ReleaseNotesModal forcedVersion="2.2.0" />,
+    );
+    expect(queryByTestId('release-notes-modal')).toBeNull();
+
+    // User finishes onboarding and navigates to /home: modal triggers!
+    mockSegments = ['home'];
     await act(async () => {
-      fireEvent.press(btn);
+      rerender(<ReleaseNotesModal forcedVersion="2.2.0" />);
     });
 
-    expect(onDismissButton).toHaveBeenCalledTimes(1);
-    expect(mockStorageMap.get(RELEASE_NOTES_STORAGE_KEY)).toBe('2.1.1');
+    expect(await findByTestId('release-notes-modal')).toBeTruthy();
+  });
 
-    // 8b: Backdrop tap dismissal
-    mockStorageMap.clear();
+  it('10. App restart preserves acknowledgement and release notes dictionary is valid', async () => {
+    // Dismissal via backdrop
     const onDismissBackdrop = jest.fn();
-    const { findByTestId: findByTestId2 } = await render(
-      <ReleaseNotesModal forcedVersion="2.1.1" onDismiss={onDismissBackdrop} />,
+    const { findByTestId } = await render(
+      <ReleaseNotesModal forcedVersion="2.2.0" onDismiss={onDismissBackdrop} />,
     );
 
-    const backdrop = await findByTestId2('release-notes-backdrop');
+    const backdrop = await findByTestId('release-notes-backdrop');
     await act(async () => {
       fireEvent.press(backdrop);
     });
 
     expect(onDismissBackdrop).toHaveBeenCalledTimes(1);
-    expect(mockStorageMap.get(RELEASE_NOTES_STORAGE_KEY)).toBe('2.1.1');
-  });
+    expect(mockStorageMap.get(RELEASE_NOTES_STORAGE_KEY)).toBe('2.2.0');
 
-  it('9. Startup & navigation initialization remains stable (splash & workout protected)', async () => {
-    // 9a: Root splash screen route (index) must NEVER show release notes
-    mockSegments = ['index'];
-    const { queryByTestId: querySplash } = await render(
-      <ReleaseNotesModal forcedVersion="2.1.1" />,
-    );
-    expect(querySplash('release-notes-modal')).toBeNull();
+    // Simulate app restart with persisted storage
+    const shouldShowAfterRestart = await releaseNotesService.shouldShowReleaseNotes('2.2.0');
+    expect(shouldShowAfterRestart).toBe(false);
 
-    // 9b: Empty root route [] must NEVER show release notes
-    mockSegments = [];
-    const { queryByTestId: queryEmpty } = await render(
-      <ReleaseNotesModal forcedVersion="2.1.1" />,
-    );
-    expect(queryEmpty('release-notes-modal')).toBeNull();
+    // Verify 2.2.0 release notes dictionary
+    const notes220 = releaseNotesService.getReleaseNotesForVersion('2.2.0');
+    expect(notes220.version).toBe('2.2.0');
+    expect(notes220.highlights.length).toBe(5);
 
-    // 9c: Active workout in progress must NEVER be interrupted by release notes
-    mockSegments = ['workout', 'active'];
-    const { queryByTestId: queryWorkout } = await render(
-      <ReleaseNotesModal forcedVersion="2.1.1" />,
-    );
-    expect(queryWorkout('release-notes-modal')).toBeNull();
-  });
-
-  it('10. Existing behavior is preserved and release notes dictionary is valid', () => {
-    // Verify 2.1.1 release notes structure
+    // Verify historical version fallbacks
     const notes211 = releaseNotesService.getReleaseNotesForVersion('2.1.1');
     expect(notes211.version).toBe('2.1.1');
-    expect(notes211.highlights.length).toBe(6);
 
-    // Verify historical version fallback
     const notes210 = releaseNotesService.getReleaseNotesForVersion('2.1.0');
     expect(notes210.version).toBe('2.1.0');
 

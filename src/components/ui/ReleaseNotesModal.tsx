@@ -69,12 +69,6 @@ export function ReleaseNotesModal({
   // Screen routes prohibited from showing the popup
   const isBlockedScreen = isSplashActive || isOnboardingActive || isActiveWorkout;
 
-  // Track whether this session was initialized or navigated through onboarding
-  const wasInOnboarding = React.useRef(false);
-  if (isOnboardingActive) {
-    wasInOnboarding.current = true;
-  }
-
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   const appVersion = forcedVersion || getAppVersionInfo().version;
@@ -87,13 +81,6 @@ export function ReleaseNotesModal({
     setNotes(releaseNotesService.getReleaseNotesForVersion(appVersion));
 
     if (!autoCheck || isBlockedScreen) {
-      return;
-    }
-
-    // If this session just came through onboarding, mark acknowledged without popping up
-    if (wasInOnboarding.current && !forcedVersion) {
-      void releaseNotesService.acknowledgeReleaseNotes(appVersion);
-      wasInOnboarding.current = false;
       return;
     }
 
