@@ -19,19 +19,23 @@ import { TrainingContext, WeeklySummary } from './types.ts';
  * @param profile - The user's profile summary.
  * @param completedWorkouts - All completed workouts for the user.
  * @param now - Optional timestamp for "current time" (useful for testing).
+ * @param allTimeVolumeOverride - Optional exact lifetime volume when completedWorkouts is bounded.
  */
 export function buildTrainingContext(
   userId: string,
   profile: { age?: number; weight?: number; height?: number; [key: string]: any },
   completedWorkouts: WorkoutSession[],
-  now: Date = new Date()
+  now: Date = new Date(),
+  allTimeVolumeOverride?: number
 ): TrainingContext {
   
   // Base deterministic analytics
   const workoutsThisWeek = calculateWeeklyWorkouts(completedWorkouts, now);
   const workoutsThisMonth = calculateMonthlyWorkouts(completedWorkouts, now);
   const weeklyVolume = calculateWeeklyVolume(completedWorkouts, now);
-  const allTimeVolume = calculateAllTimeVolume(completedWorkouts);
+  const allTimeVolume = typeof allTimeVolumeOverride === 'number'
+    ? allTimeVolumeOverride
+    : calculateAllTimeVolume(completedWorkouts);
   
   // Progression & PRs
   const recentProgressions = calculateRecentProgressions(completedWorkouts);

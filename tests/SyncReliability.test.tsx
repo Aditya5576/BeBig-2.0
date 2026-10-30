@@ -12,14 +12,12 @@ describe('Sync-Status-2: Sync Reliability & Truthful States', () => {
   let manager: SyncLifecycleManager;
   let mockNetwork: NetworkMonitor;
   let workoutService: any;
-  let scheduledService: any;
   let templateService: any;
   let exerciseService: any;
 
   beforeEach(() => {
     // Basic service mocks
     workoutService = { upsertBatch: jest.fn().mockResolvedValue([]), upsert: jest.fn() };
-    scheduledService = { upsertBatch: jest.fn().mockResolvedValue([]), upsert: jest.fn() };
     templateService = { upsertBatch: jest.fn().mockResolvedValue([]), upsert: jest.fn() };
     exerciseService = { upsertBatch: jest.fn().mockResolvedValue([]), upsert: jest.fn() };
 
@@ -28,7 +26,7 @@ describe('Sync-Status-2: Sync Reliability & Truthful States', () => {
       subscribe: jest.fn(),
     } as any;
 
-    engine = new SyncEngine(workoutService, templateService, exerciseService, scheduledService);
+    engine = new SyncEngine(workoutService, templateService, exerciseService);
     manager = new SyncLifecycleManager(engine, mockNetwork);
 
     jest.spyOn(syncMetadataStore, 'getPendingRecords').mockResolvedValue([]);
@@ -41,35 +39,35 @@ describe('Sync-Status-2: Sync Reliability & Truthful States', () => {
   });
 
   it('1. Head-of-line blocking: One entity fails but independent entity continues syncing', async () => {
-    // Workout throws 500 Unknown error, Scheduled Workout succeeds
+    // Workout throws 500 Unknown error, Template succeeds
     jest.spyOn(syncMetadataStore, 'getPendingRecords').mockImplementation(async (type) => {
       if (type === 'workout') return [{ entityType: 'workout', id: 'w1', syncStatus: 'pending_upload', clientUpdatedAt: '' } as any];
-      if (type === 'scheduled_workout') return [{ entityType: 'scheduled_workout', id: 's1', syncStatus: 'pending_upload', clientUpdatedAt: '' } as any];
+      if (type === 'template') return [{ entityType: 'template', id: 't1', syncStatus: 'pending_upload', clientUpdatedAt: '' } as any];
       return [];
     });
     
     // Ensure payload builder doesn't error
     jest.spyOn(engine as any, 'buildWorkoutPayloads').mockResolvedValue({ payloads: [{ id: 'w1' }], validMeta: [] });
-    jest.spyOn(engine as any, 'buildScheduledWorkoutPayloads').mockResolvedValue({ payloads: [{ id: 's1' }], validMeta: [] });
+    jest.spyOn(engine as any, 'buildTemplatePayloads').mockResolvedValue({ payloads: [{ id: 't1' }], validMeta: [] });
 
     workoutService.upsertBatch.mockRejectedValue(new CloudError('unknown', 'Unknown server error'));
-    scheduledService.upsertBatch.mockResolvedValue([{ id: 's1', client_updated_at: '2026', updated_at: '2026' }]);
+    templateService.upsertBatch.mockResolvedValue([{ id: 't1', client_updated_at: '2026', updated_at: '2026' }]);
     
-    jest.spyOn(engine as any, 'reconcileScheduledWorkoutResponses').mockResolvedValue({ synced: 1, reconciled: 0 });
+    jest.spyOn(engine as any, 'reconcileTemplateResponses').mockResolvedValue({ synced: 1, reconciled: 0 });
 
     const result = await engine.push(mockScope);
     
-    // Result should be partial, scheduled workout should have synced
+    // Result should be partial, template should have synced
     expect(result.status).toBe('partial');
     expect(result.errors).toContainEqual(expect.objectContaining({ kind: 'unknown' }));
-    expect(scheduledService.upsertBatch).toHaveBeenCalled();
-    expect(result.pushedCount).toBe(1); // 1 scheduled workout pushed
+    expect(templateService.upsertBatch).toHaveBeenCalled();
+    expect(result.pushedCount).toBe(1); // 1 template pushed
   });
 
   it('2. Network/Auth error aborts entire queue (safe abort)', async () => {
     jest.spyOn(syncMetadataStore, 'getPendingRecords').mockImplementation(async (type) => {
       if (type === 'workout') return [{ entityType: 'workout', id: 'w1', syncStatus: 'pending_upload', clientUpdatedAt: '' } as any];
-      if (type === 'scheduled_workout') return [{ entityType: 'scheduled_workout', id: 's1', syncStatus: 'pending_upload', clientUpdatedAt: '' } as any];
+      if (type === 'template') return [{ entityType: 'template', id: 't1', syncStatus: 'pending_upload', clientUpdatedAt: '' } as any];
       return [];
     });
     jest.spyOn(engine as any, 'buildWorkoutPayloads').mockResolvedValue({ payloads: [{ id: 'w1' }], validMeta: [] });
@@ -78,35 +76,35 @@ describe('Sync-Status-2: Sync Reliability & Truthful States', () => {
 
     const result = await engine.push(mockScope);
     
-    // Result should be error, scheduled workout should NOT be attempted
+    // Result should be error, template should NOT be attempted
     expect(result.status).toBe('error');
-    expect(scheduledService.upsertBatch).not.toHaveBeenCalled();
+    expect(templateService.upsertBatch).not.toHaveBeenCalled();
   });
 
   it('3. Permission/RLS error is caught, quarantined, and does not halt engine', async () => {
     jest.spyOn(syncMetadataStore, 'getPendingRecords').mockImplementation(async (type) => {
       if (type === 'workout') return [{ entityType: 'workout', id: 'w1', syncStatus: 'pending_upload', clientUpdatedAt: '' } as any];
-      if (type === 'scheduled_workout') return [{ entityType: 'scheduled_workout', id: 's1', syncStatus: 'pending_upload', clientUpdatedAt: '' } as any];
+      if (type === 'template') return [{ entityType: 'template', id: 't1', syncStatus: 'pending_upload', clientUpdatedAt: '' } as any];
       return [];
     });
     
     jest.spyOn(engine as any, 'buildWorkoutPayloads').mockResolvedValue({ payloads: [{ id: 'w1' }], validMeta: [] });
-    jest.spyOn(engine as any, 'buildScheduledWorkoutPayloads').mockResolvedValue({ payloads: [{ id: 's1' }], validMeta: [] });
+    jest.spyOn(engine as any, 'buildTemplatePayloads').mockResolvedValue({ payloads: [{ id: 't1' }], validMeta: [] });
 
     // RLS permission error on batch
     workoutService.upsertBatch.mockRejectedValue(new CloudError('permission', 'RLS error'));
     // Fallback individual also hits RLS
     workoutService.upsert.mockRejectedValue(new CloudError('permission', 'RLS error'));
     
-    scheduledService.upsertBatch.mockResolvedValue([{ id: 's1', client_updated_at: '2026', updated_at: '2026' }]);
-    jest.spyOn(engine as any, 'reconcileScheduledWorkoutResponses').mockResolvedValue({ synced: 1, reconciled: 0 });
+    templateService.upsertBatch.mockResolvedValue([{ id: 't1', client_updated_at: '2026', updated_at: '2026' }]);
+    jest.spyOn(engine as any, 'reconcileTemplateResponses').mockResolvedValue({ synced: 1, reconciled: 0 });
 
     const result = await engine.push(mockScope);
     
     expect(result.status).toBe('success');
     expect(result.quarantinedCount).toBe(1); // Workout quarantined!
     expect(syncMetadataStore.markError).toHaveBeenCalledWith('workout', 'w1', mockScope); // Quarantined means marked error
-    expect(scheduledService.upsertBatch).toHaveBeenCalled(); // Engine continued!
+    expect(templateService.upsertBatch).toHaveBeenCalled(); // Engine continued!
   });
 
   it('4. Truthful status: Trigger tracks lastSyncFailed on network error', async () => {

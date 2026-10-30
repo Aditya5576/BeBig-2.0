@@ -55,3 +55,6 @@ Thumbs.db
 
 .vercel
 .env*
+
+# Local workstation backups & agent rosters (never commit)
+roster-backups/

@@ -17,17 +17,27 @@ export interface ReleaseNoteItem {
 }
 
 export const CURRENT_RELEASE_NOTES: Record<string, ReleaseNoteItem> = {
+  '2.2.0': {
+    version: '2.2.0',
+    title: "What's New in BeBig 2.2",
+    highlights: [
+      'Exercise Demonstration Media: 10 verified core exercise demonstrations and 2 seed mappings with author attribution and CC-BY-SA licensing.',
+      'Unified Custom Exercise Creation: Identical creation workflow across Exercise Library and Ongoing Workout, with persistent custom photo support.',
+      'Indian Commercial Gym Catalogue: Refined exercise catalogue prioritized for standard gym equipment with duplicate movement suppression.',
+      'Search & Navigation Responsiveness: Stable virtual keyboard typing during exercise search and smooth list scrolling with cached exercise hydration.',
+      'Factual Weekly Performance: Clean, deterministic weekly training trends and progressive overload analytics following the retirement of the legacy AI coach.',
+    ],
+  },
   '2.1.1': {
     version: '2.1.1',
-    title: "What's New in BeBig",
+    title: "What's New in BeBig 2.0",
     highlights: [
-      'Per-set Notes are easier to access during workouts',
-      'Notes remain visible after workout completion',
-      'Notes are shown in Workout Summary',
-      'Notes are shown in Workout History detail',
-      'History cards show when notes exist',
-      'Previous performance indicates when a previous set had a note',
-      'Notes remain attached to the correct exercise/set',
+      'Automatic Session Numbering: Workouts started from templates automatically track and display sequential session numbers.',
+      'Recently Used Exercises: Quick access to your frequently and recently used exercises at the top of the picker.',
+      'Data Export (Excel & PDF): Export complete workout histories and saved templates directly to .xlsx spreadsheets and formatted .pdf documents.',
+      'Profile Photo Persistence: Upload, update, and reliably keep your athlete profile photo across web and mobile.',
+      'Progress Analytics 2.0 & AI Weekly Analysis: Deep volume, intensity, and muscle group analysis with AI-guided weekly performance insights.',
+      'Workout & Rest Timer Notifications: Reliable background alerts and lock-screen notifications when your rest timer finishes.',
     ],
   },
   '2.1.0': {
@@ -76,32 +86,44 @@ export const CURRENT_RELEASE_NOTES: Record<string, ReleaseNoteItem> = {
 };
 
 export const defaultReleaseHighlights: string[] = [
-  'Rest Timer UI is smoother and better aligned',
-  'Navigation feels faster and smoother',
-  'Exercise Picker performance improved',
-  'Workout experience polished',
+  'Verified Exercise Demonstration Media with licensing attribution',
+  'Unified Custom Exercise Creation with photo persistence',
+  'Exercise catalogue refined for Indian commercial gym equipment',
+  'Smooth exercise library navigation and stable search typing',
+  'Factual Weekly Performance and progressive overload analytics',
+  'Data Export to Excel (.xlsx) and PDF (.pdf)',
 ];
 
 export class ReleaseNotesService {
   async getAcknowledgedVersion(): Promise<string | null> {
     try {
-      return await platformStorage.getItem(RELEASE_NOTES_STORAGE_KEY);
+      const val = await platformStorage.getItem(RELEASE_NOTES_STORAGE_KEY);
+      if (typeof val === 'string' && val.trim().length > 0) {
+        return val.trim();
+      }
+      return null;
     } catch {
       return null;
     }
   }
 
   async shouldShowReleaseNotes(targetVersion?: string): Promise<boolean> {
-    const version = targetVersion || getAppVersionInfo().version;
-    if (!version) return false;
+    const rawVersion = targetVersion !== undefined ? targetVersion : getAppVersionInfo().version;
+    if (!rawVersion || typeof rawVersion !== 'string' || rawVersion.trim().length === 0) {
+      return false;
+    }
+    const version = rawVersion.trim();
 
     const acknowledgedVersion = await this.getAcknowledgedVersion();
     return acknowledgedVersion !== version;
   }
 
   async acknowledgeReleaseNotes(targetVersion?: string): Promise<void> {
-    const version = targetVersion || getAppVersionInfo().version;
-    if (!version) return;
+    const rawVersion = targetVersion !== undefined ? targetVersion : getAppVersionInfo().version;
+    if (!rawVersion || typeof rawVersion !== 'string' || rawVersion.trim().length === 0) {
+      return;
+    }
+    const version = rawVersion.trim();
 
     try {
       await platformStorage.setItem(RELEASE_NOTES_STORAGE_KEY, version);

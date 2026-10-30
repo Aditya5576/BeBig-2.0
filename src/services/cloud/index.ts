@@ -8,4 +8,3 @@ export * from './workoutCloudService';
 export * from './templateCloudService';
 export * from './customExerciseCloudService';
 export * from './timestamp';
-export * from './scheduledWorkoutCloudService';

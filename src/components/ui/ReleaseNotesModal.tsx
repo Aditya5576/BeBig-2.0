@@ -55,8 +55,19 @@ export function ReleaseNotesModal({
   }
 
   const firstSegment = segments[0];
+  const secondSegment = segments[1];
+
   // Active splash screen conditions: app/index gatekeeper screen active or initializing
   const isSplashActive = firstSegment === 'index' || firstSegment === '(index)' || !firstSegment;
+
+  // Onboarding routes must NEVER show release notes (do not interrupt onboarding)
+  const isOnboardingActive = firstSegment === 'onboarding';
+
+  // Active workout in progress must NEVER be interrupted
+  const isActiveWorkout = firstSegment === 'workout' && secondSegment === 'active';
+
+  // Screen routes prohibited from showing the popup
+  const isBlockedScreen = isSplashActive || isOnboardingActive || isActiveWorkout;
 
   const styles = useMemo(() => createStyles(colors), [colors]);
 
@@ -69,7 +80,7 @@ export function ReleaseNotesModal({
   useEffect(() => {
     setNotes(releaseNotesService.getReleaseNotesForVersion(appVersion));
 
-    if (!autoCheck || isSplashActive) {
+    if (!autoCheck || isBlockedScreen) {
       return;
     }
 
@@ -88,7 +99,7 @@ export function ReleaseNotesModal({
     return () => {
       isMounted = false;
     };
-  }, [appVersion, autoCheck, isSplashActive]);
+  }, [appVersion, autoCheck, isBlockedScreen, forcedVersion]);
 
   const handleDismiss = async () => {
     setVisible(false);
@@ -100,7 +111,7 @@ export function ReleaseNotesModal({
     onDismiss?.();
   };
 
-  if (!visible || isSplashActive) {
+  if (!visible || isBlockedScreen) {
     return null;
   }
 
@@ -177,7 +188,8 @@ const createStyles = (colors: any) =>
     },
     dialogCard: {
       width: '100%',
-      maxWidth: 380,
+      maxWidth: 400,
+      maxHeight: '85%',
       backgroundColor: colors.surfaceElevated || colors.surface,
       borderColor: colors.borderLight,
       borderWidth: 1.5,
@@ -212,7 +224,7 @@ const createStyles = (colors: any) =>
       letterSpacing: 0.3,
     },
     contentScroll: {
-      maxHeight: 240,
+      maxHeight: 280,
     },
     bulletsContainer: {
       gap: spacing.sm,

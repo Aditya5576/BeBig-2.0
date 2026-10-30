@@ -34,8 +34,8 @@ export function normalizeString(str: string): string {
 }
 
 /**
- * Compute Damerau-Levenshtein distance between two strings.
- * Handles insertions, deletions, substitutions, and adjacent transpositions.
+ * Compute Damerau-Levenshtein distance between two strings using a flat typed buffer.
+ * Handles insertions, deletions, substitutions, and adjacent transpositions with zero GC pressure.
  */
 export function damerauLevenshtein(a: string, b: string): number {
   const al = a.length;
@@ -43,37 +43,48 @@ export function damerauLevenshtein(a: string, b: string): number {
   if (al === 0) return bl;
   if (bl === 0) return al;
 
-  // Optimize: single array or matrix
-  const matrix: number[][] = [];
+  const cols = bl + 1;
+  const d = new Int32Array((al + 1) * cols);
+
   for (let i = 0; i <= al; i++) {
-    matrix[i] = [i];
+    d[i * cols] = i;
   }
   for (let j = 0; j <= bl; j++) {
-    matrix[0][j] = j;
+    d[j] = j;
   }
 
   for (let i = 1; i <= al; i++) {
+    const aChar = a.charCodeAt(i - 1);
+    const iCols = i * cols;
+    const prevICols = (i - 1) * cols;
+    const prevPrevICols = (i - 2) * cols;
+
     for (let j = 1; j <= bl; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      matrix[i][j] = Math.min(
-        matrix[i - 1][j] + 1, // deletion
-        matrix[i][j - 1] + 1, // insertion
-        matrix[i - 1][j - 1] + cost, // substitution
-      );
+      const bChar = b.charCodeAt(j - 1);
+      const cost = aChar === bChar ? 0 : 1;
+
+      let min = d[prevICols + j] + 1; // deletion
+      const insert = d[iCols + j - 1] + 1; // insertion
+      if (insert < min) min = insert;
+      const sub = d[prevICols + j - 1] + cost; // substitution
+      if (sub < min) min = sub;
 
       // Transposition check
       if (
         i > 1 &&
         j > 1 &&
-        a[i - 1] === b[j - 2] &&
-        a[i - 2] === b[j - 1]
+        aChar === b.charCodeAt(j - 2) &&
+        a.charCodeAt(i - 2) === bChar
       ) {
-        matrix[i][j] = Math.min(matrix[i][j], matrix[i - 2][j - 2] + 1);
+        const trans = d[prevPrevICols + j - 2] + 1;
+        if (trans < min) min = trans;
       }
+
+      d[iCols + j] = min;
     }
   }
 
-  return matrix[al][bl];
+  return d[al * cols + bl];
 }
 
 /**
@@ -147,17 +158,12 @@ export function calculateExerciseMatchScore(targetName: string, query: string): 
       return 50 - dist * 5; // 45 for dist 1, 40 for dist 2
     }
 
-    // Sliding window check if query is a substring with small typo
-    // E.g. target is "Barbell Lat Pulldown", query is "lat pulldwon"
-    if (colTarget.length > colQuery.length) {
-      const qLen = colQuery.length;
-      for (let start = 0; start <= colTarget.length - qLen + 2; start++) {
-        for (let len = Math.max(3, qLen - 1); len <= Math.min(colTarget.length - start, qLen + 1); len++) {
-          const slice = colTarget.slice(start, start + len);
-          const windowDist = damerauLevenshtein(slice, colQuery);
-          if (windowDist <= maxAllowedDist) {
-            return 45 - windowDist * 5;
-          }
+    // Direct token distance check against individual words (e.g. target "Barbell Lat Pulldown", query "pulldwon")
+    for (const tToken of targetTokens) {
+      if (Math.abs(tToken.length - normQuery.length) <= maxAllowedDist) {
+        const tokenDist = damerauLevenshtein(tToken, normQuery);
+        if (tokenDist <= maxAllowedDist) {
+          return 45 - tokenDist * 5;
         }
       }
     }

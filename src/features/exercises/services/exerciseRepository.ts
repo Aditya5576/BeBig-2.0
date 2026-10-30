@@ -2,11 +2,14 @@ import { Exercise, ExerciseCategory, CreateCustomExerciseInput, UpdateCustomExer
 import { ExerciseFilterOptions, ExerciseListResult, IExerciseProvider } from '../providers/types';
 import { WgerExerciseProvider } from '../providers/wger/WgerExerciseProvider';
 import { customExerciseStorage } from '../storage/customExerciseStorage';
-import { exerciseCacheStorage } from '../storage/exerciseCacheStorage';
+import { exerciseCacheStorage, SEED_EXERCISES } from '../storage/exerciseCacheStorage';
+import { exercisePhotoStorage } from '../storage/exercisePhotoStorage';
+import { exercisePhotoCloudService } from './exercisePhotoCloudService';
 import { normalizeCategory } from '../providers/wger/wgerMapper';
 import { getCurrentUserScope, UserScope } from '../../auth/utils/userScope';
 import { syncMetadataStore, syncLifecycleManager } from '../../../services/sync';
 import { filterAndRankExercises } from '../utils/exerciseSearch';
+import { filterCatalogueForIndianGym } from '../data/gymEquipmentFilter';
 
 async function withTimeout<T>(promise: Promise<T>, ms: number = 4000): Promise<T> {
   let timer: any;
@@ -81,7 +84,12 @@ export function inferCategoryFromQuery(query: string): ExerciseCategory | undefi
 export class ExerciseRepository {
   private provider: IExerciseProvider;
   private candidateCache = new Map<string, Exercise[]>();
+  private customExerciseMemoryMap = new Map<string, Exercise>();
+  private customExercisesVersion = 0;
   private searchSequence = 0;
+  private lastFilteredCacheRef: Exercise[] | null = null;
+  private lastFilteredOptionsKey: string = '';
+  private lastFilteredResult: Exercise[] = [];
 
   constructor(provider?: IExerciseProvider) {
     this.provider = provider || new WgerExerciseProvider();
@@ -185,6 +193,7 @@ export class ExerciseRepository {
       }
 
       // Query provider with timeout
+      let primarySearchFailed = false;
       try {
         const providerResult = await withTimeout(
           this.provider.listExercises({
@@ -209,42 +218,52 @@ export class ExerciseRepository {
           this.candidateCache.set(targetCategory, candidatePool);
         }
       } catch {
+        primarySearchFailed = true;
         // Continue with cached candidate pool
       }
 
       // Rank candidate pool
       let ranked = filterAndRankExercises(candidatePool, rawQuery, options.category);
 
-      // If ranked is empty, attempt fallback candidate retrieval (e.g. token splitting)
-      if (ranked.length === 0) {
+      // If ranked is empty and network is healthy, attempt concurrent fallback candidate retrieval
+      if (ranked.length === 0 && !primarySearchFailed) {
         const qTokens = rawQuery!.split(/\s+/).filter((t) => t.length >= 3);
-        const searchTokens = [...qTokens, rawQuery!.replace(/\s+/g, '')];
+        const searchTokens = Array.from(new Set([...qTokens, rawQuery!.replace(/\s+/g, '')])).slice(0, 2);
 
-        for (const token of searchTokens) {
-          try {
-            const fallbackResult = await withTimeout(
-              this.provider.listExercises({
-                ...options,
-                query: token,
-                limit: 50,
-              }),
-              2500,
-            );
-            if (fallbackResult.exercises.length > 0) {
-              void exerciseCacheStorage.saveToCatalog(fallbackResult.exercises);
-              const newlyRanked = filterAndRankExercises(
-                fallbackResult.exercises,
-                rawQuery,
-                options.category,
-              );
-              if (newlyRanked.length > 0) {
-                ranked = newlyRanked;
-                break;
-              }
+        const fallbackPromises = searchTokens.map((token) =>
+          withTimeout(
+            this.provider.listExercises({
+              ...options,
+              query: token,
+              limit: 50,
+            }),
+            2000,
+          ),
+        );
+
+        try {
+          const results = await Promise.allSettled(fallbackPromises);
+          const newlyFetched: Exercise[] = [];
+
+          for (const res of results) {
+            if (res.status === 'fulfilled' && res.value.exercises.length > 0) {
+              newlyFetched.push(...res.value.exercises);
             }
-          } catch {
-            // Ignore fallback errors
           }
+
+          if (newlyFetched.length > 0) {
+            void exerciseCacheStorage.saveToCatalog(newlyFetched);
+            const newlyRanked = filterAndRankExercises(
+              newlyFetched,
+              rawQuery,
+              options.category,
+            );
+            if (newlyRanked.length > 0) {
+              ranked = newlyRanked;
+            }
+          }
+        } catch {
+          // Ignore fallback errors
         }
       }
 
@@ -255,10 +274,23 @@ export class ExerciseRepository {
     }
     }
 
-    // 3. Merge custom and provider exercises (exact & strongest matches ranked to top)
+    // 3. Merge custom, foundational seed exercises, and provider exercises
+    const isUnfilteredFirstPage =
+      isFirstPage &&
+      !hasQuery &&
+      (!options.category || options.category === 'all') &&
+      options.source !== 'custom';
+
     const combinedMap = new Map<string, Exercise>();
     if (isFirstPage) {
       customMatches.forEach((e) => combinedMap.set(e.id, e));
+    }
+    if (isUnfilteredFirstPage) {
+      SEED_EXERCISES.forEach((seed) => {
+        if (!combinedMap.has(seed.id)) {
+          combinedMap.set(seed.id, seed);
+        }
+      });
     }
     providerExercises.forEach((e) => {
       if (!combinedMap.has(e.id)) {
@@ -267,15 +299,23 @@ export class ExerciseRepository {
     });
     const combined = Array.from(combinedMap.values());
 
-    const finalExercises = hasQuery && isFirstPage
+    const rankedExercises = hasQuery && isFirstPage
       ? filterAndRankExercises(combined, rawQuery, options.category)
       : combined;
+
+    const finalExercises = filterCatalogueForIndianGym(rankedExercises, {
+      includeNonStandardEquipment: options.equipment === 'all' || options.equipment === 'non-standard',
+      allowDuplicates: false,
+      isSearchActive: hasQuery,
+    }).filtered;
+
+    const seedCount = isUnfilteredFirstPage ? SEED_EXERCISES.length : 0;
 
     return {
       exercises: finalExercises,
       totalCount: hasQuery
         ? finalExercises.length
-        : totalCount + customMatches.length,
+        : totalCount + customMatches.length + seedCount,
       hasMore,
       nextOffset,
     };
@@ -285,7 +325,21 @@ export class ExerciseRepository {
     // Check custom exercises first
     if (id.startsWith('custom_')) {
       const customs = await customExerciseStorage.getCustomExercises(scope);
-      return customs.find((e) => e.id === id) || null;
+      customs.forEach((c) => this.customExerciseMemoryMap.set(c.id, c));
+      const found = customs.find((e) => e.id === id);
+      if (found) {
+        // Self-heal: if images array is empty but photoPath exists and local photo exists on disk, attach it
+        if ((!found.images || found.images.length === 0) && found.photoPath) {
+          const localPhoto = await exercisePhotoStorage.getLocalPhoto(id);
+          if (localPhoto) {
+            found.images = [{ id: `photo_${id}`, url: localPhoto, isMain: true }];
+            void customExerciseStorage.saveCustomExercise(found, scope);
+          }
+        }
+        this.customExerciseMemoryMap.set(found.id, found);
+        return found;
+      }
+      return null;
     }
 
     // Check local exercise cache first
@@ -307,17 +361,53 @@ export class ExerciseRepository {
   }
 
   /**
+   * Synchronously return cached exercise by ID if present in memory.
+   * Enables immediate 0ms rendering when navigating to Exercise Detail.
+   */
+  getCachedExerciseByIdSync(id: string): Exercise | null {
+    if (!id) return null;
+    if (this.customExerciseMemoryMap.has(id)) {
+      return this.customExerciseMemoryMap.get(id) || null;
+    }
+    return exerciseCacheStorage.getCachedExerciseByIdSync(id);
+  }
+
+  /**
+   * Current custom exercises version counter for dirty-checking on screen focus.
+   */
+  getCustomExercisesVersion(): number {
+    return this.customExercisesVersion;
+  }
+
+  /**
    * Returns cached exercises synchronously or locally without network delay.
    */
   getCachedExercises(options: ExerciseFilterOptions = {}): Exercise[] {
     if (options.source === 'custom') {
       return []; // Custom exercises are retrieved asynchronously
     }
-    return exerciseCacheStorage.searchCached({
+    const cached = exerciseCacheStorage.searchCached({
       query: options.query,
       category: options.category,
       limit: options.limit,
     });
+
+    const optionsKey = `${options.equipment || 'standard'}::${Boolean(options.query && options.query.trim().length > 0)}`;
+    if (this.lastFilteredCacheRef === cached && this.lastFilteredOptionsKey === optionsKey) {
+      return this.lastFilteredResult;
+    }
+
+    const result = filterCatalogueForIndianGym(cached, {
+      includeNonStandardEquipment: options.equipment === 'all' || options.equipment === 'non-standard',
+      allowDuplicates: false,
+      isSearchActive: Boolean(options.query && options.query.trim().length > 0),
+    }).filtered;
+
+    this.lastFilteredCacheRef = cached;
+    this.lastFilteredOptionsKey = optionsKey;
+    this.lastFilteredResult = result;
+
+    return result;
   }
 
   async createCustomExercise(
@@ -372,7 +462,8 @@ export class ExerciseRepository {
       primaryMuscles,
       secondaryMuscles,
       equipment,
-      images: [],
+      images: input.images || [],
+      photoPath: input.photoPath || null,
       sourceProvider: 'custom',
       isCustom: true,
       createdAt: now,
@@ -381,6 +472,7 @@ export class ExerciseRepository {
 
     // 1. Local durable save first (Source of Truth)
     await customExerciseStorage.saveCustomExercise(newExercise, resolvedScope);
+    this.customExerciseMemoryMap.set(newExercise.id, newExercise);
 
     // Invalidate candidate cache so new custom exercise immediately shows up in queries
     this.invalidateCandidateCache();
@@ -462,12 +554,16 @@ export class ExerciseRepository {
       primaryMuscles,
       secondaryMuscles,
       equipment,
+      images: input.images !== undefined ? input.images : existing.images,
+      photoPath: input.photoPath !== undefined ? input.photoPath : existing.photoPath,
       isCustom: true,
       updatedAt: now,
     };
 
     // 1. Local durable save first (Source of Truth)
     await customExerciseStorage.saveCustomExercise(updated, resolvedScope);
+    this.customExerciseMemoryMap.set(updated.id, updated);
+    this.invalidateCandidateCache(updated.id);
 
     // 2. Mark pending upload in sync metadata (authenticated only)
     if (resolvedScope && resolvedScope.ownerType === 'authenticated') {
@@ -498,8 +594,29 @@ export class ExerciseRepository {
    */
   async deleteCustomExercise(id: string, scope?: UserScope | null): Promise<void> {
     const resolvedScope = scope !== undefined ? scope : getCurrentUserScope();
+
+    // 1. Capture existing exercise details before local deletion removes it
+    const existingList = await customExerciseStorage.getCustomExercises(resolvedScope);
+    const existing = existingList.find((e) => e.id === id);
+    const cloudPhotoPath = existing?.photoPath;
+    const isAuth = Boolean(resolvedScope && resolvedScope.ownerType === 'authenticated' && resolvedScope.ownerId);
+
     try {
-      if (resolvedScope && resolvedScope.ownerType === 'authenticated') {
+      // 2. If authenticated and has a cloud photo, trigger user-scoped cloud photo cleanup
+      if (isAuth && cloudPhotoPath && resolvedScope?.ownerId) {
+        try {
+          const deleteSuccess = await exercisePhotoCloudService.deletePhoto(resolvedScope.ownerId, cloudPhotoPath);
+          if (!deleteSuccess && typeof __DEV__ !== 'undefined' && __DEV__) {
+            console.warn(`[ExerciseRepository] Cloud photo cleanup did not complete for ${cloudPhotoPath}`);
+          }
+        } catch (photoErr: any) {
+          if (typeof __DEV__ !== 'undefined' && __DEV__) {
+            console.warn(`[ExerciseRepository] Error during cloud photo cleanup:`, photoErr?.message);
+          }
+        }
+      }
+
+      if (isAuth) {
         const existingMeta = await syncMetadataStore.getRecord('custom_exercise', id, resolvedScope);
         const isUnsyncedLocalCreate =
           (!existingMeta || existingMeta.syncStatus === 'pending_upload') &&
@@ -528,12 +645,15 @@ export class ExerciseRepository {
         await customExerciseStorage.deleteCustomExercise(id, resolvedScope);
       }
     } finally {
+      void exercisePhotoStorage.deleteLocalPhoto(id).catch(() => {});
       this.invalidateCandidateCache(id);
     }
   }
 
   private invalidateCandidateCache(id?: string): void {
+    this.customExercisesVersion++;
     if (id) {
+      this.customExerciseMemoryMap.delete(id);
       this.candidateCache.forEach((list, key) => {
         this.candidateCache.set(
           key,
@@ -542,6 +662,7 @@ export class ExerciseRepository {
       });
     } else {
       this.candidateCache.clear();
+      this.customExerciseMemoryMap.clear();
     }
   }
 
@@ -549,7 +670,9 @@ export class ExerciseRepository {
    * Invalidates volatile in-memory storage cache on logout/user switch.
    */
   clearInMemoryState(): void {
+    this.customExercisesVersion++;
     this.candidateCache.clear();
+    this.customExerciseMemoryMap.clear();
     customExerciseStorage.clearMemoryCache();
   }
 }

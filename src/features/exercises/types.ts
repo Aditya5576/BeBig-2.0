@@ -45,6 +45,7 @@ export interface Exercise {
   sourceProvider: ExerciseSourceProvider;
   sourceExerciseId?: string;
   isCustom: boolean;
+  photoPath?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -56,6 +57,8 @@ export interface CreateCustomExerciseInput {
   primaryMuscles: string[];
   secondaryMuscles?: string[];
   equipment?: string[];
+  images?: ExerciseImage[];
+  photoPath?: string | null;
 }
 
 export interface UpdateCustomExerciseInput {
@@ -66,4 +69,56 @@ export interface UpdateCustomExerciseInput {
   primaryMuscles?: string[];
   secondaryMuscles?: string[];
   equipment?: string[];
+  images?: ExerciseImage[];
+  photoPath?: string | null;
 }
+
+/**
+ * Exercise Demonstration Media & Licensing Types
+ *
+ * Provides a type-safe domain foundation for demonstration media,
+ * ensuring all media mappings are bound to verified exercise IDs
+ * with explicit copyright and attribution metadata.
+ */
+
+export type ExerciseMediaType = 'image' | 'animation' | 'video';
+
+export type ExerciseMediaLicenseType =
+  | 'CC0'
+  | 'CC-BY-3.0'
+  | 'CC-BY-4.0'
+  | 'CC-BY-SA-3.0'
+  | 'CC-BY-SA-4.0'
+  | 'PUBLIC_DOMAIN'
+  | 'PROPRIETARY'
+  | 'UNVERIFIED';
+
+export interface ExerciseMediaLicense {
+  readonly type: ExerciseMediaLicenseType;
+  readonly author: string;
+  readonly sourceUrl: string;
+  readonly licenseUrl?: string;
+  readonly attributionNotes?: string;
+}
+
+export interface ExerciseDemonstration {
+  readonly exerciseId: string;
+  readonly mediaType: ExerciseMediaType;
+  readonly thumbnailUri: string;
+  readonly demonstrationUri: string;
+  readonly license: ExerciseMediaLicense;
+  readonly isApproved: boolean;
+}
+
+export type ExerciseMediaResolutionStatus =
+  | 'approved'
+  | 'unapproved'
+  | 'missing_license'
+  | 'missing_attribution'
+  | 'not_found';
+
+export interface ExerciseMediaResolution {
+  readonly status: ExerciseMediaResolutionStatus;
+  readonly demonstration?: ExerciseDemonstration;
+}
+

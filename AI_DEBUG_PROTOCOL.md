@@ -1,7 +1,25 @@
-# AI Debug Protocol
+# AI DEBUG PROTOCOL
 
-This protocol defines the debugging workflow for errors, failures, and diagnostics.
+## Evidence-First Debugging
 
-**Authoritative Rules**: See [AI_RULES.md](file:///c:/Users/adity/Desktop/ADI/BeBig%202.0/AI_RULES.md)
-- **RULE 7 (Targeted Testing & Empirical Error Inspection)**: Inspect exact error outputs and trace logic before editing.
-- **RULE 8 (Debugging Loop Protection)**: If a test/fix fails 3 times for the same reason, stop editing, re-evaluate evidence, and trace types.
+1. Capture the exact error.
+2. Locate the originating symbol/file.
+3. Trace only the immediate call/data path.
+4. Form one falsifiable hypothesis.
+5. Make the smallest test/fix.
+6. Verify.
+7. If false, create a different hypothesis.
+
+## Escalation
+If unresolved after 2 distinct hypotheses:
+- inspect adjacent callers/dependencies
+- inspect configuration/environment
+- inspect recent relevant changes
+- inspect platform/version compatibility
+- reproduce with a minimal case if practical
+
+## Never
+- randomly change multiple unrelated files
+- repeatedly reinstall dependencies without evidence
+- suppress an error just to make the build pass
+- claim success without verification

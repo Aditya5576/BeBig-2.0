@@ -275,6 +275,20 @@ describe('Checkpoint 1: Profile Avatar Cloud Persistence & Storage Isolation', (
       const path = avatarService.extractStoragePathFromUrl(testUserId, otherUserAvatarUrl);
       expect(path).toBeNull();
     });
+
+    it('sanitizes user IDs and strips path traversal characters from storage paths', () => {
+      // Attempt directory traversal
+      const maliciousUserId = '../../etc/passwd';
+      const path = avatarService.getAvatarStoragePath(maliciousUserId, 'image/png');
+      expect(path).not.toContain('..');
+      expect(path.split('/')[0]).toBe('etcpasswd');
+      expect(path).toMatch(/^etcpasswd\/avatar_\d+\.png$/);
+
+      // Rejects empty or whitespace-only user ID
+      expect(() => avatarService.getAvatarStoragePath('')).toThrow('User ID is required');
+      expect(() => avatarService.getAvatarStoragePath('   ')).toThrow('User ID is required');
+      expect(() => avatarService.getAvatarStoragePath('!@#$%^')).toThrow('Invalid user ID');
+    });
   });
 
   // 5. Invariant preservation

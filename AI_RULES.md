@@ -1,79 +1,111 @@
-# Token-Saving Brain v2 - Global Operating Rules
+# AI RULES — Token-Efficient Engineering
 
-## RULE 1 - SEARCH BEFORE READ
-Never start by dumping the repository.
-1. understand the user request
-2. classify task size
-3. identify likely symbols/files
-4. search for exact identifiers
-5. read only relevant files
-Use progressive disclosure.
+## PRIME DIRECTIVE
+Produce correct changes with the minimum necessary context.
 
-## RULE 2 - NEVER SCAN EVERYTHING BY DEFAULT
-Do NOT automatically inspect:
-- node_modules
-- .git
-- build
-- dist
-- coverage
+## 1. CONTEXT LOADING
+Before coding:
+1. Read AI_BRAIN.md.
+2. Read only the task-relevant section of PROJECT_INDEX.md.
+3. Search for the exact symbol, route, component, function, table, API, or error.
+4. Read the smallest set of source files needed.
+5. Expand context only when evidence requires it.
+
+NEVER start by dumping or reading the entire repository.
+
+## 2. NEVER WASTE CONTEXT ON
+Unless directly required:
+- node_modules/
+- .git/
+- dist/
+- build/
+- coverage/
 - generated files
 - caches
-- vendor code
-- dependency source
-- unrelated assets
-- unrelated feature directories
-Only inspect these when the task genuinely requires them.
+- binaries
+- lockfiles
+- screenshots/assets unrelated to the task
+- vendor/third-party source
+- unrelated feature folders
 
-## RULE 3 - SOURCE CODE WINS
+## 3. SOURCE OF TRUTH
 Priority:
-1. actual source/config/runtime evidence
-2. tests and observed behavior
-3. AI memory/documentation
-4. previous assumptions
-If AI_BRAIN conflicts with actual source code: SOURCE CODE WINS. Then update the relevant memory.
+1. Actual source/configuration/runtime evidence
+2. Tests and observed behavior
+3. AI_BRAIN.md / project documentation
+4. Previous AI assumptions
 
-## RULE 4 - TASK SIZING
-Classify every task internally:
-- TINY: one obvious file/change.
-- SMALL: one feature or a few related files.
-- MEDIUM: multiple related modules.
-- LARGE: architecture, migration, major refactor, cross-cutting change.
-Do not use LARGE-task exploration for a TINY/SMALL task.
+If memory conflicts with source code, source code wins. Update memory after the change.
 
-## RULE 5 - MINIMUM SUFFICIENT CONTEXT
-The objective is: CORRECT CHANGE using MINIMUM NECESSARY CONTEXT.
-Do not read additional files simply because they might be interesting.
-When enough evidence exists: STOP READING and implement.
+## 4. TASK SIZING
+Classify every task:
+- TINY: one obvious file/change
+- SMALL: one feature or a few files
+- MEDIUM: multiple related modules
+- LARGE: architecture, migrations, major refactor
 
-## RULE 6 - NO UNNECESSARY SUBAGENTS
-Do not spawn multiple subagents for routine tasks.
-Do not use subagents merely to:
-- reread the same files
-- repeat the same tests
+For TINY/SMALL tasks, do not perform broad repository exploration.
 
-## RULE 7 - TARGETED TESTING
-Run only tests affected by the change.
-If a component is isolated, run ONLY its specific test suite.
-Never run the entire test suite during development unless checking for widespread regression at the end of a LARGE task.
-When tests fail, DO NOT GUESS. Read the actual failure output, inspect the specific lines that failed, trace the logic, and fix the root cause.
+## 5. SEARCH BEFORE READ
+Prefer targeted search:
+- exact filename
+- exact function/component
+- route
+- error text
+- database table/column
+- import/reference
+- configuration key
 
-## RULE 8 - DEBUGGING LOOP PROTECTION
-If a test/run fails 3 times for the same reason:
-STOP EDITING.
-Re-read the error. Trace the types. Look at the actual evidence.
+Do not read files merely because they exist.
 
-## RULE 9 - NO BLIND EDITING
-Before modifying code, identify:
-- what is requested/broken
-- likely affected files
-- evidence supporting that conclusion
+## 6. EDIT DISCIPLINE
+Before editing, state internally:
+- what is broken/requested
+- which files are likely involved
+- what evidence supports that
 - smallest safe change
-Do not perform speculative refactors.
 
-## RULE 10 - SCOPE CONTROL
-Do not fix unrelated problems discovered during a task.
-Only expand scope if the unrelated issue:
-- blocks the requested task
-OR
-- creates a clear correctness/security problem.
-Otherwise report it separately.
+Avoid unrelated refactors.
+
+## 7. VERIFY, DON'T GUESS
+After changes, run the cheapest meaningful verification:
+- typecheck
+- lint
+- unit test
+- targeted test
+- build/export
+- runtime/browser verification
+
+Use the smallest verification that can actually catch the regression.
+
+## 8. ERROR LOOP PROTECTION
+If the same failure occurs twice:
+- stop repeating the same fix
+- inspect the actual error and surrounding code
+- identify a new hypothesis
+- test that hypothesis
+
+Never perform blind edit → retry loops.
+
+## 9. SCOPE CONTROL
+Do not fix unrelated issues discovered during a task unless:
+- they block the requested work, or
+- they create a clear correctness/security problem.
+
+Mention unrelated findings separately.
+
+## 10. MEMORY HYGIENE
+AI memory must remain compressed.
+- Record decisions, architecture, constraints, and current blockers.
+- Do not record every edit.
+- Do not duplicate source code.
+- Remove obsolete information.
+- Prefer one precise bullet over paragraphs.
+
+## 11. COMPLETION STANDARD
+A task is complete only when:
+- requested behavior is implemented
+- relevant verification passes
+- no known regression from the change
+- memory is updated if architecture/state changed
+- final response is concise and reports what changed + verification
