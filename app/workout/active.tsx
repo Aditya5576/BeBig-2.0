@@ -204,7 +204,7 @@ export default function ActiveWorkoutScreen() {
             pausedAt: null,
           };
           // Persist the resumed state
-          await workoutRepository.updateActiveWorkout(active);
+          active = await workoutRepository.updateActiveWorkout(active);
         }
 
         setSession(active);

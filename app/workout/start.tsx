@@ -143,10 +143,11 @@ export default function StartWorkoutScreen() {
   );
 
   const handleStartFromTemplate = async (template: WorkoutTemplate) => {
-    if (activeWorkout) {
+    const currentActive = activeWorkout ?? (await workoutRepository.getActiveWorkout());
+    if (currentActive) {
       Alert.alert(
         'Active Workout in Progress',
-        `You already have an active workout ("${activeWorkout.name}"). Would you like to resume it or discard it first?`,
+        `You already have an active workout ("${currentActive.name}"). Would you like to resume it or discard it first?`,
         [
           { text: 'Cancel', style: 'cancel' },
           {
@@ -157,10 +158,16 @@ export default function StartWorkoutScreen() {
             text: 'Discard & Start New',
             style: 'destructive',
             onPress: async () => {
-              await workoutRepository.discardActiveWorkout();
-              setActiveWorkout(null);
-              await workoutRepository.startWorkoutFromTemplate(template);
-              router.push('/workout/active' as any);
+              try {
+                await workoutRepository.discardActiveWorkout();
+                setActiveWorkout(null);
+                await workoutRepository.startWorkoutFromTemplate(template, undefined, undefined, {
+                  forceDiscardExisting: true,
+                });
+                router.push('/workout/active' as any);
+              } catch (err: any) {
+                Alert.alert('Error', err?.message || 'Failed to start workout.');
+              }
             },
           },
         ],
@@ -180,10 +187,11 @@ export default function StartWorkoutScreen() {
   };
 
   const handleStartEmptyWorkout = async () => {
-    if (activeWorkout) {
+    const currentActive = activeWorkout ?? (await workoutRepository.getActiveWorkout());
+    if (currentActive) {
       Alert.alert(
         'Active Workout in Progress',
-        `You already have an active workout ("${activeWorkout.name}"). Would you like to resume it or discard it first?`,
+        `You already have an active workout ("${currentActive.name}"). Would you like to resume it or discard it first?`,
         [
           { text: 'Cancel', style: 'cancel' },
           {
@@ -194,10 +202,16 @@ export default function StartWorkoutScreen() {
             text: 'Discard & Start New',
             style: 'destructive',
             onPress: async () => {
-              await workoutRepository.discardActiveWorkout();
-              setActiveWorkout(null);
-              await workoutRepository.startEmptyWorkout('Quick Workout');
-              router.push('/workout/active' as any);
+              try {
+                await workoutRepository.discardActiveWorkout();
+                setActiveWorkout(null);
+                await workoutRepository.startEmptyWorkout('Quick Workout', undefined, {
+                  forceDiscardExisting: true,
+                });
+                router.push('/workout/active' as any);
+              } catch (err: any) {
+                Alert.alert('Error', err?.message || 'Failed to start empty workout.');
+              }
             },
           },
         ],

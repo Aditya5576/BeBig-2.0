@@ -102,9 +102,12 @@ export const guestMigrationService = {
       const guestActiveWorkout = await workoutStorage.getActiveWorkout(guestScope);
       if (guestActiveWorkout) {
         const authActiveWorkout = await workoutStorage.getActiveWorkout(authScope);
+        const updatedActive = { ...guestActiveWorkout, ownerId: authScope.ownerId, ownerType: authScope.ownerType };
         if (!authActiveWorkout) {
-          const updatedActive = { ...guestActiveWorkout, ownerId: authScope.ownerId, ownerType: authScope.ownerType };
           await workoutStorage.saveActiveWorkout(updatedActive, authScope);
+        } else {
+          // If authenticated profile already has an ongoing workout, archive guest session to abandoned stack
+          await workoutStorage.archiveActiveWorkout(updatedActive, authScope);
         }
       }
 

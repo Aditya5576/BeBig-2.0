@@ -102,9 +102,15 @@ export default function TemplatesListScreen() {
               text: 'Discard & Start New',
               style: 'destructive',
               onPress: async () => {
-                await workoutRepository.discardActiveWorkout();
-                await workoutRepository.startWorkoutFromTemplate(template);
-                router.push('/workout/active' as any);
+                try {
+                  await workoutRepository.discardActiveWorkout();
+                  await workoutRepository.startWorkoutFromTemplate(template, undefined, undefined, {
+                    forceDiscardExisting: true,
+                  });
+                  router.push('/workout/active' as any);
+                } catch (err: any) {
+                  Alert.alert('Error', err?.message || 'Failed to start workout from template.');
+                }
               },
             },
           ],

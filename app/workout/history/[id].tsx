@@ -151,6 +151,37 @@ export default function WorkoutHistoryDetailScreen() {
   const handleRepeatWorkout = async () => {
     if (!workout) return;
     try {
+      const active = await workoutRepository.getActiveWorkout();
+      if (active) {
+        Alert.alert(
+          'Active Workout in Progress',
+          `You already have an active workout ("${active.name}"). Would you like to resume it or discard it first?`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Resume Active',
+              onPress: () => router.push('/workout/active' as any),
+            },
+            {
+              text: 'Discard & Start New',
+              style: 'destructive',
+              onPress: async () => {
+                try {
+                  await workoutRepository.discardActiveWorkout();
+                  await workoutRepository.startWorkoutFromCompleted(workout, undefined, undefined, {
+                    forceDiscardExisting: true,
+                  });
+                  router.replace('/workout/active' as any);
+                } catch (err: any) {
+                  Alert.alert('Error', err?.message || 'Failed to repeat workout.');
+                }
+              },
+            },
+          ],
+        );
+        return;
+      }
+
       await workoutRepository.startWorkoutFromCompleted(workout);
       router.replace('/workout/active' as any);
     } catch (err: any) {

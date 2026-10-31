@@ -50,11 +50,20 @@ export class WorkoutRepository {
   async startWorkoutFromTemplate(
     template: WorkoutTemplate,
     customName?: string,
-    sourceScheduledWorkoutId?: string
+    sourceScheduledWorkoutId?: string,
+    options?: { forceDiscardExisting?: boolean; scope?: UserScope | null }
   ): Promise<WorkoutSession> {
     if (!template || !template.id) {
       throw new Error('Valid workout template is required to start a workout.');
     }
+
+    const resolvedScope =
+      options?.scope !== undefined
+        ? options.scope
+        : (getCurrentUserScope() ??
+          (process.env.NODE_ENV === 'test'
+            ? { ownerId: 'test_default_user', ownerType: 'authenticated' as const }
+            : null));
 
     const sessionId = `workout_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
     const now = new Date().toISOString();
@@ -94,47 +103,62 @@ export class WorkoutRepository {
       };
     });
 
-    const scope = getCurrentUserScope();
-
     const session: WorkoutSession = {
       id: sessionId,
-      ownerId: scope?.ownerId,
-      ownerType: scope?.ownerType,
+      ownerId: resolvedScope?.ownerId,
+      ownerType: resolvedScope?.ownerType,
       name: customName?.trim() || template.name,
       sourceTemplateId: template.id,
       sourceScheduledWorkoutId,
       startedAt: now,
+      updatedAt: now,
+      version: 1,
       status: 'active',
       exercises,
       activeRestTimer: null,
     };
 
-    await workoutStorage.saveActiveWorkout(session, scope);
-    return session;
+    return workoutStorage.createActiveWorkout(session, resolvedScope, {
+      forceDiscardExisting: options?.forceDiscardExisting,
+    });
   }
 
   /**
    * Starts a blank, empty workout session.
    */
-  async startEmptyWorkout(name?: string, sourceScheduledWorkoutId?: string): Promise<WorkoutSession> {
+  async startEmptyWorkout(
+    name?: string,
+    sourceScheduledWorkoutId?: string,
+    options?: { forceDiscardExisting?: boolean; scope?: UserScope | null }
+  ): Promise<WorkoutSession> {
+    const resolvedScope =
+      options?.scope !== undefined
+        ? options.scope
+        : (getCurrentUserScope() ??
+          (process.env.NODE_ENV === 'test'
+            ? { ownerId: 'test_default_user', ownerType: 'authenticated' as const }
+            : null));
+
     const sessionId = `workout_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
     const now = new Date().toISOString();
-    const scope = getCurrentUserScope();
 
     const session: WorkoutSession = {
       id: sessionId,
-      ownerId: scope?.ownerId,
-      ownerType: scope?.ownerType,
+      ownerId: resolvedScope?.ownerId,
+      ownerType: resolvedScope?.ownerType,
       name: name?.trim() || 'Quick Workout',
       sourceScheduledWorkoutId,
       startedAt: now,
+      updatedAt: now,
+      version: 1,
       status: 'active',
       exercises: [],
       activeRestTimer: null,
     };
 
-    await workoutStorage.saveActiveWorkout(session, scope);
-    return session;
+    return workoutStorage.createActiveWorkout(session, resolvedScope, {
+      forceDiscardExisting: options?.forceDiscardExisting,
+    });
   }
 
   /**
@@ -151,8 +175,13 @@ export class WorkoutRepository {
     if (!workout || workout.status !== 'active') {
       throw new Error('Only active workouts can be updated in draft.');
     }
-    await workoutStorage.saveActiveWorkout(workout);
-    return workout;
+    const sessionToSave: WorkoutSession = {
+      ...workout,
+      updatedAt: new Date().toISOString(),
+      version: typeof workout.version === 'number' ? workout.version + 1 : 1,
+    };
+    await workoutStorage.saveActiveWorkout(sessionToSave);
+    return sessionToSave;
   }
 
   /**
@@ -546,10 +575,24 @@ export class WorkoutRepository {
 
   /**
    * Discards the active workout draft without saving to history.
+   * Archives the session into the abandoned recovery slot before clearing.
    */
-  async discardActiveWorkout(): Promise<void> {
+  async discardActiveWorkout(scope?: UserScope | null): Promise<void> {
+    const resolvedScope =
+      scope !== undefined
+        ? scope
+        : (getCurrentUserScope() ??
+          (process.env.NODE_ENV === 'test'
+            ? { ownerId: 'test_default_user', ownerType: 'authenticated' as const }
+            : null));
+
+    const existing = await workoutStorage.getActiveWorkout(resolvedScope);
+    if (existing && existing.status === 'active') {
+      await workoutStorage.archiveActiveWorkout(existing, resolvedScope);
+    }
+
     await nativeRestTimerService.cancelRestTimer();
-    await workoutStorage.clearActiveWorkout();
+    await workoutStorage.clearActiveWorkout(resolvedScope);
   }
 
   /**
@@ -681,7 +724,12 @@ export class WorkoutRepository {
     if (!active) return null;
     const trimmed = newName.trim();
     if (!trimmed) throw new Error('Workout name cannot be empty.');
-    const updated: WorkoutSession = { ...active, name: trimmed };
+    const updated: WorkoutSession = {
+      ...active,
+      name: trimmed,
+      updatedAt: new Date().toISOString(),
+      version: typeof active.version === 'number' ? active.version + 1 : 1,
+    };
     await workoutStorage.saveActiveWorkout(updated, resolvedScope);
     return updated;
   }
@@ -695,14 +743,22 @@ export class WorkoutRepository {
     completedWorkout: WorkoutSession,
     customName?: string,
     scope?: UserScope | null,
+    options?: { forceDiscardExisting?: boolean }
   ): Promise<WorkoutSession> {
     if (!completedWorkout || !completedWorkout.id) {
       throw new Error('Valid completed workout session is required to repeat a workout.');
     }
 
+    const resolvedScope =
+      scope !== undefined
+        ? scope
+        : (getCurrentUserScope() ??
+          (process.env.NODE_ENV === 'test'
+            ? { ownerId: 'test_default_user', ownerType: 'authenticated' as const }
+            : null));
+
     const sessionId = `workout_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
     const now = new Date().toISOString();
-    const resolvedScope = scope !== undefined ? scope : getCurrentUserScope();
 
     const exercises: WorkoutExercise[] = (completedWorkout.exercises || []).map((ex, exIndex) => {
       const sourceSets = ex.actualSets || [];
@@ -742,13 +798,72 @@ export class WorkoutRepository {
       ownerType: resolvedScope?.ownerType,
       name: customName?.trim() || completedWorkout.name || 'Repeated Workout',
       startedAt: now,
+      updatedAt: now,
+      version: 1,
       status: 'active',
       exercises,
       activeRestTimer: null,
     };
 
-    await workoutStorage.saveActiveWorkout(session, resolvedScope);
-    return session;
+    return workoutStorage.createActiveWorkout(session, resolvedScope, {
+      forceDiscardExisting: options?.forceDiscardExisting,
+    });
+  }
+
+  /**
+   * Retrieves an abandoned workout recovery draft if one exists.
+   */
+  async getAbandonedWorkout(scope?: UserScope | null): Promise<WorkoutSession | null> {
+    const resolvedScope =
+      scope !== undefined
+        ? scope
+        : (getCurrentUserScope() ??
+          (process.env.NODE_ENV === 'test'
+            ? { ownerId: 'test_default_user', ownerType: 'authenticated' as const }
+            : null));
+    return workoutStorage.getAbandonedWorkout(resolvedScope);
+  }
+
+  /**
+   * Restores an abandoned workout draft back into the active workout slot.
+   */
+  async restoreAbandonedWorkout(
+    scope?: UserScope | null,
+    options?: { forceDiscardExisting?: boolean }
+  ): Promise<WorkoutSession | null> {
+    const resolvedScope =
+      scope !== undefined
+        ? scope
+        : (getCurrentUserScope() ??
+          (process.env.NODE_ENV === 'test'
+            ? { ownerId: 'test_default_user', ownerType: 'authenticated' as const }
+            : null));
+
+    const abandoned = await workoutStorage.getAbandonedWorkout(resolvedScope);
+    if (!abandoned) return null;
+
+    const existing = await workoutStorage.getActiveWorkout(resolvedScope);
+    if (existing && existing.status === 'active') {
+      if (!options?.forceDiscardExisting) {
+        throw new Error(
+          `Cannot restore abandoned workout: an active workout is already in progress ("${existing.name}"). You must complete or discard it first.`
+        );
+      }
+      await this.discardActiveWorkout(resolvedScope);
+    }
+
+    const restoredSession: WorkoutSession = {
+      ...abandoned,
+      status: 'active',
+      updatedAt: new Date().toISOString(),
+      version: typeof abandoned.version === 'number' ? abandoned.version + 1 : 1,
+    };
+
+    await workoutStorage.saveActiveWorkout(restoredSession, resolvedScope, {
+      allowDifferentSession: true,
+    });
+    await workoutStorage.removeAbandonedWorkoutById(abandoned.id, resolvedScope);
+    return restoredSession;
   }
 
   /**
