@@ -63,6 +63,13 @@
           "color": "#38BDF8"
         }
       ]
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "5a1a611f-f4b5-4f32-abd1-134e02c0f5f9"
+      }
+    },
+    "owner": "adityapatil009"
   }
 }
