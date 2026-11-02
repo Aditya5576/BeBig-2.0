@@ -1,5 +1,5 @@
 import { useAppTheme } from '../../src/features/theme';
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -13,7 +13,10 @@ import {
   AppState,
   Modal,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect as routerFocusEffect } from 'expo-router';
+
+const useFocusEffect =
+  typeof routerFocusEffect === 'function' ? routerFocusEffect : (fn: any) => fn();
 import { ScreenContainer, Text, Button, Card } from '../../src/components/ui';
 import {
   workoutRepository,
@@ -76,6 +79,12 @@ export default function ActiveWorkoutScreen() {
     const sessionToSave = targetSession || sessionRef.current;
     if (!sessionToSave) return;
     try {
+      // Discard tombstone check: prevent resurrecting discarded session
+      const isDiscarded = await workoutRepository.isSessionDiscarded(sessionToSave.id);
+      if (isDiscarded) {
+        workoutCompletedRef.current = true;
+        return;
+      }
       await workoutRepository.updateActiveWorkout(sessionToSave);
     } catch {
       // Background autosave failure caught gracefully
@@ -121,6 +130,44 @@ export default function ActiveWorkoutScreen() {
       void flushActiveWorkout();
     };
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      let isFocused = true;
+
+      async function syncActiveWorkoutOnFocus() {
+        try {
+          const active = await workoutRepository.getActiveWorkout();
+          if (!isFocused) return;
+          if (!active) {
+            // Storage active session was cleared (e.g. discarded from another screen or browser tab)
+            if (sessionRef.current && !workoutCompletedRef.current) {
+              workoutCompletedRef.current = true;
+              setSession(null);
+              sessionRef.current = null;
+              router.replace('/home' as any);
+            }
+            return;
+          }
+
+          // If storage contains a different active workout session than currently mounted
+          if (!sessionRef.current || sessionRef.current.id !== active.id) {
+            setSession(active);
+            sessionRef.current = active;
+            workoutCompletedRef.current = false;
+          }
+        } catch {
+          // Graceful fallback
+        }
+      }
+
+      void syncActiveWorkoutOnFocus();
+
+      return () => {
+        isFocused = false;
+      };
+    }, [])
+  );
 
   const [loading, setLoading] = useState(true);
   const [isPickerVisible, setIsPickerVisible] = useState(false);
@@ -204,7 +251,7 @@ export default function ActiveWorkoutScreen() {
             pausedAt: null,
           };
           // Persist the resumed state
-          await workoutRepository.updateActiveWorkout(active);
+          active = await workoutRepository.updateActiveWorkout(active);
         }
 
         setSession(active);
@@ -502,7 +549,10 @@ export default function ActiveWorkoutScreen() {
             // does not re-save the stale active session after the clear.
             workoutCompletedRef.current = true;
             try {
-              await workoutRepository.discardActiveWorkout();
+              const sessionToDiscard = sessionRef.current || session;
+              await workoutRepository.discardActiveWorkout(undefined, sessionToDiscard?.id);
+              setSession(null);
+              sessionRef.current = null;
               router.replace('/home' as any);
             } catch (err: any) {
               workoutCompletedRef.current = false;

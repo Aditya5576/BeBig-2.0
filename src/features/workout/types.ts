@@ -60,4 +60,6 @@ export interface WorkoutSession {
   activeRestTimer?: ActiveRestTimer | null;
   pausedAt?: string | null; // ISO 8601 when the session was minimized/paused
   accumulatedPauseSeconds?: number; // Total seconds spent paused
+  updatedAt?: string; // ISO 8601 timestamp of last state change
+  version?: number; // Monotonically increasing revision counter for optimistic concurrency guard
 }

@@ -101,10 +101,16 @@ export const guestMigrationService = {
       // 4. Active Workout (Local continuity only, intentionally not synced)
       const guestActiveWorkout = await workoutStorage.getActiveWorkout(guestScope);
       if (guestActiveWorkout) {
-        const authActiveWorkout = await workoutStorage.getActiveWorkout(authScope);
-        if (!authActiveWorkout) {
+        const isDiscarded = await workoutStorage.isSessionDiscarded(guestActiveWorkout.id, guestScope);
+        if (!isDiscarded) {
+          const authActiveWorkout = await workoutStorage.getActiveWorkout(authScope);
           const updatedActive = { ...guestActiveWorkout, ownerId: authScope.ownerId, ownerType: authScope.ownerType };
-          await workoutStorage.saveActiveWorkout(updatedActive, authScope);
+          if (!authActiveWorkout) {
+            await workoutStorage.createActiveWorkout(updatedActive, authScope);
+          } else {
+            // If authenticated profile already has an ongoing workout, archive guest session to abandoned stack
+            await workoutStorage.archiveActiveWorkout(updatedActive, authScope);
+          }
         }
       }
 
