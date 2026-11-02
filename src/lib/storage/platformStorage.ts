@@ -16,6 +16,7 @@ export interface KeyValueStorage {
   getItem: (key: string) => Promise<string | null>;
   setItem: (key: string, value: string) => Promise<void>;
   removeItem: (key: string) => Promise<void>;
+  removeItemIfMatchingId?: (key: string, expectedId: string) => Promise<boolean>;
   clearMemoryCache: () => void;
 }
 
@@ -126,6 +127,54 @@ export const idbStorage = {
       tx.onerror = () => fail(tx.error || req.error || new Error('IndexedDB transaction failed.'));
       tx.onabort = () => fail(tx.error || req.error || new Error('IndexedDB transaction aborted.'));
       req.onerror = () => fail(req.error || new Error('IndexedDB request failed.'));
+    });
+  },
+
+  /**
+   * Atomically deletes a record within a single readwrite transaction ONLY if
+   * its parsed payload has id === expectedId.
+   */
+  async removeIfMatches(key: string, expectedId: string): Promise<boolean> {
+    const db = await openIDB();
+    return new Promise((resolve, reject) => {
+      let isSettled = false;
+      const fail = (err: any) => {
+        if (!isSettled) {
+          isSettled = true;
+          reject(err);
+        }
+      };
+
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.get(key);
+
+      let didDelete = false;
+
+      req.onsuccess = () => {
+        const val = req.result;
+        if (!val) {
+          return;
+        }
+        try {
+          const parsed = typeof val === 'string' ? JSON.parse(val) : val;
+          if (parsed && typeof parsed === 'object' && parsed.id === expectedId) {
+            store.delete(key);
+            didDelete = true;
+          }
+        } catch {}
+      };
+
+      tx.oncomplete = () => {
+        if (!isSettled) {
+          isSettled = true;
+          resolve(didDelete);
+        }
+      };
+
+      tx.onerror = () => fail(tx.error || req.error || new Error('IndexedDB transaction failed.'));
+      tx.onabort = () => fail(tx.error || req.error || new Error('IndexedDB transaction aborted.'));
+      req.onerror = () => fail(req.error || new Error('IndexedDB get request failed.'));
     });
   },
 };
@@ -281,6 +330,77 @@ export const platformStorage: KeyValueStorage = {
       if (process.env.NODE_ENV === 'test') return;
       throw error;
     }
+  },
+
+  /**
+   * Atomically deletes key ONLY if the currently stored JSON payload has id === expectedId.
+   * On Web: Executed as a single atomic readwrite IndexedDB transaction across all browser tabs.
+   * On Mobile / In-Memory / Test: Synchronous CAS verification before removal.
+   */
+  removeItemIfMatchingId: async (key: string, expectedId: string): Promise<boolean> => {
+    // 1. Web Platform (Atomic IndexedDB transaction)
+    if (Platform.OS === 'web' && idbStorage.isAvailable()) {
+      try {
+        const deleted = await idbStorage.removeIfMatches(key, expectedId);
+        if (typeof localStorage !== 'undefined') {
+          const localVal = localStorage.getItem(key);
+          if (localVal) {
+            try {
+              if (JSON.parse(localVal)?.id === expectedId) {
+                localStorage.removeItem(key);
+              }
+            } catch {}
+          }
+        }
+        const mem = memoryStorage.get(key);
+        if (mem) {
+          try {
+            if (JSON.parse(mem)?.id === expectedId) {
+              memoryStorage.delete(key);
+            }
+          } catch {}
+        }
+        return deleted;
+      } catch {}
+    }
+
+    // 2. Synchronous Memory / Local / Native Check
+    const current =
+      memoryStorage.get(key) ??
+      (typeof localStorage !== 'undefined' ? localStorage.getItem(key) : null);
+
+    if (current) {
+      try {
+        const parsed = JSON.parse(current);
+        if (parsed?.id === expectedId) {
+          memoryStorage.delete(key);
+          if (typeof localStorage !== 'undefined') {
+            localStorage.removeItem(key);
+          }
+          if (Platform.OS !== 'web') {
+            await SecureStore.deleteItemAsync(key).catch(() => {});
+          }
+          return true;
+        }
+      } catch {}
+      return false;
+    }
+
+    // If native platform SecureStore:
+    if (Platform.OS !== 'web') {
+      try {
+        const val = await SecureStore.getItemAsync(key);
+        if (val) {
+          const parsed = JSON.parse(val);
+          if (parsed?.id === expectedId) {
+            await SecureStore.deleteItemAsync(key);
+            return true;
+          }
+        }
+      } catch {}
+    }
+
+    return false;
   },
 
   clearMemoryCache: (): void => {

@@ -211,22 +211,32 @@ describe('P0 Data Loss Bug: Active Workout Concurrency, Overwrite Protection & R
     const activeAfterDiscard = await workoutRepository.getActiveWorkout();
     expect(activeAfterDiscard).toBeNull();
 
-    // Abandoned recovery draft holds the discarded data
+    // Explicitly discarded session is NOT placed into abandoned recovery draft
     const abandoned = await workoutRepository.getAbandonedWorkout();
-    expect(abandoned).not.toBeNull();
-    expect(abandoned?.id).toBe(session.id);
-    expect(abandoned?.exercises[0].actualSets[0].weight).toBe(110);
-    expect(abandoned?.exercises[0].actualSets[0].completed).toBe(true);
+    expect(abandoned).toBeNull();
+
+    // Abandoned recovery draft supports genuine archived sessions (not explicitly discarded)
+    const sessionToArchive: WorkoutSession = {
+      ...updated,
+      id: 'workout_genuine_abandoned_test',
+    };
+    await workoutStorage.archiveActiveWorkout(sessionToArchive, authScope);
+    const archivedRecovery = await workoutRepository.getAbandonedWorkout();
+    expect(archivedRecovery).not.toBeNull();
+    expect(archivedRecovery?.id).toBe('workout_genuine_abandoned_test');
+    expect(archivedRecovery?.exercises[0].actualSets[0].weight).toBe(110);
+    expect(archivedRecovery?.exercises[0].actualSets[0].completed).toBe(true);
 
     // Restore abandoned workout
     const restored = await workoutRepository.restoreAbandonedWorkout();
     expect(restored).not.toBeNull();
     expect(restored?.status).toBe('active');
+    expect(restored?.id).toBe('workout_genuine_abandoned_test');
     expect(restored?.exercises[0].actualSets[0].weight).toBe(110);
 
     // Active is restored and abandoned is cleared
     const activeRestored = await workoutRepository.getActiveWorkout();
-    expect(activeRestored?.id).toBe(session.id);
+    expect(activeRestored?.id).toBe('workout_genuine_abandoned_test');
     const abandonedAfterRestore = await workoutRepository.getAbandonedWorkout();
     expect(abandonedAfterRestore).toBeNull();
   });
@@ -398,10 +408,9 @@ describe('P0 Data Loss Bug: Active Workout Concurrency, Overwrite Protection & R
     expect(activeStored?.name).toBe('Fresh Push Session');
     expect(activeStored?.exercises).toHaveLength(0);
 
-    // Abandoned draft retains workout A
+    // Discarded workout A is permanently purged and NOT in abandoned recovery
     const abandonedA = await workoutRepository.getAbandonedWorkout();
-    expect(abandonedA?.id).toBe(sessionA.id);
-    expect(abandonedA?.exercises[0].actualSets[0].weight).toBe(120);
+    expect(abandonedA).toBeNull();
   });
 
   // Adversarial Audit 1: Atomic Concurrent Creation
@@ -471,17 +480,19 @@ describe('P0 Data Loss Bug: Active Workout Concurrency, Overwrite Protection & R
 
   // Adversarial Audit 4: Multiple abandoned workouts form a recovery stack without losing history
   it('Adversarial 4: Discarding multiple workouts retains history in recovery stack and allows sequential restore', async () => {
-    // 1. Workout A discarded
+    // 1. Workout A archived
     const sessionA = await workoutRepository.startEmptyWorkout('Workout Alpha');
     const withSquat = workoutRepository.addExerciseToWorkout(sessionA, { id: 'sq', name: 'Squat' });
     await workoutRepository.updateActiveWorkout(withSquat);
-    await workoutRepository.discardActiveWorkout();
+    await workoutStorage.archiveActiveWorkout(withSquat, authScope);
+    await workoutStorage.clearActiveWorkout(authScope);
 
-    // 2. Workout B discarded
+    // 2. Workout B archived
     const sessionB = await workoutRepository.startEmptyWorkout('Workout Beta');
     const withBench = workoutRepository.addExerciseToWorkout(sessionB, { id: 'bp', name: 'Bench' });
     await workoutRepository.updateActiveWorkout(withBench);
-    await workoutRepository.discardActiveWorkout();
+    await workoutStorage.archiveActiveWorkout(withBench, authScope);
+    await workoutStorage.clearActiveWorkout(authScope);
 
     // Most recent abandoned is Beta
     const mostRecentAbandoned = await workoutRepository.getAbandonedWorkout();
@@ -492,20 +503,21 @@ describe('P0 Data Loss Bug: Active Workout Concurrency, Overwrite Protection & R
     expect(restoredBeta?.name).toBe('Workout Beta');
     expect(restoredBeta?.exercises[0].exerciseName).toBe('Bench');
 
-    // Discard Beta again
-    await workoutRepository.discardActiveWorkout();
+    // Archive Beta again
+    await workoutStorage.archiveActiveWorkout(restoredBeta!, authScope);
+    await workoutStorage.clearActiveWorkout(authScope);
 
-    // Clear active and verify Alpha is still in abandoned stack
-    await workoutRepository.discardActiveWorkout();
+    // Verify Alpha is still in abandoned stack
     const remainingAbandoned = await workoutRepository.getAbandonedWorkout();
     expect(remainingAbandoned).not.toBeNull();
   });
 
   // Adversarial Audit 5: Restore while active workout in progress requires explicit resolution
   it('Adversarial 5: Restoring an abandoned workout while another active workout exists rejects without explicit discard', async () => {
-    // Discard Session A to abandoned archive
+    // Archive Session A to abandoned archive
     const sessionA = await workoutRepository.startEmptyWorkout('Workout Alpha');
-    await workoutRepository.discardActiveWorkout();
+    await workoutStorage.archiveActiveWorkout(sessionA, authScope);
+    await workoutStorage.clearActiveWorkout(authScope);
 
     // Now start Session B (active)
     await workoutRepository.startEmptyWorkout('Active Workout Beta');
@@ -944,14 +956,15 @@ describe('P0 Data Loss Bug: Active Workout Concurrency, Overwrite Protection & R
   it('Adversarial 18: Abandoned archive strictly caps at 5 items FIFO and deduplicates re-abandoned sessions', async () => {
     const createdSessions: WorkoutSession[] = [];
 
-    // 1. Create and discard 7 distinct workouts sequentially
+    // 1. Create and archive 7 distinct workouts sequentially
     for (let i = 1; i <= 7; i++) {
       const s = await workoutRepository.startEmptyWorkout(`Workout Session ${i}`, undefined, {
         forceDiscardExisting: true,
         scope: authScope,
       });
       createdSessions.push(s);
-      await workoutRepository.discardActiveWorkout(authScope);
+      await workoutStorage.archiveActiveWorkout(s, authScope);
+      await workoutStorage.clearActiveWorkout(authScope);
     }
 
     // Inspect abandoned archive key directly

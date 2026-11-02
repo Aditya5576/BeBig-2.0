@@ -164,14 +164,14 @@ export class WorkoutRepository {
   /**
    * Retrieves the current active workout session draft, or null if none.
    */
-  async getActiveWorkout(): Promise<WorkoutSession | null> {
-    return workoutStorage.getActiveWorkout();
+  async getActiveWorkout(scope?: UserScope | null): Promise<WorkoutSession | null> {
+    return workoutStorage.getActiveWorkout(scope);
   }
 
   /**
    * Persists an updated active workout session (continuous autosave).
    */
-  async updateActiveWorkout(workout: WorkoutSession): Promise<WorkoutSession> {
+  async updateActiveWorkout(workout: WorkoutSession, scope?: UserScope | null): Promise<WorkoutSession> {
     if (!workout || workout.status !== 'active') {
       throw new Error('Only active workouts can be updated in draft.');
     }
@@ -180,7 +180,7 @@ export class WorkoutRepository {
       updatedAt: new Date().toISOString(),
       version: typeof workout.version === 'number' ? workout.version + 1 : 1,
     };
-    await workoutStorage.saveActiveWorkout(sessionToSave);
+    await workoutStorage.saveActiveWorkout(sessionToSave, scope);
     return sessionToSave;
   }
 
@@ -575,9 +575,9 @@ export class WorkoutRepository {
 
   /**
    * Discards the active workout draft without saving to history.
-   * Archives the session into the abandoned recovery slot before clearing.
+   * Cancels native timer and permanently discards the session using discard tombstones and active token invalidation.
    */
-  async discardActiveWorkout(scope?: UserScope | null): Promise<void> {
+  async discardActiveWorkout(scope?: UserScope | null, specificSessionId?: string): Promise<void> {
     const resolvedScope =
       scope !== undefined
         ? scope
@@ -586,13 +586,15 @@ export class WorkoutRepository {
             ? { ownerId: 'test_default_user', ownerType: 'authenticated' as const }
             : null));
 
-    const existing = await workoutStorage.getActiveWorkout(resolvedScope);
-    if (existing && existing.status === 'active') {
-      await workoutStorage.archiveActiveWorkout(existing, resolvedScope);
-    }
-
     await nativeRestTimerService.cancelRestTimer();
-    await workoutStorage.clearActiveWorkout(resolvedScope);
+    await workoutStorage.discardActiveWorkout(resolvedScope, specificSessionId);
+  }
+
+  /**
+   * Checks whether a session ID has been explicitly discarded.
+   */
+  async isSessionDiscarded(sessionId: string, scope?: UserScope | null): Promise<boolean> {
+    return workoutStorage.isSessionDiscarded(sessionId, scope);
   }
 
   /**
@@ -841,6 +843,12 @@ export class WorkoutRepository {
 
     const abandoned = await workoutStorage.getAbandonedWorkout(resolvedScope);
     if (!abandoned) return null;
+
+    const isDiscarded = await workoutStorage.isSessionDiscarded(abandoned.id, resolvedScope);
+    if (isDiscarded) {
+      await workoutStorage.removeAbandonedWorkoutById(abandoned.id, resolvedScope);
+      return null;
+    }
 
     const existing = await workoutStorage.getActiveWorkout(resolvedScope);
     if (existing && existing.status === 'active') {
