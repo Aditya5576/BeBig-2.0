@@ -52,16 +52,6 @@ function isGifUri(uri: string | null | undefined): boolean {
   return cleanUri.endsWith('.gif');
 }
 
-function findStaticImage(exercise: Exercise): string | null {
-  if (!exercise.images || exercise.images.length === 0) return null;
-  const staticImgs = exercise.images.filter(
-    (img) => !isGifUri(img.thumbnailUrl) && !isGifUri(img.url)
-  );
-  if (staticImgs.length === 0) return null;
-  const main = staticImgs.find((img) => img.isMain) || staticImgs[0];
-  return main.thumbnailUrl || main.url || null;
-}
-
 export const ExerciseThumbnail = React.memo(function ExerciseThumbnail({
   exercise,
   size = 44,
@@ -84,20 +74,22 @@ export const ExerciseThumbnail = React.memo(function ExerciseThumbnail({
       if (customUri) return customUri;
     }
 
-    // 2. Check approved curated demonstration catalog
+    // In compact thumbnail / picker / list view (!isDetailView):
+    // For catalog exercises (!exercise.isCustom), suppress external HTTP image requests
+    // to eliminate network thread saturation, memory pressure, and typing lag across FlatLists.
+    // Crisp, instant vector icon fallback renders at 0ms with zero network stalls.
+    if (!isDetailView) {
+      return null;
+    }
+
+    // 2. Check approved curated demonstration catalog (Detail View only)
     const resolution = resolveExerciseDemonstration(exercise, catalog);
     if (resolution.status === 'approved' && resolution.demonstration?.thumbnailUri) {
       const thumb = resolution.demonstration.thumbnailUri;
-      // In compact thumbnail / picker / list view, avoid decoding multi-frame animated GIFs in iOS Safari WebKit
-      if (!isDetailView && isGifUri(thumb)) {
-        const staticFallback = findStaticImage(exercise);
-        if (staticFallback) return staticFallback;
-        return null;
-      }
       return thumb;
     }
 
-    // 3. Provider image fallback for standard library exercises
+    // 3. Provider image fallback for standard library exercises (Detail View only)
     if (!exercise.isCustom && exercise.images && exercise.images.length > 0) {
       const staticImgs = exercise.images.filter(
         (img) => !isGifUri(img.thumbnailUrl) && !isGifUri(img.url)
@@ -107,11 +99,8 @@ export const ExerciseThumbnail = React.memo(function ExerciseThumbnail({
         return mainStatic.thumbnailUrl || mainStatic.url;
       }
       // If only GIF is available and detail view requested, allow it
-      if (isDetailView) {
-        const anyMain = exercise.images.find((img) => img.isMain) || exercise.images[0];
-        return anyMain?.thumbnailUrl || anyMain?.url || null;
-      }
-      return null;
+      const anyMain = exercise.images.find((img) => img.isMain) || exercise.images[0];
+      return anyMain?.thumbnailUrl || anyMain?.url || null;
     }
 
     return null;

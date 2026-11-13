@@ -90,7 +90,9 @@ export function BottomNavBar() {
         style={styles.tabItem}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
-        <Icon name="home" size={20} focused={isHomeActive} />
+        <View style={[styles.iconWrap, isHomeActive && styles.iconWrapActive]}>
+          <Icon name="home" size={20} focused={isHomeActive} />
+        </View>
         <Text
           variant="caption"
           numberOfLines={1}
@@ -111,7 +113,9 @@ export function BottomNavBar() {
         style={styles.tabItem}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
-        <Icon name="history" size={20} focused={isHistoryActive} />
+        <View style={[styles.iconWrap, isHistoryActive && styles.iconWrapActive]}>
+          <Icon name="history" size={20} focused={isHistoryActive} />
+        </View>
         <Text
           variant="caption"
           numberOfLines={1}
@@ -133,7 +137,7 @@ export function BottomNavBar() {
         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
       >
         <View style={[styles.centerButton, isWorkoutActive && styles.centerButtonActive]}>
-          <Icon name="workout" size={22} color="#090D16" />
+          <Icon name="workout" size={22} color={colors.primaryText} />
         </View>
         <Text
           variant="caption"
@@ -155,7 +159,9 @@ export function BottomNavBar() {
         style={styles.tabItem}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
-        <Icon name="exercises" size={20} focused={isExercisesActive} />
+        <View style={[styles.iconWrap, isExercisesActive && styles.iconWrapActive]}>
+          <Icon name="exercises" size={20} focused={isExercisesActive} />
+        </View>
         <Text
           variant="caption"
           numberOfLines={1}
@@ -176,7 +182,9 @@ export function BottomNavBar() {
         style={styles.tabItem}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
-        <Icon name="profile" size={20} focused={isProfileActive} />
+        <View style={[styles.iconWrap, isProfileActive && styles.iconWrapActive]}>
+          <Icon name="profile" size={20} focused={isProfileActive} />
+        </View>
         <Text
           variant="caption"
           numberOfLines={1}
@@ -199,9 +207,9 @@ const createStyles = (colors: any) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
-    backgroundColor: '#111218',
+    backgroundColor: colors.surfaceInset || '#0D121D',
     borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopColor: colors.borderLight,
     paddingTop: 8,
     minHeight: 64,
   },
@@ -212,6 +220,16 @@ const createStyles = (colors: any) => StyleSheet.create({
     minHeight: 48,
     paddingHorizontal: 2,
     gap: 3,
+  },
+  iconWrap: {
+    paddingHorizontal: 12,
+    paddingVertical: 3,
+    borderRadius: radii.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconWrapActive: {
+    backgroundColor: 'rgba(56, 189, 248, 0.16)',
   },
   tabIcon: {
     fontSize: 20,
@@ -228,7 +246,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     textAlign: 'center',
   },
   tabLabelActive: {
-    color: '#E5A93C',
+    color: colors.primary,
   },
   tabLabelInactive: {
     color: colors.textMuted,
@@ -246,19 +264,19 @@ const createStyles = (colors: any) => StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#E5A93C',
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#E5A93C',
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
     shadowRadius: 8,
     elevation: 8,
     borderWidth: 2,
-    borderColor: '#111218',
+    borderColor: colors.surfaceInset || '#0D121D',
   },
   centerButtonActive: {
-    backgroundColor: '#FFD700',
+    backgroundColor: colors.primaryPressed,
     transform: [{ scale: 1.05 }],
   },
   centerButtonIcon: {

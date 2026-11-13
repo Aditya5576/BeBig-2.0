@@ -12,7 +12,7 @@ import {
   Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ScreenContainer, Text, Button, Card, useBottomContentInset } from '../../src/components/ui';
+import { ScreenContainer, Text, Button, Card, Icon, useBottomContentInset } from '../../src/components/ui';
 import {
   templateRepository,
   ExercisePickerModal,
@@ -267,7 +267,8 @@ export default function TemplateDetailScreen() {
           <View style={styles.navBar}>
             <Button
               testID="template-detail-back-button"
-              title="← Templates"
+              title="Templates"
+              icon="chevronLeft"
               onPress={() => router.back()}
               variant="ghost"
               size="sm"
@@ -355,7 +356,8 @@ export default function TemplateDetailScreen() {
 
             <Button
               testID="add-exercise-button"
-              title="+ Add Exercise"
+              title="Add Exercise"
+              icon="plus"
               onPress={() => setIsPickerVisible(true)}
               variant="secondary"
               size="sm"
@@ -400,15 +402,15 @@ export default function TemplateDetailScreen() {
                       onPress={() => handleMoveUp(index)}
                       disabled={isFirst}
                       style={[styles.arrowButton, isFirst && styles.buttonDisabled]}
-                      hitSlop={8}
+                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                      accessibilityRole="button"
+                      accessibilityLabel="Move exercise up"
                     >
-                      <Text
-                        variant="caption"
-                        color={isFirst ? 'muted' : 'primary'}
-                        style={styles.controlIcon}
-                      >
-                        ▲
-                      </Text>
+                      <Icon
+                        name="arrowUp"
+                        size={12}
+                        color={isFirst ? colors.textMuted : colors.textPrimary}
+                      />
                     </Pressable>
 
                     <Pressable
@@ -416,26 +418,26 @@ export default function TemplateDetailScreen() {
                       onPress={() => handleMoveDown(index)}
                       disabled={isLast}
                       style={[styles.arrowButton, isLast && styles.buttonDisabled]}
-                      hitSlop={8}
+                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                      accessibilityRole="button"
+                      accessibilityLabel="Move exercise down"
                     >
-                      <Text
-                        variant="caption"
-                        color={isLast ? 'muted' : 'primary'}
-                        style={styles.controlIcon}
-                      >
-                        ▼
-                      </Text>
+                      <Icon
+                        name="arrowDown"
+                        size={12}
+                        color={isLast ? colors.textMuted : colors.textPrimary}
+                      />
                     </Pressable>
 
                     <Pressable
                       testID={`remove-exercise-${item.exerciseId}`}
                       onPress={() => handleRemoveExercise(item.exerciseId)}
                       style={styles.removeButton}
-                      hitSlop={8}
+                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                      accessibilityRole="button"
+                      accessibilityLabel="Remove exercise"
                     >
-                      <Text variant="caption" color="muted" style={styles.removeIcon}>
-                        ✕
-                      </Text>
+                      <Icon name="close" size={14} color={colors.textMuted} />
                     </Pressable>
                   </View>
                 </View>

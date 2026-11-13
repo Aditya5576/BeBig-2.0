@@ -2,7 +2,7 @@ import { useAppTheme, useThemeStore } from '../src/features/theme';
 import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, TextInput, Image, Alert, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ScreenContainer, ScreenScrollView, Text, Button, Card } from '../src/components/ui';
+import { ScreenContainer, ScreenScrollView, Text, Button, Card, Icon } from '../src/components/ui';
 import { useAuthStore } from '../src/features/auth';
 import {
   useOnboardingStore,
@@ -827,14 +827,15 @@ export default function SettingsScreen() {
               <Pressable
                 testID="edit-profile-button"
                 onPress={handleStartEdit}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                 style={styles.headerEditAction}
                 accessibilityLabel="Edit Profile"
                 accessibilityRole="button"
               >
-                <Text variant="label" color="accent">
-                  Edit ›
+                <Text variant="label" color="accent" style={{ marginRight: 2 }}>
+                  Edit
                 </Text>
+                <Icon name="chevronRight" size={12} color={colors.accent} />
               </Pressable>
             )}
           </View>
@@ -1737,6 +1738,9 @@ const createStyles = (colors: any) => StyleSheet.create({
     marginTop: 2,
   },
   headerEditAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
     paddingVertical: 4,
     paddingHorizontal: spacing.xs,
   },

@@ -27,22 +27,25 @@ export default function WeeklyPerformanceScreen() {
   const [loading, setLoading] = useState(true);
   const [selectedPeriod, setSelectedPeriod] = useState<AnalyticsPeriod>('week');
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
+  const loadData = useCallback(async (isInitial = false) => {
+    if (isInitial) setLoading(true);
     try {
       const data = await workoutRepository.getCompletedWorkouts();
       setWorkouts(data);
     } catch {
       setWorkouts([]);
     } finally {
-      setLoading(false);
+      if (isInitial) setLoading(false);
     }
   }, []);
 
+  const isInitialMount = React.useRef(true);
   useFocusEffect(
     useCallback(() => {
-      void loadData();
-    }, [loadData]),
+      const isInitial = isInitialMount.current && workouts.length === 0;
+      isInitialMount.current = false;
+      void loadData(isInitial);
+    }, [loadData, workouts.length]),
   );
 
   const weeklyPerformance = useMemo(() => {
@@ -67,8 +70,9 @@ export default function WeeklyPerformanceScreen() {
               accessibilityLabel="Back"
               accessibilityRole="button"
             >
+              <Icon name="chevronLeft" size={18} color={colors.accent} />
               <Text variant="bodyBold" color="accent">
-                ‹ Back
+                Back
               </Text>
             </Pressable>
 
@@ -139,6 +143,9 @@ const createStyles = (colors: any) =>
       alignItems: 'center',
     },
     backButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
       minHeight: 36,
       justifyContent: 'center',
       paddingVertical: 4,

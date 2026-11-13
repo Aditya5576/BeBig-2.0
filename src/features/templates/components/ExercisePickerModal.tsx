@@ -156,15 +156,20 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
     let isMounted = true;
 
     // Instant local cache check first to avoid blocking user during weak network / offline
+    const trimmed = searchQuery.trim();
     const cachedInitial = exerciseRepository.getCachedExercises({
-      query: searchQuery.trim() || undefined,
+      query: trimmed || undefined,
       category: selectedCategory !== 'all' ? selectedCategory : undefined,
       source: selectedSource,
     });
 
+    setExercises(cachedInitial);
     if (cachedInitial.length > 0) {
-      setExercises(cachedInitial);
       setLoading(false);
+      // If we already have matching exercises in cache for this query, skip the 3.5s WGER network fetch!
+      if (trimmed) {
+        return;
+      }
     } else {
       setLoading(true);
     }
@@ -173,7 +178,7 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
       async () => {
         try {
           const result = await exerciseRepository.getExercises({
-            query: searchQuery.trim() || undefined,
+            query: trimmed || undefined,
             category: selectedCategory !== 'all' ? selectedCategory : undefined,
             source: selectedSource,
             limit: 30,
@@ -188,7 +193,7 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
         } catch {
           if (isMounted && cachedInitial.length === 0) {
             const cachedFallback = exerciseRepository.getCachedExercises({
-              query: searchQuery.trim() || undefined,
+              query: trimmed || undefined,
               category: selectedCategory !== 'all' ? selectedCategory : undefined,
               source: selectedSource,
             });
@@ -202,7 +207,7 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
           }
         }
       },
-      searchQuery ? 200 : 0,
+      trimmed ? 200 : 0,
     );
 
     return () => {
@@ -210,6 +215,49 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
       clearTimeout(timeoutId);
     };
   }, [visible, searchQuery, selectedCategory, selectedSource]);
+
+  const handleSearchChange = (text: string) => {
+    setSearchQuery(text);
+    if (!visible) return;
+    const trimmed = text.trim();
+    const cached = exerciseRepository.getCachedExercises({
+      query: trimmed || undefined,
+      category: selectedCategory !== 'all' ? selectedCategory : undefined,
+      source: selectedSource,
+    });
+    setExercises(cached);
+    if (cached.length > 0) {
+      setLoading(false);
+    }
+  };
+
+  const handleCategorySelect = (cat: string) => {
+    setSelectedCategory(cat);
+    if (!visible) return;
+    const cached = exerciseRepository.getCachedExercises({
+      query: searchQuery.trim() || undefined,
+      category: cat !== 'all' ? cat : undefined,
+      source: selectedSource,
+    });
+    setExercises(cached);
+    if (cached.length > 0) {
+      setLoading(false);
+    }
+  };
+
+  const handleSourceSelect = (src: 'all' | 'custom' | 'external') => {
+    setSelectedSource(src);
+    if (!visible) return;
+    const cached = exerciseRepository.getCachedExercises({
+      query: searchQuery.trim() || undefined,
+      category: selectedCategory !== 'all' ? selectedCategory : undefined,
+      source: src,
+    });
+    setExercises(cached);
+    if (cached.length > 0) {
+      setLoading(false);
+    }
+  };
 
   const handleLoadMore = async () => {
     if (loading || loadingMore || !hasMore || nextOffset === undefined) return;
@@ -397,7 +445,7 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
                 placeholder="Search exercise library..."
                 placeholderTextColor={colors.textMuted}
                 value={searchQuery}
-                onChangeText={setSearchQuery}
+                onChangeText={handleSearchChange}
                 autoCapitalize="none"
                 autoCorrect={false}
                 clearButtonMode="while-editing"
@@ -414,7 +462,7 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
                     <Pressable
                       key={src}
                       testID={`picker-source-filter-${src}`}
-                      onPress={() => setSelectedSource(src)}
+                      onPress={() => handleSourceSelect(src)}
                       style={[styles.sourceChip, isActive && styles.sourceChipActive]}
                     >
                       <Text
@@ -437,7 +485,7 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
               >
                 <Pressable
                   testID="picker-category-filter-all"
-                  onPress={() => setSelectedCategory('all')}
+                  onPress={() => handleCategorySelect('all')}
                   style={[styles.categoryChip, selectedCategory === 'all' && styles.categoryChipActive]}
                 >
                   <Text
@@ -455,7 +503,7 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
                     <Pressable
                       key={cat.id}
                       testID={`picker-category-filter-${cat.id}`}
-                      onPress={() => setSelectedCategory(cat.id)}
+                      onPress={() => handleCategorySelect(cat.id)}
                       style={[styles.categoryChip, isActive && styles.categoryChipActive]}
                     >
                       <Text

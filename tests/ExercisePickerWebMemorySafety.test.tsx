@@ -35,6 +35,18 @@ jest.mock('expo-router', () => ({
   }),
 }));
 
+jest.mock('../src/lib/supabase', () => ({
+  isSupabaseConfigured: jest.fn(() => false),
+  supabase: {
+    auth: {
+      getSession: jest.fn().mockResolvedValue({ data: { session: null } }),
+      onAuthStateChange: jest.fn().mockReturnValue({
+        data: { subscription: { unsubscribe: jest.fn() } },
+      }),
+    },
+  },
+}));
+
 const mockGifExercise: Exercise = {
   id: 'wger_1225',
   name: 'Barbell Squat',
@@ -123,7 +135,7 @@ describe('ExercisePicker & Web Memory Safety', () => {
         <ExerciseThumbnail
           exercise={mockGifWithStaticExercise}
           testID="test-thumb-hybrid"
-          isDetailView={false}
+          isDetailView={true}
         />
       );
 
@@ -155,7 +167,7 @@ describe('ExercisePicker & Web Memory Safety', () => {
           <ExerciseThumbnail
             exercise={mockGifWithStaticExercise}
             testID="test-thumb-web"
-            isDetailView={false}
+            isDetailView={true}
           />
         );
 

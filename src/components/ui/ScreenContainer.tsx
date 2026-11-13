@@ -15,6 +15,7 @@ export interface ScreenContainerProps {
   style?: StyleProp<ViewStyle>;
   edges?: Edge[];
   disableAnimation?: boolean;
+  noPaddingHorizontal?: boolean;
 }
 
 import { useSegments } from 'expo-router';
@@ -88,6 +89,7 @@ export function ScreenContainer({
   style,
   edges = ['top', 'left', 'right'],
   disableAnimation = false,
+  noPaddingHorizontal = false,
 }: ScreenContainerProps) {
   const isTest = process.env.NODE_ENV === 'test';
   const shouldDisableAnim = disableAnimation || isTest;
@@ -114,7 +116,17 @@ export function ScreenContainer({
   }, [fadeAnim, shouldDisableAnim]);
 
   return (
-    <SafeAreaView edges={edges} style={[{ flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.md }, style]}>
+    <SafeAreaView
+      edges={edges}
+      style={[
+        {
+          flex: 1,
+          backgroundColor: colors.background,
+          paddingHorizontal: noPaddingHorizontal ? 0 : spacing.md,
+        },
+        style,
+      ]}
+    >
       <Animated.View style={[styles.animatedContent, { opacity: fadeAnim }]}>
         {children}
       </Animated.View>

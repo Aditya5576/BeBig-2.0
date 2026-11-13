@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Text, Button, Card } from '../../../components/ui';
+import { Text, Button, Card, Icon } from '../../../components/ui';
 import { useAppTheme } from '../../theme';
 import { ActiveRestTimer } from '../types';
 import { spacing, radii } from '../../../constants/theme';
@@ -110,9 +110,12 @@ export function RestTimerOverlay({
         <Card style={styles.restCompleteCard} testID="rest-complete-banner">
           <View style={styles.restCompleteContent}>
             <View style={styles.restCompleteInfo}>
-              <Text variant="caption" style={styles.restCompleteLabel}>
-                REST COMPLETE
-              </Text>
+              <View style={styles.completeTitleRow}>
+                <Icon name="check" size={13} strokeWidth={3} color={colors.primary} />
+                <Text variant="caption" style={styles.restCompleteLabel}>
+                  REST COMPLETE
+                </Text>
+              </View>
               <Text variant="body" color="primary" style={styles.restCompleteTitle}>
                 Ready for your next set!
               </Text>
@@ -156,6 +159,7 @@ export function RestTimerOverlay({
         <View style={styles.timerHeaderRow}>
           <View style={styles.timerContext}>
             <View style={styles.restTag}>
+              <Icon name="clock" size={11} strokeWidth={2.5} color={colors.primary} />
               <Text variant="caption" style={styles.restTagText}>
                 REST
               </Text>
@@ -248,7 +252,7 @@ const createStyles = (colors: any, insets: { bottom: number }) => StyleSheet.cre
   },
   restCompleteCard: {
     backgroundColor: colors.surfaceElevated,
-    borderColor: colors.success,
+    borderColor: colors.primary,
     borderWidth: 1,
     borderRadius: 12,
     paddingHorizontal: 14,
@@ -258,6 +262,11 @@ const createStyles = (colors: any, insets: { bottom: number }) => StyleSheet.cre
     shadowOpacity: 0.2,
     shadowRadius: 5,
     elevation: 4,
+  },
+  completeTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   progressBarContainer: {
     position: 'absolute',
@@ -286,12 +295,15 @@ const createStyles = (colors: any, insets: { bottom: number }) => StyleSheet.cre
     minWidth: 0,
   },
   restTag: {
-    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: 'rgba(0, 229, 153, 0.12)',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: 'rgba(56, 189, 248, 0.3)',
+    borderColor: 'rgba(0, 229, 153, 0.3)',
   },
   restTagText: {
     fontSize: 10,

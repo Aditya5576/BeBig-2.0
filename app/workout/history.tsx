@@ -2,7 +2,7 @@ import { useAppTheme } from '../../src/features/theme';
 import React, { useState, useCallback, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert, TextInput } from 'react-native';
 import { useRouter, useFocusEffect as routerFocusEffect } from 'expo-router';
-import { ScreenContainer, ScreenScrollView, Text, Button, Card } from '../../src/components/ui';
+import { ScreenContainer, ScreenScrollView, Text, Button, Card, Icon } from '../../src/components/ui';
 import {
   workoutRepository,
   WorkoutSession,
@@ -38,8 +38,10 @@ export default function WorkoutHistoryScreen() {
   const [editingWorkoutId, setEditingWorkoutId] = useState<string | null>(null);
   const [editWorkoutName, setEditWorkoutName] = useState('');
 
-  const loadHistory = useCallback(async () => {
-    setLoading(true);
+  const loadHistory = useCallback(async (isInitial = false) => {
+    if (isInitial && workouts.length === 0) {
+      setLoading(true);
+    }
     try {
       const data = await workoutRepository.getCompletedWorkouts();
       setWorkouts(data);
@@ -48,11 +50,11 @@ export default function WorkoutHistoryScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [workouts.length]);
 
   useFocusEffect(
     useCallback(() => {
-      void loadHistory();
+      void loadHistory(false);
     }, [loadHistory]),
   );
 
@@ -151,10 +153,15 @@ export default function WorkoutHistoryScreen() {
             onPress={() => router.back()}
             style={styles.backButton}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
           >
-            <Text variant="bodyBold" color="accent" style={styles.backButtonText}>
-              ‹ Back
-            </Text>
+            <View style={styles.backButtonRow}>
+              <Icon name="chevronLeft" size={18} color={colors.accent} />
+              <Text variant="bodyBold" color="accent" style={styles.backButtonText}>
+                Back
+              </Text>
+            </View>
           </Pressable>
 
           <View style={styles.titleContainer}>
@@ -167,7 +174,7 @@ export default function WorkoutHistoryScreen() {
           </View>
         </View>
 
-        {loading ? (
+        {loading && workouts.length === 0 ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={colors.primary} />
           </View>
@@ -175,9 +182,7 @@ export default function WorkoutHistoryScreen() {
           /* Empty State */
           <Card style={styles.emptyCard} testID="history-empty-state">
             <View style={styles.emptyIconContainer}>
-              <Text variant="display" style={styles.emptyEmoji}>
-                🏋️‍♂️
-              </Text>
+              <Icon name="workout" size={32} color={colors.textMuted} />
             </View>
             <Text
               variant="titleLarge"
@@ -212,7 +217,7 @@ export default function WorkoutHistoryScreen() {
             >
               <View style={styles.weeklyPerformanceBannerLeft}>
                 <View style={styles.weeklyPerformanceIconWrap}>
-                  <Text style={{ fontSize: 16 }}>📊</Text>
+                  <Icon name="chart" size={18} color={colors.primary} />
                 </View>
                 <View style={styles.weeklyPerformanceTextGroup}>
                   <View style={styles.weeklyPerformanceBadgeRow}>
@@ -225,9 +230,7 @@ export default function WorkoutHistoryScreen() {
                   </Text>
                 </View>
               </View>
-              <Text variant="titleMedium" color="accent" style={styles.weeklyPerformanceChevron}>
-                →
-              </Text>
+              <Icon name="chevronRight" size={18} color={colors.primary} />
             </Pressable>
 
             {/* Month-Grouped Workouts List */}
@@ -317,9 +320,12 @@ export default function WorkoutHistoryScreen() {
                                     <HistorySyncStatus workoutId={item.id} />
                                     {notesCount > 0 && (
                                       <View style={styles.historyCardNoteBadge} testID={`history-card-notes-indicator-${item.id}`}>
-                                        <Text style={styles.historyCardNoteText}>
-                                          📝 {notesCount} {notesCount === 1 ? 'note' : 'notes'}
-                                        </Text>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                          <Icon name="edit" size={10} color={colors.primary} />
+                                          <Text style={styles.historyCardNoteText}>
+                                            {notesCount} {notesCount === 1 ? 'note' : 'notes'}
+                                          </Text>
+                                        </View>
                                       </View>
                                     )}
                                   </View>
@@ -336,7 +342,13 @@ export default function WorkoutHistoryScreen() {
                               <Text variant="caption" color="muted" style={styles.metricLabel}>
                                 DURATION
                               </Text>
-                              <Text variant="bodyBold" color="primary">
+                              <Text
+                                variant="bodyBold"
+                                color="primary"
+                                numberOfLines={1}
+                                adjustsFontSizeToFit
+                                style={styles.metricNumericValue}
+                              >
                                 {formatDuration(item.totalDuration)}
                               </Text>
                             </View>
@@ -347,7 +359,13 @@ export default function WorkoutHistoryScreen() {
                               <Text variant="caption" color="muted" style={styles.metricLabel}>
                                 VOLUME
                               </Text>
-                              <Text variant="bodyBold" color="accent">
+                              <Text
+                                variant="bodyBold"
+                                color="accent"
+                                numberOfLines={1}
+                                adjustsFontSizeToFit
+                                style={styles.metricNumericValue}
+                              >
                                 {(item.totalVolume ?? 0).toLocaleString()} kg
                               </Text>
                             </View>
@@ -358,7 +376,13 @@ export default function WorkoutHistoryScreen() {
                               <Text variant="caption" color="muted" style={styles.metricLabel}>
                                 SETS
                               </Text>
-                              <Text variant="bodyBold" color="primary">
+                              <Text
+                                variant="bodyBold"
+                                color="primary"
+                                numberOfLines={1}
+                                adjustsFontSizeToFit
+                                style={styles.metricNumericValue}
+                              >
                                 {item.completedSetsCount ?? 0}
                               </Text>
                             </View>
@@ -413,8 +437,9 @@ export default function WorkoutHistoryScreen() {
                             style={styles.viewDetailsButton}
                           >
                             <Text variant="caption" style={styles.viewDetailsText}>
-                              View Details ›
+                              View Details
                             </Text>
+                            <Icon name="chevronRight" size={12} color={colors.primary} />
                           </Pressable>
                         </View>
                       </Card>
@@ -446,6 +471,11 @@ const createStyles = (colors: any) => StyleSheet.create({
     justifyContent: 'center',
     marginBottom: spacing.xs,
     alignSelf: 'flex-start',
+  },
+  backButtonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   backButtonText: {},
   titleContainer: {
@@ -554,6 +584,10 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.5,
   },
+  metricNumericValue: {
+    fontVariant: ['tabular-nums'],
+    textAlign: 'center',
+  },
   exerciseList: {
     marginTop: 2,
   },
@@ -599,13 +633,15 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontSize: 12,
   },
   viewDetailsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
     borderRadius: radii.sm,
     backgroundColor: 'rgba(56, 189, 248, 0.1)',
     minHeight: 36,
     justifyContent: 'center',
-    alignItems: 'center',
   },
   viewDetailsText: {
     color: colors.primary,

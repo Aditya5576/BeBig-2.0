@@ -2,7 +2,7 @@ import { useAppTheme } from '../../../src/features/theme';
 import React, { useState, useCallback, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { useRouter, useFocusEffect as routerFocusEffect } from 'expo-router';
-import { ScreenContainer, Text, Button, Card } from '../../../src/components/ui';
+import { ScreenContainer, Text, Button, Card, Icon } from '../../../src/components/ui';
 import {
   workoutRepository,
   calculatePersonalRecords,
@@ -69,14 +69,18 @@ export default function PersonalRecordsScreen() {
             onPress={() => router.back()}
             style={styles.backButton}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            accessibilityLabel="Back"
+            accessibilityRole="button"
           >
+            <Icon name="chevronLeft" size={18} color={colors.accent} />
             <Text variant="bodyBold" color="accent" style={styles.backButtonText}>
-              ‹ Back
+              Back
             </Text>
           </Pressable>
 
           <View style={styles.titleContainer}>
             <View style={styles.trophyBadge}>
+              <Icon name="trophy" size={12} color="#F59E0B" />
               <Text variant="caption" color="accent" style={styles.trophyBadgeText}>
                 RECORD BOARD
               </Text>
@@ -98,9 +102,7 @@ export default function PersonalRecordsScreen() {
           /* Empty State */
           <Card style={styles.emptyCard} testID="prs-empty-state">
             <View style={styles.emptyIconContainer}>
-              <Text variant="display" style={styles.emptyEmoji}>
-                🏆
-              </Text>
+              <Icon name="trophy" size={32} color="#F59E0B" />
             </View>
             <Text variant="titleLarge" color="primary" style={styles.emptyTitle}>
               No Personal Records Yet
@@ -173,9 +175,6 @@ export default function PersonalRecordsScreen() {
             {/* Records List */}
             <View style={styles.recordsList} testID="prs-list">
               {records.map((pr, index) => {
-                const rankMedal =
-                  index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `#${index + 1}`;
-
                 return (
                   <Card key={pr.exerciseId} style={styles.prCard} testID={`pr-card-${pr.exerciseId}`}>
                     <Pressable
@@ -194,9 +193,17 @@ export default function PersonalRecordsScreen() {
                       <View style={styles.prMainRow}>
                         {/* Rank Badge */}
                         <View style={styles.rankContainer}>
-                          <Text variant="bodyBold" style={styles.rankText}>
-                            {rankMedal}
-                          </Text>
+                          {index === 0 ? (
+                            <Icon name="medal" size={18} color="#F59E0B" />
+                          ) : index === 1 ? (
+                            <Icon name="medal" size={18} color="#94A3B8" />
+                          ) : index === 2 ? (
+                            <Icon name="medal" size={18} color="#CD7F32" />
+                          ) : (
+                            <Text variant="caption" color="muted" style={styles.rankText}>
+                              #{index + 1}
+                            </Text>
+                          )}
                         </View>
 
                         {/* Exercise & Date Info */}
@@ -235,9 +242,7 @@ export default function PersonalRecordsScreen() {
                           </Text>
                         </View>
 
-                        <Text variant="body" color="muted" style={styles.chevron}>
-                          ›
-                        </Text>
+                        <Icon name="chevronRight" size={14} color={colors.textMuted} style={styles.chevron} />
                       </View>
                     </Pressable>
                   </Card>
@@ -260,6 +265,9 @@ const createStyles = (colors: any) => StyleSheet.create({
     paddingBottom: spacing.md,
   },
   backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     alignSelf: 'flex-start',
     paddingVertical: spacing.xs,
     paddingRight: spacing.md,
@@ -272,6 +280,9 @@ const createStyles = (colors: any) => StyleSheet.create({
     marginTop: spacing.xs,
   },
   trophyBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     alignSelf: 'flex-start',
     backgroundColor: 'rgba(245, 158, 11, 0.12)',
     paddingHorizontal: spacing.sm,

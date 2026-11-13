@@ -302,9 +302,7 @@ export default function HomeScreen() {
                   <Text variant="caption" color="muted" style={styles.statLabel}>
                     PRS
                   </Text>
-                  <Text variant="caption" color="muted" style={styles.statChevron}>
-                    ›
-                  </Text>
+                  <Icon name="chevronRight" size={12} color={colors.textMuted} />
                 </View>
                 <Text variant="titleLarge" color="primary" style={styles.statNumber}>
                   {`🏆 ${analytics.totalPRsCount}`}
@@ -363,9 +361,7 @@ export default function HomeScreen() {
                   <Text variant="caption" color="muted" style={styles.statLabel}>
                     THIS WEEK
                   </Text>
-                  <Text variant="caption" color="muted" style={styles.statChevron}>
-                    ›
-                  </Text>
+                  <Icon name="chevronRight" size={12} color={colors.textMuted} />
                 </View>
                 <Text variant="titleLarge" color="accent" style={styles.statNumber}>
                   {`${formatVolume(analytics.weeklyVolume)}`}
@@ -619,9 +615,7 @@ export default function HomeScreen() {
                     <Text variant="caption" color="muted" style={styles.historyDate}>
                       {formatCompletedDate(w.finishedAt || w.startedAt)}
                     </Text>
-                    <Text variant="caption" color="muted" style={styles.historyChevron}>
-                      ›
-                    </Text>
+                    <Icon name="chevronRight" size={14} color={colors.textMuted} />
                   </View>
                 </Pressable>
               ))}
@@ -639,7 +633,7 @@ export default function HomeScreen() {
         >
           <View style={styles.weeklyPerformanceLeft}>
             <View style={styles.weeklyPerformanceIconWrap}>
-              <Icon name="trophy" size={18} color="#F59E0B" />
+              <Icon name="chart" size={18} color={colors.primary} />
             </View>
             <View style={styles.weeklyPerformanceTextGroup}>
               <View style={styles.weeklyPerformanceBadgeRow}>
@@ -652,9 +646,7 @@ export default function HomeScreen() {
               </Text>
             </View>
           </View>
-          <Text variant="titleMedium" color="accent" style={styles.weeklyPerformanceChevron}>
-            →
-          </Text>
+          <Icon name="chevronRight" size={18} color={colors.accent} />
         </Pressable>
 
         {/* 7. App Footer */}

@@ -9,7 +9,7 @@ import {
   Platform,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ScreenContainer, Text, Button, Card, Input } from '../../src/components/ui';
+import { ScreenContainer, Text, Button, Card, Input, Icon } from '../../src/components/ui';
 import { useOnboardingStore } from '../../src/features/onboarding';
 import { authService, useAuthStore, resolveAuthenticatedUserRoute, mapAuthError } from '../../src/features/auth';
 import { profileService } from '../../src/features/profile';
@@ -318,9 +318,7 @@ export default function AuthScreen({
           style={({ pressed }) => [styles.backButton, pressed && styles.backButtonPressed]}
           testID="auth-back-button"
         >
-          <Text variant="titleLarge" color="accent" style={styles.backChevron}>
-            ‹
-          </Text>
+          <Icon name="chevronLeft" size={18} color={colors.accent} />
           <Text variant="bodyBold" color="accent">
             Back
           </Text>

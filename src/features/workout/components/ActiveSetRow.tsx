@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, TextInput, Pressable, Modal } from 'react-native';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { View, StyleSheet, TextInput, Pressable, Modal, useWindowDimensions } from 'react-native';
 import { useAppTheme } from '../../theme';
-import { Text } from '../../../components/ui';
+import { Text, Icon } from '../../../components/ui';
 import { WorkoutExercise, WorkoutSet, SetType } from '../types';
 import { spacing, radii } from '../../../constants/theme';
 
@@ -38,7 +38,9 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
   onToggleCompleteSet,
 }) => {
   const { colors } = useAppTheme();
-  const styles = createStyles(colors);
+  const { width: windowWidth } = useWindowDimensions();
+  const isNarrow = windowWidth < 380;
+  const styles = useMemo(() => createStyles(colors, isNarrow), [colors, isNarrow]);
 
   // Initialize input state:
   // Completed sets always display their confirmed logged values.
@@ -224,20 +226,20 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
                 ? 'F'
                 : set.setNumber}
             </Text>
-            <Text
-              style={[
-                styles.badgeChevronText,
+            <Icon
+              name="chevronDown"
+              size={8}
+              strokeWidth={3}
+              color={
                 set.setType === 'drop'
-                  ? styles.badgeTextDrop
+                  ? colors.dropSet || '#A855F7'
                   : set.setType === 'warmup'
-                  ? styles.badgeTextWarmup
+                  ? colors.warning
                   : set.setType === 'failure'
-                  ? styles.badgeTextFailure
-                  : null,
-              ]}
-            >
-              ▾
-            </Text>
+                  ? colors.error
+                  : colors.textMuted
+              }
+            />
           </View>
         </Pressable>
 
@@ -262,7 +264,7 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
             testID={`set-weight-${exercise.exerciseId}-${set.setNumber}`}
             value={localWeight}
             placeholder="kg"
-            placeholderTextColor={colors.textMuted}
+            placeholderTextColor="#64748B"
             keyboardType="decimal-pad"
             selectTextOnFocus
             onChangeText={handleWeightChange}
@@ -281,7 +283,7 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
             testID={`set-reps-${exercise.exerciseId}-${set.setNumber}`}
             value={localReps}
             placeholder="reps"
-            placeholderTextColor={colors.textMuted}
+            placeholderTextColor="#64748B"
             keyboardType="number-pad"
             selectTextOnFocus
             onChangeText={handleRepsChange}
@@ -300,7 +302,7 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
             testID={`set-rir-${exercise.exerciseId}-${set.setNumber}`}
             value={localRir}
             placeholder="RIR"
-            placeholderTextColor={colors.textMuted}
+            placeholderTextColor="#64748B"
             keyboardType="decimal-pad"
             selectTextOnFocus
             onChangeText={handleRirChange}
@@ -331,14 +333,12 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
             }
             accessibilityRole="button"
           >
-            <Text
-              style={[
-                styles.checkButtonIcon,
-                set.completed ? styles.checkIconDone : styles.checkIconPending,
-              ]}
-            >
-              ✓
-            </Text>
+            <Icon
+              name="check"
+              size={16}
+              strokeWidth={3}
+              color={set.completed ? '#FFFFFF' : colors.textMuted}
+            />
           </Pressable>
         </View>
 
@@ -359,14 +359,11 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
             }
             accessibilityRole="button"
           >
-            <Text
-              style={[
-                styles.noteButtonIcon,
-                hasExistingNote ? styles.noteButtonIconActive : null,
-              ]}
-            >
-              {hasExistingNote ? '📝' : '✎'}
-            </Text>
+            <Icon
+              name="note"
+              size={13}
+              color={hasExistingNote ? colors.primary : colors.textMuted}
+            />
             {hasExistingNote && (
               <View
                 testID={`set-note-indicator-${exercise.exerciseId}-${set.setNumber}`}
@@ -387,7 +384,7 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
               accessibilityLabel={`Delete set ${set.setNumber}`}
               accessibilityRole="button"
             >
-              <Text style={styles.deleteIconText}>✕</Text>
+              <Icon name="trash" size={13} color={colors.error} />
             </Pressable>
           ) : null}
         </View>
@@ -402,7 +399,7 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
           accessibilityLabel={`Note: ${localNotes}. Tap to edit.`}
           accessibilityRole="button"
         >
-          <Text style={styles.notePreviewIcon}>📝</Text>
+          <Icon name="note" size={12} color={colors.primary} />
           <Text
             numberOfLines={1}
             ellipsizeMode="tail"
@@ -438,7 +435,7 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
               accessibilityLabel={`Clear note for set ${set.setNumber}`}
               accessibilityRole="button"
             >
-              <Text style={styles.clearNoteText}>✕</Text>
+              <Icon name="close" size={12} color={colors.textMuted} />
             </Pressable>
           )}
           <Pressable
@@ -463,7 +460,7 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
               accessibilityLabel={`Delete set ${set.setNumber}`}
               accessibilityRole="button"
             >
-              <Text style={styles.deleteIconText}>✕</Text>
+              <Icon name="trash" size={13} color={colors.error} />
             </Pressable>
           )}
         </View>
@@ -521,7 +518,7 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
                   </Text>
                 </View>
                 {(!set.setType || set.setType === 'normal') && (
-                  <Text style={styles.typeOptionCheckmark}>✓</Text>
+                  <Icon name="check" size={16} strokeWidth={2.5} color={colors.primary} />
                 )}
               </Pressable>
 
@@ -548,7 +545,7 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
                   </Text>
                 </View>
                 {set.setType === 'warmup' && (
-                  <Text style={styles.typeOptionCheckmark}>✓</Text>
+                  <Icon name="check" size={16} strokeWidth={2.5} color={colors.warning} />
                 )}
               </Pressable>
 
@@ -575,7 +572,7 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
                   </Text>
                 </View>
                 {set.setType === 'drop' && (
-                  <Text style={styles.typeOptionCheckmark}>✓</Text>
+                  <Icon name="check" size={16} strokeWidth={2.5} color={colors.dropSet || '#A855F7'} />
                 )}
               </Pressable>
 
@@ -602,7 +599,7 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
                   </Text>
                 </View>
                 {set.setType === 'failure' && (
-                  <Text style={styles.typeOptionCheckmark}>✓</Text>
+                  <Icon name="check" size={16} strokeWidth={2.5} color={colors.error} />
                 )}
               </Pressable>
             </View>
@@ -623,39 +620,39 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
   );
 });
 
-const createStyles = (colors: any) =>
+const createStyles = (colors: any, isNarrow: boolean = false) =>
   StyleSheet.create({
     rowWrapper: {
       backgroundColor: 'transparent',
       borderRadius: 8,
-      paddingVertical: 3,
+      paddingVertical: 5,
       paddingHorizontal: 2,
-      gap: 4,
+      gap: isNarrow ? 2 : 4,
     },
     rowWrapperCompleted: {
-      backgroundColor: 'rgba(56, 189, 248, 0.04)',
+      backgroundColor: 'rgba(34, 197, 94, 0.08)',
     },
     mainRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 4,
+      gap: isNarrow ? 3 : 4,
     },
     colSet: {
-      width: 32,
+      width: isNarrow ? 28 : 32,
       alignItems: 'center',
       justifyContent: 'center',
     },
     colSetTouch: {
-      width: 32,
+      width: isNarrow ? 28 : 32,
       minHeight: 40,
       alignItems: 'center',
       justifyContent: 'center',
     },
     setNumberBadge: {
-      width: 30,
+      width: isNarrow ? 26 : 28,
       height: 30,
       borderRadius: 6,
-      borderWidth: 1,
+      borderWidth: 0,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
@@ -664,92 +661,86 @@ const createStyles = (colors: any) =>
     setNumberBadgeCompleted: {},
     setNumberText: {
       fontWeight: '700',
-      fontSize: 12,
+      fontSize: isNarrow ? 11 : 12,
       color: colors.textSecondary,
     },
     setNumberTextCompleted: {
-      color: colors.primary,
-    },
-    badgeChevronText: {
-      fontSize: 8,
-      fontWeight: '900',
-      color: colors.textMuted,
-      marginTop: 1,
+      color: '#22C55E',
     },
     colPrev: {
-      width: 48,
+      width: isNarrow ? 40 : 46,
       alignItems: 'center',
       justifyContent: 'center',
     },
     prevText: {
-      fontWeight: '600',
-      fontSize: 10.5,
-      color: colors.textMuted,
+      fontWeight: '500',
+      fontSize: isNarrow ? 9.5 : 10.5,
+      color: '#64748B',
       textAlign: 'center',
       fontVariant: ['tabular-nums'],
     },
     prevTextEmpty: {
-      color: colors.textMuted,
+      color: '#64748B',
       fontSize: 12,
       fontWeight: '400',
     },
     colKg: {
       flex: 1.15,
-      minWidth: 40,
+      minWidth: isNarrow ? 34 : 38,
     },
     colReps: {
       flex: 1.0,
-      minWidth: 38,
+      minWidth: isNarrow ? 30 : 36,
     },
     colRir: {
       flex: 0.85,
-      minWidth: 34,
+      minWidth: isNarrow ? 28 : 32,
     },
     metricInput: {
       backgroundColor: '#0D121D',
       borderWidth: 1,
-      borderColor: colors.borderLight,
+      borderColor: 'rgba(148, 163, 184, 0.16)',
       borderRadius: 8,
-      paddingHorizontal: 2,
+      paddingHorizontal: isNarrow ? 1 : 2,
       paddingVertical: 0,
       color: '#F8FAFC',
-      fontSize: 14,
-      fontWeight: '700',
+      fontSize: 15,
+      fontWeight: '600',
       textAlign: 'center',
-      height: 38,
+      height: 36,
       fontVariant: ['tabular-nums'],
     },
     metricInputCompleted: {
-      backgroundColor: 'rgba(56, 189, 248, 0.04)',
-      borderColor: 'rgba(56, 189, 248, 0.25)',
+      backgroundColor: 'rgba(34, 197, 94, 0.06)',
+      borderColor: 'rgba(34, 197, 94, 0.25)',
       color: '#F8FAFC',
     },
     metricInputRir: {
-      fontSize: 13,
+      fontSize: isNarrow ? 13 : 14,
       fontWeight: '600',
       color: colors.textSecondary,
     },
     colCheck: {
-      width: 38,
+      width: isNarrow ? 32 : 36,
       alignItems: 'center',
       justifyContent: 'center',
     },
     checkButton: {
-      width: 38,
-      height: 38,
+      width: 32,
+      height: 32,
       borderRadius: 8,
       justifyContent: 'center',
       alignItems: 'center',
     },
     checkButtonPending: {
-      backgroundColor: colors.surfaceSubtle,
+      backgroundColor: '#1E293B',
       borderWidth: 1,
-      borderColor: colors.borderLight,
+      borderColor: 'rgba(148, 163, 184, 0.16)',
     },
     checkButtonDone: {
-      backgroundColor: colors.primary,
-      borderWidth: 1,
-      borderColor: colors.primary,
+      backgroundColor: '#22C55E',
+      borderWidth: 0,
+      borderColor: 'transparent',
     },
     checkButtonIcon: {
       fontSize: 15,
@@ -762,17 +753,17 @@ const createStyles = (colors: any) =>
       color: colors.background,
     },
     colNote: {
-      width: 30,
+      width: isNarrow ? 26 : 28,
       alignItems: 'center',
       justifyContent: 'center',
     },
     noteButton: {
-      width: 30,
-      height: 38,
+      width: isNarrow ? 26 : 28,
+      height: 36,
       borderRadius: 8,
-      backgroundColor: colors.surfaceSubtle,
-      borderWidth: 1,
-      borderColor: colors.borderLight,
+      backgroundColor: 'transparent',
+      borderWidth: 0,
+      borderColor: 'transparent',
       justifyContent: 'center',
       alignItems: 'center',
       position: 'relative',
@@ -800,9 +791,9 @@ const createStyles = (colors: any) =>
     notePreviewPill: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: 'rgba(56, 189, 248, 0.06)',
-      borderWidth: 1,
-      borderColor: 'rgba(56, 189, 248, 0.2)',
+      backgroundColor: 'rgba(56, 189, 248, 0.08)',
+      borderWidth: 0,
+      borderColor: 'transparent',
       borderRadius: 6,
       paddingVertical: 5,
       paddingHorizontal: 8,
@@ -887,34 +878,34 @@ const createStyles = (colors: any) =>
       fontWeight: '700',
     },
     colDelete: {
-      width: 28,
+      width: isNarrow ? 24 : 26,
       alignItems: 'center',
       justifyContent: 'center',
     },
     deleteButton: {
-      width: 28,
-      height: 38,
+      width: isNarrow ? 24 : 26,
+      height: 36,
       borderRadius: 8,
-      backgroundColor: 'rgba(239, 68, 68, 0.08)',
-      borderWidth: 1,
-      borderColor: 'rgba(239, 68, 68, 0.25)',
+      backgroundColor: 'transparent',
+      borderWidth: 0,
+      borderColor: 'transparent',
       justifyContent: 'center',
       alignItems: 'center',
     },
     badgeNormal: {
-      backgroundColor: colors.surfaceElevated,
-      borderColor: colors.borderLight,
-      borderWidth: 1,
+      backgroundColor: '#1E293B',
+      borderColor: 'transparent',
+      borderWidth: 0,
       borderRadius: 6,
     },
     badgeTextNormal: {
-      color: colors.textPrimary,
+      color: '#F8FAFC',
       fontWeight: '700',
     },
     badgeDrop: {
       backgroundColor: 'rgba(168, 85, 247, 0.18)',
-      borderColor: '#A855F7',
-      borderWidth: 1,
+      borderColor: 'transparent',
+      borderWidth: 0,
       borderRadius: 6,
     },
     badgeTextDrop: {
@@ -923,8 +914,8 @@ const createStyles = (colors: any) =>
     },
     badgeWarmup: {
       backgroundColor: 'rgba(245, 158, 11, 0.18)',
-      borderColor: '#F59E0B',
-      borderWidth: 1,
+      borderColor: 'transparent',
+      borderWidth: 0,
       borderRadius: 6,
     },
     badgeTextWarmup: {
@@ -933,8 +924,8 @@ const createStyles = (colors: any) =>
     },
     badgeFailure: {
       backgroundColor: 'rgba(239, 68, 68, 0.18)',
-      borderColor: '#EF4444',
-      borderWidth: 1,
+      borderColor: 'transparent',
+      borderWidth: 0,
       borderRadius: 6,
     },
     badgeTextFailure: {

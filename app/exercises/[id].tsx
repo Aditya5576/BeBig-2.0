@@ -450,7 +450,8 @@ export default function ExerciseDetailScreen() {
         <View style={styles.navBar}>
           <Button
             testID="detail-back-button"
-            title="← Back"
+            title="Back"
+            icon="chevronLeft"
             onPress={() => router.back()}
             variant="ghost"
             size="sm"

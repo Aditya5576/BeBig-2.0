@@ -2,7 +2,7 @@ import { useAppTheme } from '../../src/features/theme';
 import React, { useState, useCallback, useMemo } from 'react';
 import { View, StyleSheet, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { ScreenContainer, ScreenScrollView, Text, Button, Card } from '../../src/components/ui';
+import { ScreenContainer, ScreenScrollView, Text, Button, Card, Icon } from '../../src/components/ui';
 import { templateRepository, WorkoutTemplate } from '../../src/features/templates';
 import { workoutRepository, WorkoutSession } from '../../src/features/workout';
 import {
@@ -263,10 +263,15 @@ export default function StartWorkoutScreen() {
             onPress={() => router.back()}
             style={styles.backButton}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
           >
-            <Text variant="bodyBold" color="accent" style={styles.backButtonText}>
-              ‹ Back
-            </Text>
+            <View style={styles.backButtonContent}>
+              <Icon name="chevronLeft" size={20} strokeWidth={2.5} color={colors.primary} />
+              <Text variant="bodyBold" color="accent" style={styles.backButtonText}>
+                Back
+              </Text>
+            </View>
           </Pressable>
 
           <View style={styles.titleContainer}>
@@ -432,9 +437,12 @@ export default function StartWorkoutScreen() {
                   onPress={() => router.push('/templates' as any)}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
-                  <Text variant="caption" color="accent" style={styles.manageTemplatesText}>
-                    Manage Library →
-                  </Text>
+                  <View style={styles.manageTemplatesRow}>
+                    <Text variant="caption" color="accent" style={styles.manageTemplatesText}>
+                      Manage Library
+                    </Text>
+                    <Icon name="arrowRight" size={13} strokeWidth={2.5} color={colors.primary} />
+                  </View>
                 </Pressable>
               </View>
 
@@ -521,7 +529,6 @@ const createStyles = (colors: any) =>
   StyleSheet.create({
     scrollContent: {
       flexGrow: 1,
-      paddingHorizontal: spacing.md,
       paddingVertical: spacing.md,
       gap: spacing.md,
     },
@@ -533,6 +540,11 @@ const createStyles = (colors: any) =>
       minHeight: 36,
       justifyContent: 'center',
       alignSelf: 'flex-start',
+    },
+    backButtonContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
     },
     backButtonText: {
       fontSize: 16,
@@ -768,6 +780,11 @@ const createStyles = (colors: any) =>
       fontSize: 11,
       fontWeight: '700',
       color: colors.textMuted,
+    },
+    manageTemplatesRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
     },
     manageTemplatesText: {
       fontSize: 12,

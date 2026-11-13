@@ -10,7 +10,7 @@ import {
   TextInput,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { ScreenContainer, ScreenFlatList, Text, Button, Card } from '../../src/components/ui';
+import { ScreenContainer, ScreenFlatList, Text, Button, Card, Icon } from '../../src/components/ui';
 import { templateRepository, WorkoutTemplate } from '../../src/features/templates';
 import { workoutRepository } from '../../src/features/workout';
 import { getTemplateFocus } from '../../src/features/templates/utils/templateUtils';
@@ -48,8 +48,10 @@ export default function TemplatesListScreen() {
   const [activeSort, setActiveSort] = useState<SortOption>('latest_updated');
   const [startingTemplateId, setStartingTemplateId] = useState<string | null>(null);
 
-  const loadTemplates = useCallback(async () => {
-    setLoading(true);
+  const loadTemplates = useCallback(async (isInitial = false) => {
+    if (isInitial && templates.length === 0) {
+      setLoading(true);
+    }
     try {
       const data = await templateRepository.getTemplates();
       setTemplates(data);
@@ -58,11 +60,11 @@ export default function TemplatesListScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [templates.length]);
 
   useFocusEffect(
     useCallback(() => {
-      void loadTemplates();
+      void loadTemplates(false);
     }, [loadTemplates]),
   );
 
@@ -323,7 +325,8 @@ export default function TemplatesListScreen() {
         <View style={styles.navRow}>
           <Button
             testID="templates-back-button"
-            title="← Home"
+            title="Home"
+            icon="chevronLeft"
             onPress={() => router.back()}
             variant="ghost"
             size="sm"
@@ -349,7 +352,8 @@ export default function TemplatesListScreen() {
 
           <Button
             testID="create-template-button"
-            title="+ New"
+            title="New"
+            icon="plus"
             onPress={() => router.push('/templates/new' as any)}
             variant="primary"
             size="sm"
@@ -374,10 +378,11 @@ export default function TemplatesListScreen() {
               testID="clear-search-button"
               onPress={() => setSearchQuery('')}
               style={styles.clearSearchButton}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              accessibilityRole="button"
+              accessibilityLabel="Clear search"
             >
-              <Text variant="caption" color="muted" style={styles.clearSearchText}>
-                ✕
-              </Text>
+              <Icon name="close" size={14} color={colors.textMuted} />
             </Pressable>
           ) : null}
         </View>

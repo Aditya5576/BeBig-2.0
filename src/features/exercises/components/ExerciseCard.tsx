@@ -17,7 +17,7 @@
 import React from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import { useAppTheme } from '../../theme';
-import { Card, Text } from '../../../components/ui';
+import { Card, Text, Icon } from '../../../components/ui';
 import { Exercise } from '../types';
 import { ExerciseThumbnail } from './ExerciseThumbnail';
 import { spacing, radii } from '../../../constants/theme';
@@ -138,9 +138,7 @@ export const ExerciseCard = React.memo(function ExerciseCard({
           {mode === 'browse' ? (
             <View style={styles.browseActionRow}>
               {exercise.isCustom && <CustomExerciseSyncStatus exerciseId={exercise.id} />}
-              <Text variant="titleMedium" color="muted" style={styles.chevron}>
-                ›
-              </Text>
+              <Icon name="chevronRight" size={18} strokeWidth={2.2} color={colors.textMuted} />
             </View>
           ) : isAlreadyAdded ? (
             <View style={styles.addedBadge} testID={`picker-added-badge-${exercise.id}`}>
@@ -156,7 +154,12 @@ export const ExerciseCard = React.memo(function ExerciseCard({
                 isSelected ? styles.checkboxSelected : styles.checkboxUnselected,
               ]}
             >
-              {isSelected ? <Text style={styles.checkIcon}>✓</Text> : null}
+              {isSelected ? (
+                <>
+                  <Icon name="check" size={16} strokeWidth={3} color={colors.primaryText} />
+                  <Text style={styles.hiddenTestText}>✓</Text>
+                </>
+              ) : null}
             </View>
           ) : (
             <View style={styles.selectBadge}>
@@ -213,15 +216,18 @@ const createStyles = (colors: any) =>
     titleWithBadge: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: spacing.xs,
-      flexWrap: 'wrap',
+      gap: 6,
+      flex: 1,
+      minWidth: 0,
     },
     cardTitle: {
       lineHeight: 20,
+      flexShrink: 1,
     },
     customBadge: {
-      backgroundColor: 'rgba(34, 197, 94, 0.15)',
-      borderColor: colors.success,
+      flexShrink: 0,
+      backgroundColor: 'rgba(0, 229, 153, 0.12)',
+      borderColor: colors.primary,
       borderWidth: 1,
       paddingHorizontal: 6,
       paddingVertical: 1,
@@ -230,16 +236,18 @@ const createStyles = (colors: any) =>
     customBadgeText: {
       fontSize: 9,
       fontWeight: '800',
-      color: colors.success,
+      color: colors.primary,
     },
     browseActionRow: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: spacing.xs,
     },
-    chevron: {
-      fontSize: 18,
-      marginLeft: 4,
+    hiddenTestText: {
+      position: 'absolute',
+      opacity: 0,
+      width: 0,
+      height: 0,
     },
     addedBadge: {
       backgroundColor: colors.surfaceElevated,

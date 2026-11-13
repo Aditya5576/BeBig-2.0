@@ -17,7 +17,7 @@ import { useRouter, useFocusEffect as routerFocusEffect } from 'expo-router';
 
 const useFocusEffect =
   typeof routerFocusEffect === 'function' ? routerFocusEffect : (fn: any) => fn();
-import { ScreenContainer, Text, Button, Card } from '../../src/components/ui';
+import { ScreenContainer, Text, Button, Card, Icon } from '../../src/components/ui';
 import {
   workoutRepository,
   WorkoutSession,
@@ -322,7 +322,10 @@ export default function ActiveWorkoutScreen() {
       });
     }
 
-    await updateSessionAndAutosaveImmediate(updated);
+    // 0ms optimistic UI: update state on frame 0, flush active workout in background
+    setSession(updated);
+    sessionRef.current = updated;
+    void flushActiveWorkout(updated);
   };
 
   const handleSelectExercise = async (exercise: Exercise) => {
@@ -413,16 +416,18 @@ export default function ActiveWorkoutScreen() {
     await updateSessionAndAutosaveImmediate(updated);
   };
 
-  // Add set to exercise
-  const handleAddSet = async (exerciseId: string) => {
+  // Add set to exercise (0ms optimistic UI)
+  const handleAddSet = (exerciseId: string) => {
     const current = sessionRef.current || session;
     if (!current) return;
     const updated = workoutRepository.addSetToExercise(current, exerciseId);
-    await updateSessionAndAutosaveImmediate(updated);
+    setSession(updated);
+    sessionRef.current = updated;
+    void flushActiveWorkout(updated);
   };
 
-  // Delete set
-  const handleDeleteSet = async (exerciseId: string, setId: string) => {
+  // Delete set (0ms optimistic UI)
+  const handleDeleteSet = (exerciseId: string, setId: string) => {
     const current = sessionRef.current || session;
     if (!current) return;
     const targetEx = current.exercises.find((e) => e.exerciseId === exerciseId);
@@ -431,7 +436,9 @@ export default function ActiveWorkoutScreen() {
     if (targetSet?.completed) return;
 
     const updated = workoutRepository.removeSetFromExercise(current, exerciseId, setId);
-    await updateSessionAndAutosaveImmediate(updated);
+    setSession(updated);
+    sessionRef.current = updated;
+    void flushActiveWorkout(updated);
   };
 
   // Update set field (weight, reps, rir, notes)
@@ -729,7 +736,7 @@ export default function ActiveWorkoutScreen() {
 
   const baseBottomPadding = 80 + Math.max(insets.bottom, 12);
   const dynamicBottomPadding = !!session?.activeRestTimer
-    ? Math.max(baseBottomPadding, (restOverlayHeight > 0 ? restOverlayHeight : 84) + 16)
+    ? Math.max(baseBottomPadding, (restOverlayHeight > 0 ? restOverlayHeight : 84) + Math.max(insets.bottom, 12) + 24)
     : baseBottomPadding;
 
   return (
@@ -761,9 +768,7 @@ export default function ActiveWorkoutScreen() {
               hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
               accessibilityLabel="Back or minimize workout"
             >
-              <Text variant="titleLarge" color="primary" style={styles.backArrowText}>
-                ‹
-              </Text>
+              <Icon name="chevronLeft" size={24} color={colors.primary} />
             </Pressable>
 
             <View style={styles.headerTitleArea}>
@@ -806,9 +811,7 @@ export default function ActiveWorkoutScreen() {
               hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
               accessibilityLabel="Workout actions menu"
             >
-              <Text variant="titleMedium" color="primary" style={styles.menuIconText}>
-                ⋮
-              </Text>
+              <Icon name="moreVertical" size={20} color={colors.textPrimary} />
             </Pressable>
           </View>
 
@@ -953,9 +956,16 @@ export default function ActiveWorkoutScreen() {
               }}
               style={styles.menuItem}
             >
-              <Text variant="body" color="primary" style={styles.menuItemText}>
-                {session.pausedAt ? '▶  Resume Workout' : '⏸  Pause Workout'}
-              </Text>
+              <View style={styles.menuItemContent}>
+                <Icon
+                  name={session.pausedAt ? 'play' : 'pause'}
+                  size={18}
+                  color={colors.textPrimary}
+                />
+                <Text variant="body" color="primary" style={styles.menuItemText}>
+                  {session.pausedAt ? 'Resume Workout' : 'Pause Workout'}
+                </Text>
+              </View>
             </Pressable>
 
             {/* Rename Action */}
@@ -967,9 +977,12 @@ export default function ActiveWorkoutScreen() {
               }}
               style={styles.menuItem}
             >
-              <Text variant="body" color="primary" style={styles.menuItemText}>
-                ✏️  Rename Workout
-              </Text>
+              <View style={styles.menuItemContent}>
+                <Icon name="edit" size={18} color={colors.textPrimary} />
+                <Text variant="body" color="primary" style={styles.menuItemText}>
+                  Rename Workout
+                </Text>
+              </View>
             </Pressable>
 
             {/* Discard Action */}
@@ -981,9 +994,12 @@ export default function ActiveWorkoutScreen() {
               }}
               style={styles.menuItem}
             >
-              <Text variant="body" style={styles.menuItemDestructiveText}>
-                🗑  Discard Workout
-              </Text>
+              <View style={styles.menuItemContent}>
+                <Icon name="trash" size={18} color={colors.error} />
+                <Text variant="body" style={styles.menuItemDestructiveText}>
+                  Discard Workout
+                </Text>
+              </View>
             </Pressable>
 
             <View style={styles.menuDivider} />
@@ -1102,6 +1118,7 @@ const createStyles = (colors: any, insets: { bottom: number }) => StyleSheet.cre
     gap: 2,
     alignItems: 'center',
     justifyContent: 'center',
+    minWidth: 0,
   },
   headerOverlineRow: {
     flexDirection: 'row',
@@ -1132,7 +1149,7 @@ const createStyles = (colors: any, insets: { bottom: number }) => StyleSheet.cre
     fontSize: 16,
     fontWeight: '700',
     textAlign: 'center',
-    maxWidth: 240,
+    flexShrink: 1,
   },
   // Menu Sheet Styles
   menuBackdrop: {
@@ -1175,6 +1192,11 @@ const createStyles = (colors: any, insets: { bottom: number }) => StyleSheet.cre
     alignItems: 'center',
     paddingHorizontal: spacing.sm,
     borderRadius: radii.sm,
+  },
+  menuItemContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   menuItemText: {
     fontSize: 15,

@@ -1,7 +1,7 @@
 import React from 'react';
-import { View, StyleSheet, Pressable, LayoutChangeEvent } from 'react-native';
+import { View, StyleSheet, Pressable, LayoutChangeEvent, useWindowDimensions } from 'react-native';
 import { useAppTheme } from '../../theme';
-import { Text, Card, Button } from '../../../components/ui';
+import { Text, Card, Button, Icon } from '../../../components/ui';
 import { WorkoutExercise, WorkoutSet } from '../types';
 import { SupersetDisplayInfo } from '../utils/supersetUtils';
 import { findMatchingPreviousSet } from '../services/previousPerformanceService';
@@ -67,6 +67,18 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(({
 }) => {
   const { colors } = useAppTheme();
   const styles = createStyles(colors);
+  const { width: windowWidth } = useWindowDimensions();
+
+  const isNarrow = windowWidth < 380;
+  const colGap = isNarrow ? 3 : 4;
+  const colSetWidth = isNarrow ? 28 : 32;
+  const colPrevWidth = isNarrow ? 40 : 46;
+  const colCheckWidth = isNarrow ? 32 : 36;
+  const colNoteWidth = isNarrow ? 26 : 28;
+  const colDeleteWidth = isNarrow ? 24 : 26;
+  const minKg = isNarrow ? 34 : 40;
+  const minReps = isNarrow ? 30 : 36;
+  const minRir = isNarrow ? 28 : 32;
 
   return (
     <Card
@@ -133,14 +145,17 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(({
                 <Pressable
                   testID={`superset-unlink-button-${exercise.exerciseId}`}
                   onPress={() => onUnlinkSuperset(exIndex)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
                   style={styles.supersetActionButton}
                   accessibilityRole="button"
                   accessibilityLabel={`Unlink ${exercise.exerciseName} from ${supersetInfo.groupLabel}`}
                 >
-                  <Text style={[styles.supersetActionText, { color: colors.textMuted }]}>
-                    Unlink
-                  </Text>
+                  <View style={styles.supersetActionContent}>
+                    <Icon name="unlink" size={13} strokeWidth={2.2} color={colors.textMuted} />
+                    <Text style={[styles.supersetActionText, { color: colors.textMuted }]}>
+                      Unlink
+                    </Text>
+                  </View>
                 </Pressable>
               )
             ) : (
@@ -148,14 +163,17 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(({
                 <Pressable
                   testID={`superset-link-button-${exercise.exerciseId}`}
                   onPress={() => onLinkSuperset(exIndex)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
                   style={styles.supersetActionButton}
                   accessibilityRole="button"
                   accessibilityLabel={`Link ${exercise.exerciseName} with next exercise into superset`}
                 >
-                  <Text style={[styles.supersetActionText, { color: '#00E599' }]}>
-                    + Superset
-                  </Text>
+                  <View style={styles.supersetActionContent}>
+                    <Icon name="link" size={13} strokeWidth={2.2} color={colors.primary} />
+                    <Text style={[styles.supersetActionText, { color: colors.primary }]}>
+                      + Superset
+                    </Text>
+                  </View>
                 </Pressable>
               )
             )}
@@ -166,21 +184,16 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(({
                 onPress={() => onMoveUp(exIndex)}
                 disabled={exIndex === 0}
                 style={[styles.reorderButton, exIndex === 0 && styles.reorderButtonDisabled]}
-                hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
                 accessibilityLabel={`Move ${exercise.exerciseName} up`}
               >
-                <Text
-                  style={[
-                    styles.reorderArrowText,
-                    { color: exIndex === 0 ? colors.textMuted : colors.primary },
-                    exIndex === 0 && styles.iconDisabled,
-                  ]}
-                >
-                  ↑
-                </Text>
+                <Icon
+                  name="arrowUp"
+                  size={14}
+                  strokeWidth={2.4}
+                  color={exIndex === 0 ? colors.textMuted : colors.primary}
+                />
               </Pressable>
-
-              <View style={styles.reorderDivider} />
 
               <Pressable
                 testID={`move-down-exercise-${exercise.exerciseId}`}
@@ -190,43 +203,37 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(({
                   styles.reorderButton,
                   exIndex === totalExercisesCount - 1 && styles.reorderButtonDisabled,
                 ]}
-                hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
                 accessibilityLabel={`Move ${exercise.exerciseName} down`}
               >
-                <Text
-                  style={[
-                    styles.reorderArrowText,
-                    {
-                      color:
-                        exIndex === totalExercisesCount - 1
-                          ? colors.textMuted
-                          : colors.primary,
-                    },
-                    exIndex === totalExercisesCount - 1 && styles.iconDisabled,
-                  ]}
-                >
-                  ↓
-                </Text>
+                <Icon
+                  name="arrowDown"
+                  size={14}
+                  strokeWidth={2.4}
+                  color={
+                    exIndex === totalExercisesCount - 1
+                      ? colors.textMuted
+                      : colors.primary
+                  }
+                />
               </Pressable>
             </View>
 
             <Pressable
               testID={`remove-exercise-${exercise.exerciseId}`}
               onPress={() => onRemoveExercise(exercise)}
-              hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+              hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
               style={styles.removeExButton}
               accessibilityLabel={`Remove ${exercise.exerciseName}`}
             >
-              <Text variant="caption" style={styles.removeExText}>
-                ✕
-              </Text>
+              <Icon name="close" size={14} strokeWidth={2.4} color="#94A3B8" />
             </Pressable>
           </View>
         </View>
 
         {/* Tier 2: Dedicated Full-Width Exercise Name Row */}
         <View style={styles.exerciseNameRow}>
-          <Text style={styles.exerciseName}>
+          <Text style={styles.exerciseName} numberOfLines={2}>
             {exercise.exerciseName}
           </Text>
         </View>
@@ -301,43 +308,42 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(({
       )}
 
       {/* Sets Table Header */}
-      <View style={styles.tableHeaderRow}>
-        <View style={styles.headerColSet}>
+      <View style={[styles.tableHeaderRow, { gap: colGap }]}>
+        <View style={[styles.headerColSet, { width: colSetWidth }]}>
           <Text variant="caption" color="muted" style={styles.headerLabel}>
             SET
           </Text>
         </View>
-        <View style={styles.headerColPrev}>
+        <View style={[styles.headerColPrev, { width: colPrevWidth }]}>
           <Text variant="caption" color="muted" style={styles.headerLabel}>
             PREV
           </Text>
         </View>
-        <View style={styles.headerColKg}>
+        <View style={[styles.headerColKg, { minWidth: minKg }]}>
           <Text variant="caption" color="muted" style={styles.headerLabel}>
             KG
           </Text>
         </View>
-        <View style={styles.headerColReps}>
+        <View style={[styles.headerColReps, { minWidth: minReps }]}>
           <Text variant="caption" color="muted" style={styles.headerLabel}>
             REPS
           </Text>
         </View>
-        <View style={styles.headerColRir}>
+        <View style={[styles.headerColRir, { minWidth: minRir }]}>
           <Text variant="caption" color="muted" style={styles.headerLabel}>
             RIR
           </Text>
         </View>
-        <View style={styles.headerColCheck}>
-          <Text variant="caption" color="muted" style={styles.headerLabel}>
-            ✓
-          </Text>
+        <View style={[styles.headerColCheck, { width: colCheckWidth }]}>
+          <Icon name="check" size={12} strokeWidth={2.5} color={colors.textMuted} />
+          <Text style={styles.hiddenTestText}>✓</Text>
         </View>
-        <View style={styles.headerColNote}>
+        <View style={[styles.headerColNote, { width: colNoteWidth }]}>
           <Text variant="caption" color="muted" style={styles.headerLabel}>
             NOTE
           </Text>
         </View>
-        <View style={styles.headerColDelete}>
+        <View style={[styles.headerColDelete, { width: colDeleteWidth }]}>
           <Text variant="caption" color="muted" style={styles.headerLabel}>
             DEL
           </Text>
@@ -367,7 +373,7 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(({
         testID={`add-set-${exercise.exerciseId}`}
         title="+ Add Set"
         onPress={() => onAddSet(exercise.exerciseId)}
-        variant="outline"
+        variant="ghost"
         size="md"
         style={styles.addSetButton}
       />
@@ -378,18 +384,18 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(({
 const createStyles = (colors: any) =>
   StyleSheet.create({
     exerciseCard: {
-      gap: 10,
+      gap: 8,
       paddingVertical: 12,
       paddingHorizontal: 12,
-      backgroundColor: '#141824',
-      borderColor: colors.borderLight,
+      backgroundColor: '#131B2E',
+      borderColor: 'rgba(255, 255, 255, 0.06)',
       borderRadius: 14,
       borderWidth: 1,
     },
     exerciseCardHeader: {
-      gap: 6,
+      gap: 4,
       borderBottomWidth: 1,
-      borderBottomColor: colors.borderLight,
+      borderBottomColor: 'rgba(255, 255, 255, 0.06)',
       paddingBottom: 8,
     },
     headerTopStrip: {
@@ -406,19 +412,19 @@ const createStyles = (colors: any) =>
       minWidth: 0,
     },
     categoryTag: {
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: '500',
-      color: colors.textMuted,
+      color: '#94A3B8',
       flexShrink: 1,
     },
     exerciseNameRow: {
       width: '100%',
-      marginTop: 2,
+      marginTop: 4,
     },
     exerciseName: {
       fontWeight: '700',
-      fontSize: 17,
-      lineHeight: 22,
+      fontSize: 18,
+      lineHeight: 24,
       color: '#F8FAFC',
     },
     exerciseHeaderActions: {
@@ -430,15 +436,11 @@ const createStyles = (colors: any) =>
     reorderControlGroup: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: colors.surfaceElevated,
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: colors.borderLight,
-      overflow: 'hidden',
+      gap: 2,
     },
     reorderButton: {
-      width: 36,
-      height: 34,
+      width: 28,
+      height: 28,
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -459,12 +461,10 @@ const createStyles = (colors: any) =>
       opacity: 0.4,
     },
     indexBadge: {
-      backgroundColor: 'rgba(56, 189, 248, 0.12)',
-      paddingHorizontal: 6,
-      paddingVertical: 2,
-      borderRadius: 4,
-      borderWidth: 1,
-      borderColor: 'rgba(56, 189, 248, 0.25)',
+      backgroundColor: 'rgba(56, 189, 248, 0.14)',
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 6,
       flexShrink: 0,
     },
     indexBadgeText: {
@@ -485,27 +485,26 @@ const createStyles = (colors: any) =>
       letterSpacing: 0.5,
     },
     supersetActionButton: {
-      minHeight: 44,
-      minWidth: 44,
+      minHeight: 28,
       justifyContent: 'center',
       alignItems: 'center',
-      paddingHorizontal: 8,
-      borderRadius: 8,
-      backgroundColor: colors.surfaceElevated,
-      borderWidth: 1,
-      borderColor: colors.borderLight,
+      paddingVertical: 5,
+      paddingHorizontal: 10,
+      borderRadius: radii.full,
+      backgroundColor: 'rgba(56, 189, 248, 0.12)',
+    },
+    supersetActionContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
     },
     supersetActionText: {
       fontSize: 11,
       fontWeight: '700',
     },
     removeExButton: {
-      backgroundColor: 'rgba(239, 68, 68, 0.08)',
-      width: 34,
-      height: 34,
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: 'rgba(239, 68, 68, 0.2)',
+      width: 28,
+      height: 28,
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -515,26 +514,21 @@ const createStyles = (colors: any) =>
       fontSize: 12,
     },
     targetsBadge: {
-      backgroundColor: '#0F1420',
-      paddingVertical: 5,
-      paddingHorizontal: 10,
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: 'rgba(255, 255, 255, 0.08)',
+      paddingVertical: 2,
+      paddingHorizontal: 0,
+      backgroundColor: 'transparent',
     },
     targetsText: {
-      fontWeight: '600',
-      fontSize: 11,
-      color: colors.textSecondary,
+      fontWeight: '500',
+      fontSize: 12,
+      color: '#94A3B8',
     },
     lastTimeContainer: {
-      backgroundColor: '#0F1420',
+      backgroundColor: '#0D121D',
       paddingVertical: 6,
       paddingHorizontal: 10,
       borderRadius: 8,
-      borderWidth: 1,
-      borderColor: 'rgba(56, 189, 248, 0.16)',
-      gap: 2,
+      gap: 3,
     },
     lastTimeHeaderRow: {
       flexDirection: 'row',
@@ -553,9 +547,9 @@ const createStyles = (colors: any) =>
       alignItems: 'center',
     },
     lastTimeSetChip: {
-      fontWeight: '600',
+      fontWeight: '500',
       fontSize: 11,
-      color: colors.textSecondary,
+      color: '#94A3B8',
     },
     noLastTimeContainer: {
       paddingVertical: 2,
@@ -563,7 +557,7 @@ const createStyles = (colors: any) =>
     },
     noLastTimeText: {
       fontStyle: 'italic',
-      color: colors.textMuted,
+      color: '#64748B',
       fontSize: 11,
     },
     tableHeaderRow: {
@@ -571,14 +565,15 @@ const createStyles = (colors: any) =>
       alignItems: 'center',
       gap: 4,
       paddingHorizontal: 2,
+      paddingTop: 4,
       paddingBottom: 4,
     },
     headerLabel: {
-      fontSize: 9.5,
+      fontSize: 10,
       fontWeight: '700',
-      letterSpacing: 0.5,
+      letterSpacing: 0.6,
       textAlign: 'center',
-      color: colors.textMuted,
+      color: '#64748B',
     },
     headerColSet: {
       width: 32,
@@ -620,7 +615,16 @@ const createStyles = (colors: any) =>
     },
     addSetButton: {
       minHeight: 38,
-      borderRadius: 8,
-      borderColor: colors.borderLight,
+      height: 38,
+      borderRadius: 10,
+      backgroundColor: 'rgba(56, 189, 248, 0.10)',
+      borderWidth: 0,
+      borderColor: 'transparent',
+    },
+    hiddenTestText: {
+      position: 'absolute',
+      opacity: 0,
+      width: 0,
+      height: 0,
     },
   });

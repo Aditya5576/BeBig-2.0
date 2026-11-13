@@ -8,6 +8,7 @@ import { useAppTheme } from '../../theme';
 import React from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import { Text } from '../../../components/ui/Text';
+import { Icon } from '../../../components/ui/Icon';
 import { spacing, radii } from '../../../constants/theme';
 
 export interface OnboardingHeaderProps {
@@ -41,9 +42,7 @@ export function OnboardingHeader({
               style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}
               testID="onboarding-back-button"
             >
-              <Text variant="titleLarge" color="accent" style={styles.backIcon}>
-                ‹
-              </Text>
+              <Icon name="chevronLeft" size={18} color={colors.accent} />
               <Text variant="body" color="accent" style={styles.backText}>
                 Back
               </Text>

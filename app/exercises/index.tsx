@@ -11,7 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { ScreenContainer, ScreenScrollView, ScreenFlatList, Text, Button, Card } from '../../src/components/ui';
+import { ScreenContainer, ScreenScrollView, ScreenFlatList, Text, Button, Card, Icon } from '../../src/components/ui';
 import { exerciseRepository, Exercise, STANDARD_CATEGORIES, ExerciseThumbnail, ExerciseCard } from '../../src/features/exercises';
 import { spacing, radii } from '../../src/constants/theme';
 import { useEntitySyncStatus } from '../../src/services/sync';
@@ -108,8 +108,8 @@ export default function ExerciseListScreen() {
       category: selectedCategory !== 'all' ? selectedCategory : undefined,
       source: selectedSource,
     });
+    setExercises(cached);
     if (cached.length > 0) {
-      setExercises(cached);
       setLoading(false);
       setError(null);
     }
@@ -121,9 +121,24 @@ export default function ExerciseListScreen() {
     const reqId = ++searchReqIdRef.current;
     const trimmedQuery = searchQuery.trim();
 
+    // If we have cached results for this query, skip redundant network calls.
+    // The in-memory cache is authoritative for rapid keystroke search.
+    const cached = exerciseRepository.getCachedExercises({
+      query: trimmedQuery || undefined,
+      category: selectedCategory !== 'all' ? selectedCategory : undefined,
+      source: selectedSource,
+    });
+
+    if (cached.length > 0 && trimmedQuery) {
+      setExercises(cached);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
     const timeoutId = setTimeout(async () => {
       // If we don't already have exercises rendered, indicate loading
-      if (exercises.length === 0) {
+      if (cached.length === 0) {
         setLoading(true);
       }
       setError(null);
@@ -146,13 +161,13 @@ export default function ExerciseListScreen() {
       } catch (err: any) {
         if (isMounted && reqId === searchReqIdRef.current) {
           // If we have cached results, keep displaying them gracefully
-          const cached = exerciseRepository.getCachedExercises({
+          const fallbackCached = exerciseRepository.getCachedExercises({
             query: trimmedQuery || undefined,
             category: selectedCategory !== 'all' ? selectedCategory : undefined,
             source: selectedSource,
           });
-          if (cached.length > 0) {
-            setExercises(cached);
+          if (fallbackCached.length > 0) {
+            setExercises(fallbackCached);
             setIsCachedOnly(true);
           } else {
             setError(err?.message || 'Failed to load exercises. Please try again.');
@@ -177,7 +192,7 @@ export default function ExerciseListScreen() {
     setHasMore(false);
     setNextOffset(undefined);
 
-    // Instant synchronous local search against cache on keystroke
+    // Instant synchronous local search against cache on keystroke (0ms)
     const trimmed = text.trim();
     const cached = exerciseRepository.getCachedExercises({
       query: trimmed || undefined,
@@ -185,8 +200,8 @@ export default function ExerciseListScreen() {
       source: selectedSource,
     });
 
+    setExercises(cached);
     if (cached.length > 0) {
-      setExercises(cached);
       setLoading(false);
       setError(null);
     }
@@ -203,8 +218,8 @@ export default function ExerciseListScreen() {
       category: categoryId !== 'all' ? categoryId : undefined,
       source: selectedSource,
     });
+    setExercises(cached);
     if (cached.length > 0) {
-      setExercises(cached);
       setLoading(false);
       setError(null);
     }
@@ -219,10 +234,10 @@ export default function ExerciseListScreen() {
     const cached = exerciseRepository.getCachedExercises({
       query: searchQueryRef.current.trim() || undefined,
       category: selectedCategory !== 'all' ? selectedCategory : undefined,
-      source,
+      source: source,
     });
+    setExercises(cached);
     if (cached.length > 0) {
-      setExercises(cached);
       setLoading(false);
       setError(null);
     }
@@ -276,15 +291,6 @@ export default function ExerciseListScreen() {
 
   const keyExtractor = useCallback((item: Exercise) => item.id, []);
 
-  const getItemLayout = useCallback(
-    (_data: any, index: number) => ({
-      length: 107,
-      offset: 107 * index,
-      index,
-    }),
-    []
-  );
-
   return (
     <ScreenContainer>
       {/* Top Header */}
@@ -311,6 +317,7 @@ export default function ExerciseListScreen() {
 
         {/* Search Bar */}
         <View style={styles.searchContainer}>
+          <Icon name="search" size={16} strokeWidth={2.2} color={colors.textMuted} style={styles.searchIcon} />
           <TextInput
             testID="exercise-search-input"
             style={styles.searchInput}
@@ -459,7 +466,6 @@ export default function ExerciseListScreen() {
         maxToRenderPerBatch={10}
         windowSize={7}
         updateCellsBatchingPeriod={50}
-        getItemLayout={getItemLayout}
         removeClippedSubviews={Platform.OS !== 'web'}
         contentContainerStyle={[
           styles.listContent,
@@ -499,13 +505,21 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   searchContainer: {
     marginTop: spacing.xs,
+    position: 'relative',
+    justifyContent: 'center',
+  },
+  searchIcon: {
+    position: 'absolute',
+    left: spacing.md,
+    zIndex: 1,
   },
   searchInput: {
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.borderLight,
     borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
+    paddingLeft: spacing.md + 26,
+    paddingRight: spacing.md,
     paddingVertical: spacing.sm + 2,
     color: colors.textPrimary,
     fontSize: 16,

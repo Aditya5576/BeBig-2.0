@@ -2,7 +2,7 @@ import { useAppTheme } from '../../src/features/theme';
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, ActivityIndicator, TextInput, Pressable, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ScreenContainer, Text, Button, Card } from '../../src/components/ui';
+import { ScreenContainer, Text, Button, Card, Icon } from '../../src/components/ui';
 import { workoutRepository, WorkoutSession } from '../../src/features/workout';
 import { templateRepository, CreateTemplateInput, WorkoutTemplate } from '../../src/features/templates';
 import {
@@ -142,7 +142,7 @@ export default function WorkoutSummaryScreen() {
     if (!workout) return;
     const focus = deriveWorkoutFocus(workout.exercises || []);
     const seq = getSuggestedTemplateSessionNumber(allTemplates, focus);
-    const defaultName = `${focus} — Session ${seq}`;
+    const defaultName = workout.name && workout.name.trim() ? workout.name.trim() : `${focus} — Session ${seq}`;
     
     setActiveFocus(focus);
     setSequenceNumber(seq);
@@ -325,6 +325,7 @@ export default function WorkoutSummaryScreen() {
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.trophyBadge}>
+            <Icon name="trophy" size={12} color={colors.primary} />
             <Text variant="caption" color="accent" style={styles.trophyBadgeText}>
               WORKOUT COMPLETE
             </Text>
@@ -343,7 +344,14 @@ export default function WorkoutSummaryScreen() {
             <Text variant="caption" color="muted" style={styles.metricLabel}>
               DURATION
             </Text>
-            <Text variant="titleLarge" color="primary" testID="summary-duration" style={styles.metricValue}>
+            <Text
+              variant="titleLarge"
+              color="primary"
+              testID="summary-duration"
+              style={styles.metricValue}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+            >
               {formatDuration(workout.totalDuration)}
             </Text>
           </Card>
@@ -352,7 +360,14 @@ export default function WorkoutSummaryScreen() {
             <Text variant="caption" color="muted" style={styles.metricLabel}>
               TOTAL VOLUME
             </Text>
-            <Text variant="titleLarge" color="accent" testID="summary-volume" style={styles.metricValue}>
+            <Text
+              variant="titleLarge"
+              color="accent"
+              testID="summary-volume"
+              style={styles.metricValue}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+            >
               {formatVolume(workout.totalVolume)}
             </Text>
           </Card>
@@ -361,7 +376,14 @@ export default function WorkoutSummaryScreen() {
             <Text variant="caption" color="muted" style={styles.metricLabel}>
               EXERCISES
             </Text>
-            <Text variant="titleLarge" color="primary" testID="summary-exercises-count" style={styles.metricValue}>
+            <Text
+              variant="titleLarge"
+              color="primary"
+              testID="summary-exercises-count"
+              style={styles.metricValue}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+            >
               {completedExercises.length}
             </Text>
           </Card>
@@ -370,7 +392,14 @@ export default function WorkoutSummaryScreen() {
             <Text variant="caption" color="muted" style={styles.metricLabel}>
               SETS LOGGED
             </Text>
-            <Text variant="titleLarge" color="primary" testID="summary-sets-count" style={styles.metricValue}>
+            <Text
+              variant="titleLarge"
+              color="primary"
+              testID="summary-sets-count"
+              style={styles.metricValue}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+            >
               {workout.completedSetsCount ?? 0}
             </Text>
           </Card>
@@ -449,9 +478,12 @@ export default function WorkoutSummaryScreen() {
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     style={styles.viewProgressionButton}
                   >
-                    <Text variant="caption" color="accent" style={styles.viewProgressionText}>
-                      View Full Progression →
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <Text variant="caption" color="accent" style={styles.viewProgressionText}>
+                        View Full Progression
+                      </Text>
+                      <Icon name="chevronRight" size={12} color={colors.accent} />
+                    </View>
                   </Pressable>
                 </View>
 
@@ -663,7 +695,7 @@ export default function WorkoutSummaryScreen() {
 
               {saveError ? (
                 <Text testID="save-template-error" variant="caption" style={styles.errorText}>
-                  {saveError}
+                  {saveError.startsWith('⚠') ? saveError : `⚠ ${saveError}`}
                 </Text>
               ) : null}
               
@@ -761,6 +793,9 @@ const createStyles = (colors: any) => StyleSheet.create({
     gap: spacing.xs,
   },
   trophyBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     alignSelf: 'flex-start',
     backgroundColor: colors.surfaceElevated,
     borderWidth: 1,
@@ -782,6 +817,8 @@ const createStyles = (colors: any) => StyleSheet.create({
   metricCard: {
     flex: 1,
     minWidth: '45%',
+    minHeight: 88,
+    justifyContent: 'center',
     padding: spacing.md,
     gap: 4,
     backgroundColor: colors.surfaceElevated,
@@ -794,6 +831,7 @@ const createStyles = (colors: any) => StyleSheet.create({
   metricValue: {
     fontSize: 22,
     fontWeight: '800',
+    fontVariant: ['tabular-nums'],
   },
   insightsSection: {
     gap: spacing.sm,

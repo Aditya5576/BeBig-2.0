@@ -9,6 +9,7 @@ describe('Milestone 1 — Foundation Setup Verification', () => {
     expect(env.appName).toBe('BeBig');
     expect(env.appEnv).toBeDefined();
     expect(colors.dark.primary).toBe('#38BDF8');
+    expect(colors.dark.secondaryAccent).toBe('#00E599');
     expect(spacing.md).toBe(16);
   });
 
