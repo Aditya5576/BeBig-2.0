@@ -8,12 +8,15 @@
 
 import { OwnerType } from '../auth';
 
+export type SetType = 'normal' | 'warmup' | 'drop' | 'failure';
+
 export interface WorkoutSet {
   id: string;
   setNumber: number;
   weight: number; // kg, supports decimals (e.g. 62.5)
   reps: number; // positive whole integer (e.g. 8)
   rir?: number; // Reps In Reserve (0 to 10)
+  setType?: SetType; // 'normal' | 'warmup' | 'drop' | 'failure' (defaults to 'normal')
   notes?: string; // optional user notes
   completed: boolean;
   completedAt?: string; // ISO 8601 timestamp
@@ -24,6 +27,7 @@ export interface WorkoutExercise {
   exerciseName: string;
   categoryName?: string;
   order: number;
+  supersetGroupId?: string | null; // null/undefined for standalone; shared string for contiguous Superset (2) or Giant Set (3+)
   // Preserved snapshot of planned targets from template (if any)
   plannedSets?: number;
   plannedTargetReps?: string;

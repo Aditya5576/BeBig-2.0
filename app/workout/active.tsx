@@ -23,9 +23,11 @@ import {
   WorkoutSession,
   WorkoutExercise,
   WorkoutSet,
+  SetType,
   ActiveExerciseCard,
   ActiveWorkoutTimer,
   workoutNotificationService,
+  getSupersetDisplayInfo,
 } from '../../src/features/workout';
 import { ExercisePickerModal } from '../../src/features/templates/components/ExercisePickerModal';
 import { buildLastPerformanceMap } from '../../src/features/workout/services/previousPerformanceService';
@@ -50,6 +52,11 @@ export default function ActiveWorkoutScreen() {
 
   const [session, setSession] = useState<WorkoutSession | null>(null);
   const [restOverlayHeight, setRestOverlayHeight] = useState<number>(0);
+
+  const activeExerciseIds = useMemo(
+    () => session?.exercises?.map((e) => e.exerciseId) ?? [],
+    [session?.exercises],
+  );
   const sessionRef = useRef<WorkoutSession | null>(null);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Guard: true once the workout is completed or discarded so that the
@@ -364,12 +371,8 @@ export default function ActiveWorkoutScreen() {
     scrollViewRef.current?.scrollTo?.({ y: targetScrollY, animated: false });
     currentScrollY.current = targetScrollY;
 
-    const updated = [...current.exercises];
-    const temp = updated[index - 1];
-    updated[index - 1] = updated[index];
-    updated[index] = temp;
-    const reindexed = updated.map((ex, idx) => ({ ...ex, order: idx }));
-    await updateSessionAndAutosaveImmediate({ ...current, exercises: reindexed });
+    const updated = workoutRepository.moveExerciseUp(current, index);
+    await updateSessionAndAutosaveImmediate(updated);
   };
 
   // Reorder exercise move down
@@ -390,12 +393,24 @@ export default function ActiveWorkoutScreen() {
     scrollViewRef.current?.scrollTo?.({ y: targetScrollY, animated: false });
     currentScrollY.current = targetScrollY;
 
-    const updated = [...current.exercises];
-    const temp = updated[index + 1];
-    updated[index + 1] = updated[index];
-    updated[index] = temp;
-    const reindexed = updated.map((ex, idx) => ({ ...ex, order: idx }));
-    await updateSessionAndAutosaveImmediate({ ...current, exercises: reindexed });
+    const updated = workoutRepository.moveExerciseDown(current, index);
+    await updateSessionAndAutosaveImmediate(updated);
+  };
+
+  // Link exercise with next into Superset or Giant Set
+  const handleLinkSuperset = async (index: number) => {
+    const current = sessionRef.current || session;
+    if (!current) return;
+    const updated = workoutRepository.linkSupersetWithNext(current, index);
+    await updateSessionAndAutosaveImmediate(updated);
+  };
+
+  // Unlink exercise from Superset or Giant Set
+  const handleUnlinkSuperset = async (index: number) => {
+    const current = sessionRef.current || session;
+    if (!current) return;
+    const updated = workoutRepository.unlinkSuperset(current, index);
+    await updateSessionAndAutosaveImmediate(updated);
   };
 
   // Add set to exercise
@@ -441,11 +456,21 @@ export default function ActiveWorkoutScreen() {
       partial = { rir: isNaN(num) ? 0 : Math.min(10, Math.max(0, num)) };
     } else if (field === 'notes') {
       partial = { notes: value };
+    } else if (field === 'setType') {
+      partial = { setType: value as SetType };
     }
 
     try {
-      const updated = workoutRepository.updateSet(current, exerciseId, setId, partial);
-      scheduleDebouncedSave(updated);
+      let updated = workoutRepository.updateSet(current, exerciseId, setId, partial);
+      if (field === 'setType') {
+        // If user changed setType to 'drop' while a rest timer is running for this exercise, dismiss it immediately
+        if (value === 'drop' && updated.activeRestTimer && updated.activeRestTimer.exerciseId === exerciseId) {
+          updated = workoutRepository.clearRestTimer(updated);
+        }
+        await updateSessionAndAutosaveImmediate(updated);
+      } else {
+        scheduleDebouncedSave(updated);
+      }
     } catch {
       // Silent error during active typing
     }
@@ -480,22 +505,50 @@ export default function ActiveWorkoutScreen() {
         return;
       }
 
-      // Complete set and trigger rest timer
+      // Complete set and trigger rest timer (unless next set is a Drop Set or part of Superset round)
       let updated = workoutRepository.updateSet(current, exercise.exerciseId, set.id, {
         ...pendingUpdates,
         completed: true,
         completedAt: new Date().toISOString(),
       });
 
-      const restTime =
-        exercise.plannedRestTime && exercise.plannedRestTime > 0 ? exercise.plannedRestTime : 90;
-      updated = workoutRepository.startRestTimer(
-        updated,
-        exercise.exerciseId,
-        set.setNumber,
-        restTime,
-        exercise.exerciseName,
-      );
+      // Check if next set in this exercise is a Drop Set
+      const currentEx = updated.exercises.find((e) => e.exerciseId === exercise.exerciseId);
+      const setIndex = currentEx?.actualSets.findIndex((s) => s.id === set.id) ?? -1;
+      const nextSet = setIndex >= 0 && currentEx ? currentEx.actualSets[setIndex + 1] : undefined;
+      const isNextDropSet = nextSet?.setType === 'drop';
+
+      // Unified rest pacing:
+      // 1. Skip rest timer if next set in this exercise is a drop set
+      // 2. Skip rest timer if exercise is in a superset/giant set and NOT the last exercise in the group (A1 -> A2)
+      let shouldTriggerRestTimer = !isNextDropSet;
+
+      if (shouldTriggerRestTimer && exercise.supersetGroupId) {
+        const groupExercises = updated.exercises.filter(
+          (e) => e.supersetGroupId === exercise.supersetGroupId,
+        );
+        const groupPos = groupExercises.findIndex(
+          (e) => e.exerciseId === exercise.exerciseId,
+        );
+
+        if (groupPos >= 0 && groupPos < groupExercises.length - 1) {
+          // Not the last exercise in the superset/giant set round:
+          // Skip rest timer so lifter transitions immediately to next paired exercise
+          shouldTriggerRestTimer = false;
+        }
+      }
+
+      if (shouldTriggerRestTimer) {
+        const restTime =
+          exercise.plannedRestTime && exercise.plannedRestTime > 0 ? exercise.plannedRestTime : 90;
+        updated = workoutRepository.startRestTimer(
+          updated,
+          exercise.exerciseId,
+          set.setNumber,
+          restTime,
+          exercise.exerciseName,
+        );
+      }
 
       await updateSessionAndAutosaveImmediate(updated);
     } else {
@@ -772,28 +825,46 @@ export default function ActiveWorkoutScreen() {
               </Text>
             </Card>
           ) : (
-            session.exercises.map((ex, exIndex) => (
-              <ActiveExerciseCard
-                key={`${ex.exerciseId}_${ex.order ?? exIndex}`}
-                exercise={ex}
-                exIndex={exIndex}
-                totalExercisesCount={session.exercises.length}
-                lastPerformance={lastPerformanceMap[`${ex.exerciseId}_${ex.order}`] ?? lastPerformanceMap[ex.exerciseId]}
-                expandedNotesSetIds={expandedNotesSetIds}
-                onMoveUp={handleMoveUpExercise}
-                onMoveDown={handleMoveDownExercise}
-                onRemoveExercise={handleRemoveExercise}
-                onAddSet={handleAddSet}
-                onDeleteSet={handleDeleteSet}
-                onToggleNotes={toggleNotesForSet}
-                onUpdateSetField={handleUpdateSetField}
-                onToggleCompleteSet={handleToggleCompleteSet}
-                onLayout={(e) => {
-                  const { y, height } = e.nativeEvent.layout;
-                  cardLayoutsRef.current[ex.exerciseId] = { y, height };
-                }}
-              />
-            ))
+            <View style={styles.exerciseListContainer}>
+              {session.exercises.map((ex, exIndex) => {
+                const isLinkedWithNext =
+                  Boolean(ex.supersetGroupId) &&
+                  exIndex < session.exercises.length - 1 &&
+                  session.exercises[exIndex + 1].supersetGroupId === ex.supersetGroupId;
+                return (
+                  <ActiveExerciseCard
+                    key={`${ex.exerciseId}_${ex.order ?? exIndex}`}
+                    exercise={ex}
+                    exIndex={exIndex}
+                    totalExercisesCount={session.exercises.length}
+                    supersetInfo={getSupersetDisplayInfo(session.exercises, ex.exerciseId)}
+                    lastPerformance={lastPerformanceMap[`${ex.exerciseId}_${ex.order}`] ?? lastPerformanceMap[ex.exerciseId]}
+                    expandedNotesSetIds={expandedNotesSetIds}
+                    onMoveUp={handleMoveUpExercise}
+                    onMoveDown={handleMoveDownExercise}
+                    onLinkSuperset={handleLinkSuperset}
+                    onUnlinkSuperset={handleUnlinkSuperset}
+                    onRemoveExercise={handleRemoveExercise}
+                    onAddSet={handleAddSet}
+                    onDeleteSet={handleDeleteSet}
+                    onToggleNotes={toggleNotesForSet}
+                    onUpdateSetField={handleUpdateSetField}
+                    onToggleCompleteSet={handleToggleCompleteSet}
+                    style={{
+                      marginBottom: isLinkedWithNext
+                        ? 8
+                        : exIndex === session.exercises.length - 1
+                        ? 0
+                        : 14,
+                    }}
+                    onLayout={(e) => {
+                      const { y, height } = e.nativeEvent.layout;
+                      cardLayoutsRef.current[ex.exerciseId] = { y, height };
+                    }}
+                  />
+                );
+              })}
+            </View>
           )}
 
           {/* Bottom Action Section: Add Exercise & Finish */}
@@ -846,7 +917,7 @@ export default function ActiveWorkoutScreen() {
         onClose={() => setIsPickerVisible(false)}
         onSelectExercise={handleSelectExercise}
         onSelectExercises={handleSelectExercises}
-        selectedExerciseIds={session.exercises.map((e) => e.exerciseId)}
+        selectedExerciseIds={activeExerciseIds}
         multiSelect={true}
       />
 
@@ -997,6 +1068,9 @@ const createStyles = (colors: any, insets: { bottom: number }) => StyleSheet.cre
     flexGrow: 1,
     paddingVertical: 12,
     gap: 14,
+  },
+  exerciseListContainer: {
+    gap: 0,
   },
   topBar: {
     flexDirection: 'row',

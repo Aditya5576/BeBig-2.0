@@ -20,12 +20,18 @@ Do not treat AI memory as source code. Actual project files are authoritative.
 
 ## Verified Skill Workflow
 When a task matches an installed engineering skill (located in `C:\Users\adity\.agents\skills\`):
-1. **Task-Specific Selection**: Select only the skill relevant to the task (never load all five):
+1. **Task-Specific Selection**: Select only the skill relevant to the task (never load multiple skills concurrently):
    - `gravitas`: Complex implementations, multi-file changes, architectural refactoring, or contract-gated verification.
+   - `gravitas-reliability`: Lightweight ground-before-mutating discipline, 6 invariants, and evidence-backed verification.
    - `systematic-debugging`: Diagnosing test failures, bugs, unexpected runtime behavior, or regressions.
    - `test-driven-development`: Authoring new features or reproducing bugs via failing tests first.
+   - `vitest-tdd-workflow`: Vite/Vitest unit testing, React Testing Library, and mock storage harnesses.
    - `code-review-excellence`: Reviewing PRs, git diffs, architectural changes, or code quality.
    - `git-commit-message`: Formatting commit messages from staged diffs (`git status`, `git diff --cached`).
+   - `react-best-practices`: Building React/React Native components, UI render optimization, and hook discipline.
+   - `typescript-expert`: Strict type modeling, generics, domain data structures, and Zod runtime validation.
+   - `pwa-offline-indexeddb`: Offline storage, IndexedDB schemas, write queues, and local data persistence.
+   - `healthcare-security-privacy`: Handling sensitive user health data, PII privacy, input sanitization, and audit logs.
 2. **Read Before Use**: If the selected skill is not already mounted in `<skills>`, read its `SKILL.md` before applying its procedures.
 3. **Truthful Reporting Standards**:
    - Clearly distinguish skills automatically discovered, manually read, and practices actually applied.

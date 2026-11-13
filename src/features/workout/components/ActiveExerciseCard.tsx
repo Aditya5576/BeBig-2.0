@@ -3,6 +3,7 @@ import { View, StyleSheet, Pressable, LayoutChangeEvent } from 'react-native';
 import { useAppTheme } from '../../theme';
 import { Text, Card, Button } from '../../../components/ui';
 import { WorkoutExercise, WorkoutSet } from '../types';
+import { SupersetDisplayInfo } from '../utils/supersetUtils';
 import { findMatchingPreviousSet } from '../services/previousPerformanceService';
 import { ActiveSetRow } from './ActiveSetRow';
 import { spacing, radii } from '../../../constants/theme';
@@ -11,10 +12,13 @@ export interface ActiveExerciseCardProps {
   exercise: WorkoutExercise;
   exIndex: number;
   totalExercisesCount: number;
+  supersetInfo?: SupersetDisplayInfo;
   lastPerformance?: { workoutDate?: string; sets: WorkoutSet[] };
   expandedNotesSetIds: Record<string, boolean>;
   onMoveUp: (index: number) => void;
   onMoveDown: (index: number) => void;
+  onLinkSuperset?: (index: number) => void;
+  onUnlinkSuperset?: (index: number) => void;
   onRemoveExercise: (exercise: WorkoutExercise) => void;
   onAddSet: (exerciseId: string) => void;
   onDeleteSet: (exerciseId: string, setId: string) => void;
@@ -31,6 +35,7 @@ export interface ActiveExerciseCardProps {
     pendingUpdates?: Partial<WorkoutSet>,
   ) => void;
   onLayout?: (e: LayoutChangeEvent) => void;
+  style?: any;
 }
 
 const formatShortDate = (dateStr?: string) => {
@@ -44,10 +49,13 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(({
   exercise,
   exIndex,
   totalExercisesCount,
+  supersetInfo,
   lastPerformance,
   expandedNotesSetIds,
   onMoveUp,
   onMoveDown,
+  onLinkSuperset,
+  onUnlinkSuperset,
   onRemoveExercise,
   onAddSet,
   onDeleteSet,
@@ -55,94 +63,172 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(({
   onUpdateSetField,
   onToggleCompleteSet,
   onLayout,
+  style,
 }) => {
   const { colors } = useAppTheme();
   const styles = createStyles(colors);
 
   return (
-    <Card key={exercise.exerciseId} style={styles.exerciseCard} onLayout={onLayout}>
-      {/* Exercise Header */}
+    <Card
+      key={exercise.exerciseId}
+      style={[
+        styles.exerciseCard,
+        supersetInfo?.isInGroup && {
+          borderLeftWidth: 4,
+          borderLeftColor: supersetInfo.accentColor,
+          borderColor:
+            supersetInfo.groupType === 'giant_set'
+              ? 'rgba(56, 189, 248, 0.28)'
+              : 'rgba(0, 229, 153, 0.28)',
+        },
+        style,
+      ]}
+      onLayout={onLayout}
+    >
+      {/* Exercise Header — Two-Tier Architecture */}
       <View style={styles.exerciseCardHeader}>
-        <View style={styles.exerciseTitleGroup}>
-          <View style={styles.indexBadge}>
-            <Text variant="caption" color="accent" style={styles.indexBadgeText}>
-              #{exIndex + 1}
-            </Text>
-          </View>
-          <View style={styles.exerciseNameContainer}>
-            <Text variant="titleMedium" color="primary" style={styles.exerciseName}>
-              {exercise.exerciseName}
-            </Text>
+        {/* Tier 1: Top Metadata & Action Strip */}
+        <View style={styles.headerTopStrip}>
+          <View style={styles.metaLeftGroup}>
+            <View style={styles.indexBadge}>
+              <Text variant="caption" color="accent" style={styles.indexBadgeText}>
+                #{exIndex + 1}
+              </Text>
+            </View>
+            {supersetInfo?.isInGroup && (
+              <View
+                style={[
+                  styles.supersetPillBadge,
+                  {
+                    borderColor: supersetInfo.accentColor,
+                    backgroundColor:
+                      supersetInfo.groupType === 'giant_set'
+                        ? 'rgba(56, 189, 248, 0.12)'
+                        : 'rgba(0, 229, 153, 0.12)',
+                  },
+                ]}
+                testID={`superset-badge-${exercise.exerciseId}`}
+              >
+                <Text
+                  style={[
+                    styles.supersetPillText,
+                    { color: supersetInfo.accentColor },
+                  ]}
+                >
+                  {supersetInfo.groupLabel}
+                </Text>
+              </View>
+            )}
             {exercise.categoryName ? (
-              <Text variant="caption" color="muted">
+              <Text variant="caption" color="muted" style={styles.categoryTag} numberOfLines={1}>
                 {exercise.categoryName}
               </Text>
             ) : null}
           </View>
-        </View>
 
-        <View style={styles.exerciseHeaderActions}>
-          <View style={styles.reorderControlGroup}>
-            <Pressable
-              testID={`move-up-exercise-${exercise.exerciseId}`}
-              onPress={() => onMoveUp(exIndex)}
-              disabled={exIndex === 0}
-              style={[styles.reorderButton, exIndex === 0 && styles.reorderButtonDisabled]}
-              hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-              accessibilityLabel={`Move ${exercise.exerciseName} up`}
-            >
-              <Text
-                style={[
-                  styles.reorderArrowText,
-                  { color: exIndex === 0 ? colors.textMuted : colors.primary },
-                  exIndex === 0 && styles.iconDisabled,
-                ]}
+          <View style={styles.exerciseHeaderActions}>
+            {/* Superset Link / Unlink Button */}
+            {supersetInfo?.isInGroup ? (
+              onUnlinkSuperset && (
+                <Pressable
+                  testID={`superset-unlink-button-${exercise.exerciseId}`}
+                  onPress={() => onUnlinkSuperset(exIndex)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  style={styles.supersetActionButton}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Unlink ${exercise.exerciseName} from ${supersetInfo.groupLabel}`}
+                >
+                  <Text style={[styles.supersetActionText, { color: colors.textMuted }]}>
+                    Unlink
+                  </Text>
+                </Pressable>
+              )
+            ) : (
+              exIndex < totalExercisesCount - 1 && onLinkSuperset && (
+                <Pressable
+                  testID={`superset-link-button-${exercise.exerciseId}`}
+                  onPress={() => onLinkSuperset(exIndex)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  style={styles.supersetActionButton}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Link ${exercise.exerciseName} with next exercise into superset`}
+                >
+                  <Text style={[styles.supersetActionText, { color: '#00E599' }]}>
+                    + Superset
+                  </Text>
+                </Pressable>
+              )
+            )}
+
+            <View style={styles.reorderControlGroup}>
+              <Pressable
+                testID={`move-up-exercise-${exercise.exerciseId}`}
+                onPress={() => onMoveUp(exIndex)}
+                disabled={exIndex === 0}
+                style={[styles.reorderButton, exIndex === 0 && styles.reorderButtonDisabled]}
+                hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                accessibilityLabel={`Move ${exercise.exerciseName} up`}
               >
-                ↑
-              </Text>
-            </Pressable>
+                <Text
+                  style={[
+                    styles.reorderArrowText,
+                    { color: exIndex === 0 ? colors.textMuted : colors.primary },
+                    exIndex === 0 && styles.iconDisabled,
+                  ]}
+                >
+                  ↑
+                </Text>
+              </Pressable>
 
-            <View style={styles.reorderDivider} />
+              <View style={styles.reorderDivider} />
+
+              <Pressable
+                testID={`move-down-exercise-${exercise.exerciseId}`}
+                onPress={() => onMoveDown(exIndex)}
+                disabled={exIndex === totalExercisesCount - 1}
+                style={[
+                  styles.reorderButton,
+                  exIndex === totalExercisesCount - 1 && styles.reorderButtonDisabled,
+                ]}
+                hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                accessibilityLabel={`Move ${exercise.exerciseName} down`}
+              >
+                <Text
+                  style={[
+                    styles.reorderArrowText,
+                    {
+                      color:
+                        exIndex === totalExercisesCount - 1
+                          ? colors.textMuted
+                          : colors.primary,
+                    },
+                    exIndex === totalExercisesCount - 1 && styles.iconDisabled,
+                  ]}
+                >
+                  ↓
+                </Text>
+              </Pressable>
+            </View>
 
             <Pressable
-              testID={`move-down-exercise-${exercise.exerciseId}`}
-              onPress={() => onMoveDown(exIndex)}
-              disabled={exIndex === totalExercisesCount - 1}
-              style={[
-                styles.reorderButton,
-                exIndex === totalExercisesCount - 1 && styles.reorderButtonDisabled,
-              ]}
+              testID={`remove-exercise-${exercise.exerciseId}`}
+              onPress={() => onRemoveExercise(exercise)}
               hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-              accessibilityLabel={`Move ${exercise.exerciseName} down`}
+              style={styles.removeExButton}
+              accessibilityLabel={`Remove ${exercise.exerciseName}`}
             >
-              <Text
-                style={[
-                  styles.reorderArrowText,
-                  {
-                    color:
-                      exIndex === totalExercisesCount - 1
-                        ? colors.textMuted
-                        : colors.primary,
-                  },
-                  exIndex === totalExercisesCount - 1 && styles.iconDisabled,
-                ]}
-              >
-                ↓
+              <Text variant="caption" style={styles.removeExText}>
+                ✕
               </Text>
             </Pressable>
           </View>
+        </View>
 
-          <Pressable
-            testID={`remove-exercise-${exercise.exerciseId}`}
-            onPress={() => onRemoveExercise(exercise)}
-            hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-            style={styles.removeExButton}
-            accessibilityLabel={`Remove ${exercise.exerciseName}`}
-          >
-            <Text variant="caption" style={styles.removeExText}>
-              ✕
-            </Text>
-          </Pressable>
+        {/* Tier 2: Dedicated Full-Width Exercise Name Row */}
+        <View style={styles.exerciseNameRow}>
+          <Text style={styles.exerciseName}>
+            {exercise.exerciseName}
+          </Text>
         </View>
       </View>
 
@@ -177,6 +263,14 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(({
           </View>
           <View style={styles.lastTimeSetsRow}>
             {lastPerformance.sets.map((s, idx, arr) => {
+              const tag =
+                s.setType === 'drop'
+                  ? 'D '
+                  : s.setType === 'warmup'
+                  ? 'W '
+                  : s.setType === 'failure'
+                  ? 'F '
+                  : '';
               const weightText = s.weight > 0 ? `${s.weight}kg` : 'BW';
               const rirText = s.rir !== undefined && s.rir !== null ? ` @ RIR ${s.rir}` : '';
               const noteText = s.notes && s.notes.trim().length > 0 ? ' 📝' : '';
@@ -189,7 +283,7 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(({
                   style={styles.lastTimeSetChip}
                   testID={`last-time-set-chip-${exercise.exerciseId}-${s.setNumber || idx + 1}`}
                 >
-                  {`${weightText} × ${s.reps}${rirText}${noteText}${separator}`}
+                  {`${tag}${weightText} × ${s.reps}${rirText}${noteText}${separator}`}
                 </Text>
               );
             })}
@@ -285,20 +379,47 @@ const createStyles = (colors: any) =>
   StyleSheet.create({
     exerciseCard: {
       gap: 10,
-      paddingVertical: 14,
-      paddingHorizontal: 10,
-      backgroundColor: colors.surface,
+      paddingVertical: 12,
+      paddingHorizontal: 12,
+      backgroundColor: '#141824',
       borderColor: colors.borderLight,
-      borderRadius: 12,
+      borderRadius: 14,
+      borderWidth: 1,
     },
     exerciseCardHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
+      gap: 6,
       borderBottomWidth: 1,
       borderBottomColor: colors.borderLight,
       paddingBottom: 8,
+    },
+    headerTopStrip: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
       gap: 8,
+    },
+    metaLeftGroup: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      flex: 1,
+      minWidth: 0,
+    },
+    categoryTag: {
+      fontSize: 11,
+      fontWeight: '500',
+      color: colors.textMuted,
+      flexShrink: 1,
+    },
+    exerciseNameRow: {
+      width: '100%',
+      marginTop: 2,
+    },
+    exerciseName: {
+      fontWeight: '700',
+      fontSize: 17,
+      lineHeight: 22,
+      color: '#F8FAFC',
     },
     exerciseHeaderActions: {
       flexDirection: 'row',
@@ -337,13 +458,6 @@ const createStyles = (colors: any) =>
     iconDisabled: {
       opacity: 0.4,
     },
-    exerciseTitleGroup: {
-      flexDirection: 'row',
-      gap: 8,
-      flex: 1,
-      minWidth: 0,
-      alignItems: 'center',
-    },
     indexBadge: {
       backgroundColor: 'rgba(56, 189, 248, 0.12)',
       paddingHorizontal: 6,
@@ -358,16 +472,32 @@ const createStyles = (colors: any) =>
       fontSize: 11,
       color: colors.primary,
     },
-    exerciseNameContainer: {
-      flex: 1,
-      minWidth: 0,
-      gap: 2,
+    supersetPillBadge: {
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 4,
+      borderWidth: 1,
+      alignSelf: 'center',
     },
-    exerciseName: {
+    supersetPillText: {
+      fontSize: 10,
+      fontWeight: '800',
+      letterSpacing: 0.5,
+    },
+    supersetActionButton: {
+      minHeight: 44,
+      minWidth: 44,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: 8,
+      borderRadius: 8,
+      backgroundColor: colors.surfaceElevated,
+      borderWidth: 1,
+      borderColor: colors.borderLight,
+    },
+    supersetActionText: {
+      fontSize: 11,
       fontWeight: '700',
-      fontSize: 16,
-      lineHeight: 20,
-      color: colors.textPrimary,
     },
     removeExButton: {
       backgroundColor: 'rgba(239, 68, 68, 0.08)',
@@ -385,12 +515,12 @@ const createStyles = (colors: any) =>
       fontSize: 12,
     },
     targetsBadge: {
-      backgroundColor: colors.surfaceSubtle,
-      paddingVertical: 6,
+      backgroundColor: '#0F1420',
+      paddingVertical: 5,
       paddingHorizontal: 10,
-      borderRadius: 6,
+      borderRadius: 8,
       borderWidth: 1,
-      borderColor: colors.borderLight,
+      borderColor: 'rgba(255, 255, 255, 0.08)',
     },
     targetsText: {
       fontWeight: '600',
@@ -398,12 +528,12 @@ const createStyles = (colors: any) =>
       color: colors.textSecondary,
     },
     lastTimeContainer: {
-      backgroundColor: 'rgba(56, 189, 248, 0.04)',
+      backgroundColor: '#0F1420',
       paddingVertical: 6,
       paddingHorizontal: 10,
-      borderRadius: 6,
+      borderRadius: 8,
       borderWidth: 1,
-      borderColor: 'rgba(56, 189, 248, 0.15)',
+      borderColor: 'rgba(56, 189, 248, 0.16)',
       gap: 2,
     },
     lastTimeHeaderRow: {
@@ -451,34 +581,34 @@ const createStyles = (colors: any) =>
       color: colors.textMuted,
     },
     headerColSet: {
-      width: 22,
+      width: 32,
       alignItems: 'center',
     },
     headerColPrev: {
-      width: 44,
+      width: 48,
       alignItems: 'center',
     },
     headerColKg: {
       flex: 1.15,
-      minWidth: 38,
+      minWidth: 40,
       alignItems: 'center',
     },
     headerColReps: {
       flex: 1.0,
-      minWidth: 36,
+      minWidth: 38,
       alignItems: 'center',
     },
     headerColRir: {
       flex: 0.85,
-      minWidth: 32,
+      minWidth: 34,
       alignItems: 'center',
     },
     headerColCheck: {
-      width: 36,
+      width: 38,
       alignItems: 'center',
     },
     headerColNote: {
-      width: 28,
+      width: 30,
       alignItems: 'center',
     },
     headerColDelete: {

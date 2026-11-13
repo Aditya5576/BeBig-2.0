@@ -326,4 +326,25 @@ describe('ExerciseMediaService', () => {
       }
     );
   });
+
+  describe('Curated Media Catalog — Expanded WGER Catalog', () => {
+    it('contains exactly 281 verified entries (279 WGER movements + 2 canonical seed bindings)', () => {
+      const keys = Object.keys(CURATED_EXERCISE_MEDIA_CATALOG);
+      expect(keys.length).toBe(281);
+    });
+
+    it('verifies every entry in CURATED_EXERCISE_MEDIA_CATALOG meets strict licensing and attribution requirements', () => {
+      for (const [id, demo] of Object.entries(CURATED_EXERCISE_MEDIA_CATALOG)) {
+        const result = resolveExerciseDemonstration(id, CURATED_EXERCISE_MEDIA_CATALOG);
+        expect(result.status).toBe('approved');
+        expect(result.demonstration).toBeDefined();
+        expect(result.demonstration?.isApproved).toBe(true);
+        expect(result.demonstration?.thumbnailUri).toMatch(/^https?:\/\//);
+        expect(result.demonstration?.demonstrationUri).toMatch(/^https?:\/\//);
+        expect(['CC-BY-SA-3.0', 'CC-BY-SA-4.0']).toContain(result.demonstration?.license.type);
+        expect(result.demonstration?.license.author.trim().length).toBeGreaterThan(0);
+        expect(result.demonstration?.license.sourceUrl.trim().length).toBeGreaterThan(0);
+      }
+    });
+  });
 });

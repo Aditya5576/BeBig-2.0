@@ -37,7 +37,7 @@ export interface ExercisePickerModalProps {
   showRecentlyUsed?: boolean;
 }
 
-export function ExercisePickerModal({
+export const ExercisePickerModal = React.memo(function ExercisePickerModal({
   visible,
   onClose,
   onSelectExercise,
@@ -143,6 +143,8 @@ export function ExercisePickerModal({
   // Reset transient picker state when modal opens or closes
   useEffect(() => {
     if (!visible) {
+      setExercises([]);
+      setLoading(false);
       setSelectedExercisesMap(new Map());
       setSelectionOrder([]);
       setIsCreatingCustom(false);
@@ -504,9 +506,9 @@ export function ExercisePickerModal({
               ]}
               keyboardDismissMode="on-drag"
               keyboardShouldPersistTaps="handled"
-              initialNumToRender={12}
-              maxToRenderPerBatch={10}
-              windowSize={7}
+              initialNumToRender={Platform.OS === 'web' ? 8 : 12}
+              maxToRenderPerBatch={Platform.OS === 'web' ? 6 : 10}
+              windowSize={Platform.OS === 'web' ? 5 : 7}
               updateCellsBatchingPeriod={50}
               removeClippedSubviews={Platform.OS !== 'web'}
               onEndReached={handleLoadMore}
@@ -550,7 +552,7 @@ export function ExercisePickerModal({
       </ScreenContainer>
     </Modal>
   );
-}
+});
 
 const createStyles = (colors: any) =>
   StyleSheet.create({

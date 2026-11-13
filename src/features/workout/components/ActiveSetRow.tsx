@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, TextInput, Pressable } from 'react-native';
+import { View, StyleSheet, TextInput, Pressable, Modal } from 'react-native';
 import { useAppTheme } from '../../theme';
 import { Text } from '../../../components/ui';
-import { WorkoutExercise, WorkoutSet } from '../types';
+import { WorkoutExercise, WorkoutSet, SetType } from '../types';
 import { spacing, radii } from '../../../constants/theme';
 
 export interface ActiveSetRowProps {
@@ -60,6 +60,15 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
       : ''
   );
   const [localNotes, setLocalNotes] = useState(set.notes || '');
+  const [isTypeSelectorOpen, setIsTypeSelectorOpen] = useState(false);
+
+  const handleSelectSetType = useCallback(
+    (newType: SetType) => {
+      onUpdateSetField(exercise.exerciseId, set.id, 'setType', newType);
+      setIsTypeSelectorOpen(false);
+    },
+    [exercise.exerciseId, set.id, onUpdateSetField],
+  );
 
   // Synchronize when completion status transitions or when confirmed props change
   useEffect(() => {
@@ -145,8 +154,16 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
 
   const formatPrevious = (prev?: WorkoutSet) => {
     if (!prev) return '—';
+    const tag =
+      prev.setType === 'drop'
+        ? 'D '
+        : prev.setType === 'warmup'
+        ? 'W '
+        : prev.setType === 'failure'
+        ? 'F '
+        : '';
     const w = prev.weight > 0 ? `${prev.weight}` : 'BW';
-    return `${w} × ${prev.reps}`;
+    return `${tag}${w} × ${prev.reps}`;
   };
 
   const previousText = formatPrevious(previousSet);
@@ -161,24 +178,65 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
         set.completed ? styles.rowWrapperCompleted : null,
       ]}
     >
-      {/* Main Tabular Row: [SET] [PREV] [KG] [REPS] [RIR] [✓] [NOTE] */}
+      {/* Main Tabular Row: [SET] [PREV] [KG] [REPS] [RIR] [✓] [NOTE] [DEL] */}
       <View style={styles.mainRow}>
-        {/* Set Number Indicator */}
+        {/* Set Type / Number Interactive Badge */}
         <Pressable
-          onPress={() => onToggleNotes(set.id)}
-          hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-          style={styles.colSet}
-          accessibilityLabel={`Set ${set.setNumber}, tap to toggle notes`}
+          testID={`set-type-badge-${set.id}`}
+          onPress={() => setIsTypeSelectorOpen(true)}
+          hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+          style={styles.colSetTouch}
+          accessibilityLabel={`Set ${set.setNumber}, type ${set.setType || 'normal'}. Tap to select set type.`}
+          accessibilityRole="button"
         >
-          <View style={styles.setNumberBadge}>
+          <View
+            style={[
+              styles.setNumberBadge,
+              set.setType === 'drop'
+                ? styles.badgeDrop
+                : set.setType === 'warmup'
+                ? styles.badgeWarmup
+                : set.setType === 'failure'
+                ? styles.badgeFailure
+                : styles.badgeNormal,
+            ]}
+          >
             <Text
               variant="label"
               style={[
                 styles.setNumberText,
-                set.completed ? styles.setNumberTextCompleted : null,
+                set.setType === 'drop'
+                  ? styles.badgeTextDrop
+                  : set.setType === 'warmup'
+                  ? styles.badgeTextWarmup
+                  : set.setType === 'failure'
+                  ? styles.badgeTextFailure
+                  : set.completed
+                  ? styles.setNumberTextCompleted
+                  : null,
               ]}
             >
-              {set.setNumber}
+              {set.setType === 'drop'
+                ? 'D'
+                : set.setType === 'warmup'
+                ? 'W'
+                : set.setType === 'failure'
+                ? 'F'
+                : set.setNumber}
+            </Text>
+            <Text
+              style={[
+                styles.badgeChevronText,
+                set.setType === 'drop'
+                  ? styles.badgeTextDrop
+                  : set.setType === 'warmup'
+                  ? styles.badgeTextWarmup
+                  : set.setType === 'failure'
+                  ? styles.badgeTextFailure
+                  : null,
+              ]}
+            >
+              ▾
             </Text>
           </View>
         </Pressable>
@@ -410,6 +468,157 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
           )}
         </View>
       )}
+
+      {/* Set Type Selector Modal */}
+      <Modal
+        testID="set-type-selector-modal"
+        visible={isTypeSelectorOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsTypeSelectorOpen(false)}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={() => setIsTypeSelectorOpen(false)}
+        >
+          <Pressable
+            style={styles.typeSelectorCard}
+            onPress={(e) => e.stopPropagation()}
+          >
+            {/* Modal Drag Handle */}
+            <View style={styles.modalDragHandle} />
+
+            <View style={styles.typeSelectorHeader}>
+              <Text variant="headingSmall" style={styles.typeSelectorTitle}>
+                Select Set Type
+              </Text>
+              <Text variant="caption" style={styles.typeSelectorSubtitle}>
+                Exercise: {exercise.exerciseName} • Set {set.setNumber}
+              </Text>
+            </View>
+
+            <View style={styles.typeOptionList}>
+              {/* Normal Set Option */}
+              <Pressable
+                testID="set-type-option-normal"
+                onPress={() => handleSelectSetType('normal')}
+                style={[
+                  styles.typeOptionItem,
+                  (!set.setType || set.setType === 'normal') && styles.typeOptionItemActive,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Normal working set"
+              >
+                <View style={[styles.typeOptionIconWrap, styles.badgeNormal]}>
+                  <Text style={[styles.typeOptionIconText, styles.badgeTextNormal]}>
+                    {set.setNumber}
+                  </Text>
+                </View>
+                <View style={styles.typeOptionTexts}>
+                  <Text style={styles.typeOptionLabel}>Normal Set</Text>
+                  <Text style={styles.typeOptionDesc}>
+                    Standard working set (qualifies for PRs & 1RM)
+                  </Text>
+                </View>
+                {(!set.setType || set.setType === 'normal') && (
+                  <Text style={styles.typeOptionCheckmark}>✓</Text>
+                )}
+              </Pressable>
+
+              {/* Warm-up Set Option */}
+              <Pressable
+                testID="set-type-option-warmup"
+                onPress={() => handleSelectSetType('warmup')}
+                style={[
+                  styles.typeOptionItem,
+                  set.setType === 'warmup' && styles.typeOptionItemActive,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Warm-up set"
+              >
+                <View style={[styles.typeOptionIconWrap, styles.badgeWarmup]}>
+                  <Text style={[styles.typeOptionIconText, styles.badgeTextWarmup]}>
+                    W
+                  </Text>
+                </View>
+                <View style={styles.typeOptionTexts}>
+                  <Text style={styles.typeOptionLabel}>Warm-up Set</Text>
+                  <Text style={styles.typeOptionDesc}>
+                    Prepares muscles; excluded from top-weight PRs
+                  </Text>
+                </View>
+                {set.setType === 'warmup' && (
+                  <Text style={styles.typeOptionCheckmark}>✓</Text>
+                )}
+              </Pressable>
+
+              {/* Drop Set Option */}
+              <Pressable
+                testID="set-type-option-drop"
+                onPress={() => handleSelectSetType('drop')}
+                style={[
+                  styles.typeOptionItem,
+                  set.setType === 'drop' && styles.typeOptionItemActive,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Drop set"
+              >
+                <View style={[styles.typeOptionIconWrap, styles.badgeDrop]}>
+                  <Text style={[styles.typeOptionIconText, styles.badgeTextDrop]}>
+                    D
+                  </Text>
+                </View>
+                <View style={styles.typeOptionTexts}>
+                  <Text style={styles.typeOptionLabel}>Drop Set</Text>
+                  <Text style={styles.typeOptionDesc}>
+                    Immediate back-to-back set; skips rest timer
+                  </Text>
+                </View>
+                {set.setType === 'drop' && (
+                  <Text style={styles.typeOptionCheckmark}>✓</Text>
+                )}
+              </Pressable>
+
+              {/* Failure Set Option */}
+              <Pressable
+                testID="set-type-option-failure"
+                onPress={() => handleSelectSetType('failure')}
+                style={[
+                  styles.typeOptionItem,
+                  set.setType === 'failure' && styles.typeOptionItemActive,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Failure set"
+              >
+                <View style={[styles.typeOptionIconWrap, styles.badgeFailure]}>
+                  <Text style={[styles.typeOptionIconText, styles.badgeTextFailure]}>
+                    F
+                  </Text>
+                </View>
+                <View style={styles.typeOptionTexts}>
+                  <Text style={styles.typeOptionLabel}>Failure Set</Text>
+                  <Text style={styles.typeOptionDesc}>
+                    Pushed to concentric muscle failure; full PR tracking
+                  </Text>
+                </View>
+                {set.setType === 'failure' && (
+                  <Text style={styles.typeOptionCheckmark}>✓</Text>
+                )}
+              </Pressable>
+            </View>
+
+            <Pressable
+              testID="close-set-type-selector"
+              onPress={() => setIsTypeSelectorOpen(false)}
+              style={styles.closeButton}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel"
+            >
+              <Text style={styles.closeButtonText}>Cancel</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 });
@@ -419,7 +628,7 @@ const createStyles = (colors: any) =>
     rowWrapper: {
       backgroundColor: 'transparent',
       borderRadius: 8,
-      paddingVertical: 4,
+      paddingVertical: 3,
       paddingHorizontal: 2,
       gap: 4,
     },
@@ -432,27 +641,43 @@ const createStyles = (colors: any) =>
       gap: 4,
     },
     colSet: {
-      width: 22,
+      width: 32,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    colSetTouch: {
+      width: 32,
+      minHeight: 40,
       alignItems: 'center',
       justifyContent: 'center',
     },
     setNumberBadge: {
-      width: 22,
-      height: 40,
-      justifyContent: 'center',
+      width: 30,
+      height: 30,
+      borderRadius: 6,
+      borderWidth: 1,
+      flexDirection: 'row',
       alignItems: 'center',
+      justifyContent: 'center',
+      gap: 1,
     },
     setNumberBadgeCompleted: {},
     setNumberText: {
       fontWeight: '700',
-      fontSize: 13,
+      fontSize: 12,
       color: colors.textSecondary,
     },
     setNumberTextCompleted: {
       color: colors.primary,
     },
+    badgeChevronText: {
+      fontSize: 8,
+      fontWeight: '900',
+      color: colors.textMuted,
+      marginTop: 1,
+    },
     colPrev: {
-      width: 44,
+      width: 48,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -461,6 +686,7 @@ const createStyles = (colors: any) =>
       fontSize: 10.5,
       color: colors.textMuted,
       textAlign: 'center',
+      fontVariant: ['tabular-nums'],
     },
     prevTextEmpty: {
       color: colors.textMuted,
@@ -469,33 +695,34 @@ const createStyles = (colors: any) =>
     },
     colKg: {
       flex: 1.15,
-      minWidth: 38,
+      minWidth: 40,
     },
     colReps: {
       flex: 1.0,
-      minWidth: 36,
+      minWidth: 38,
     },
     colRir: {
       flex: 0.85,
-      minWidth: 32,
+      minWidth: 34,
     },
     metricInput: {
-      backgroundColor: colors.surfaceElevated,
+      backgroundColor: '#0D121D',
       borderWidth: 1,
       borderColor: colors.borderLight,
       borderRadius: 8,
       paddingHorizontal: 2,
       paddingVertical: 0,
-      color: colors.textPrimary,
+      color: '#F8FAFC',
       fontSize: 14,
       fontWeight: '700',
       textAlign: 'center',
-      height: 40,
+      height: 38,
+      fontVariant: ['tabular-nums'],
     },
     metricInputCompleted: {
       backgroundColor: 'rgba(56, 189, 248, 0.04)',
       borderColor: 'rgba(56, 189, 248, 0.25)',
-      color: colors.textPrimary,
+      color: '#F8FAFC',
     },
     metricInputRir: {
       fontSize: 13,
@@ -503,13 +730,13 @@ const createStyles = (colors: any) =>
       color: colors.textSecondary,
     },
     colCheck: {
-      width: 36,
+      width: 38,
       alignItems: 'center',
       justifyContent: 'center',
     },
     checkButton: {
-      width: 36,
-      height: 40,
+      width: 38,
+      height: 38,
       borderRadius: 8,
       justifyContent: 'center',
       alignItems: 'center',
@@ -535,13 +762,13 @@ const createStyles = (colors: any) =>
       color: colors.background,
     },
     colNote: {
-      width: 28,
+      width: 30,
       alignItems: 'center',
       justifyContent: 'center',
     },
     noteButton: {
-      width: 28,
-      height: 40,
+      width: 30,
+      height: 38,
       borderRadius: 8,
       backgroundColor: colors.surfaceSubtle,
       borderWidth: 1,
@@ -666,12 +893,151 @@ const createStyles = (colors: any) =>
     },
     deleteButton: {
       width: 28,
-      height: 40,
+      height: 38,
       borderRadius: 8,
       backgroundColor: 'rgba(239, 68, 68, 0.08)',
       borderWidth: 1,
       borderColor: 'rgba(239, 68, 68, 0.25)',
       justifyContent: 'center',
       alignItems: 'center',
+    },
+    badgeNormal: {
+      backgroundColor: colors.surfaceElevated,
+      borderColor: colors.borderLight,
+      borderWidth: 1,
+      borderRadius: 6,
+    },
+    badgeTextNormal: {
+      color: colors.textPrimary,
+      fontWeight: '700',
+    },
+    badgeDrop: {
+      backgroundColor: 'rgba(168, 85, 247, 0.18)',
+      borderColor: '#A855F7',
+      borderWidth: 1,
+      borderRadius: 6,
+    },
+    badgeTextDrop: {
+      color: '#C084FC',
+      fontWeight: '800',
+    },
+    badgeWarmup: {
+      backgroundColor: 'rgba(245, 158, 11, 0.18)',
+      borderColor: '#F59E0B',
+      borderWidth: 1,
+      borderRadius: 6,
+    },
+    badgeTextWarmup: {
+      color: '#FBBF24',
+      fontWeight: '800',
+    },
+    badgeFailure: {
+      backgroundColor: 'rgba(239, 68, 68, 0.18)',
+      borderColor: '#EF4444',
+      borderWidth: 1,
+      borderRadius: 6,
+    },
+    badgeTextFailure: {
+      color: '#F87171',
+      fontWeight: '800',
+    },
+    modalBackdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.65)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: 20,
+    },
+    modalDragHandle: {
+      width: 36,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: '#334155',
+      alignSelf: 'center',
+      marginBottom: 12,
+    },
+    typeSelectorCard: {
+      width: '100%',
+      maxWidth: 360,
+      backgroundColor: '#141824',
+      borderRadius: 16,
+      padding: 18,
+      borderWidth: 1,
+      borderColor: '#242C3D',
+    },
+    typeSelectorHeader: {
+      marginBottom: 14,
+    },
+    typeSelectorTitle: {
+      fontSize: 17,
+      fontWeight: '700',
+      color: colors.textPrimary,
+    },
+    typeSelectorSubtitle: {
+      fontSize: 12,
+      color: colors.textMuted,
+      marginTop: 2,
+    },
+    typeOptionList: {
+      gap: 8,
+    },
+    typeOptionItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      borderRadius: 10,
+      backgroundColor: '#0F1420',
+      borderWidth: 1,
+      borderColor: '#242C3D',
+      minHeight: 52,
+      gap: 12,
+    },
+    typeOptionItemActive: {
+      borderColor: colors.primary || '#38BDF8',
+      backgroundColor: 'rgba(56, 189, 248, 0.08)',
+    },
+    typeOptionIconWrap: {
+      width: 32,
+      height: 32,
+      borderRadius: 8,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    typeOptionIconText: {
+      fontSize: 14,
+      fontWeight: '800',
+    },
+    typeOptionTexts: {
+      flex: 1,
+    },
+    typeOptionLabel: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: colors.textPrimary,
+    },
+    typeOptionDesc: {
+      fontSize: 11,
+      color: colors.textMuted,
+      marginTop: 2,
+    },
+    typeOptionCheckmark: {
+      fontSize: 16,
+      fontWeight: '900',
+      color: colors.primary || '#38BDF8',
+      marginLeft: 'auto',
+    },
+    closeButton: {
+      marginTop: 14,
+      paddingVertical: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 8,
+      backgroundColor: 'transparent',
+    },
+    closeButtonText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: colors.textMuted,
     },
   });

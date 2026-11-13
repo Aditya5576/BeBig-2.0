@@ -6,7 +6,7 @@
  */
 
 import { WorkoutTemplate } from '../../templates/types';
-import { WorkoutSession, WorkoutExercise, WorkoutSet, ActiveRestTimer } from '../types';
+import { WorkoutSession, WorkoutExercise, WorkoutSet, SetType, ActiveRestTimer } from '../types';
 import { workoutStorage } from '../storage/workoutStorage';
 import { getCurrentUserScope, UserScope } from '../../auth/utils/userScope';
 import { syncMetadataStore, syncLifecycleManager, getRecordKey } from '../../../services/sync';
@@ -86,6 +86,7 @@ export class WorkoutRepository {
           weight: defaultWeight,
           reps: defaultReps,
           rir: 2,
+          setType: 'normal',
           completed: false,
         });
       }
@@ -197,6 +198,7 @@ export class WorkoutRepository {
       weight: 0,
       reps: 10,
       rir: 2,
+      setType: 'normal',
       completed: false,
     };
 
@@ -232,6 +234,7 @@ export class WorkoutRepository {
         weight: lastSet ? lastSet.weight : 0,
         reps: lastSet ? lastSet.reps : 10,
         rir: lastSet ? lastSet.rir : 2,
+        setType: 'normal',
         notes: lastSet && lastSet.notes ? lastSet.notes : undefined,
         completed: false,
       };
@@ -286,6 +289,152 @@ export class WorkoutRepository {
   }
 
   /**
+   * Enforces superset group invariants:
+   * - Only contiguous exercises can share a supersetGroupId.
+   * - Any group with fewer than 2 exercises is dissolved (supersetGroupId reset to null).
+   */
+  cleanSupersetInvariants(exercises: WorkoutExercise[]): WorkoutExercise[] {
+    if (!exercises || exercises.length === 0) return exercises;
+
+    const result: WorkoutExercise[] = exercises.map((ex) => ({ ...ex }));
+
+    let i = 0;
+    while (i < result.length) {
+      const groupId = result[i].supersetGroupId;
+      if (!groupId) {
+        i++;
+        continue;
+      }
+
+      let j = i;
+      while (j < result.length && result[j].supersetGroupId === groupId) {
+        j++;
+      }
+      const runLength = j - i;
+
+      if (runLength < 2) {
+        // Orphan exercise: dissolve group ID to null
+        for (let k = i; k < j; k++) {
+          result[k].supersetGroupId = null;
+        }
+      }
+      i = j;
+    }
+
+    return result;
+  }
+
+  /**
+   * Links an exercise with the immediately following exercise into a Superset or Giant Set.
+   * If either exercise is already in a group, reuses that group ID so 3+ contiguous exercises
+   * seamlessly become a Giant Set.
+   */
+  linkSupersetWithNext(workout: WorkoutSession, exerciseIndex: number): WorkoutSession {
+    if (!workout.exercises || exerciseIndex < 0 || exerciseIndex >= workout.exercises.length - 1) {
+      return workout;
+    }
+
+    const currentEx = workout.exercises[exerciseIndex];
+    const nextEx = workout.exercises[exerciseIndex + 1];
+
+    const groupId =
+      currentEx.supersetGroupId ||
+      nextEx.supersetGroupId ||
+      `ss_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+
+    const updatedExercises = workout.exercises.map((ex, idx) => {
+      if (idx === exerciseIndex || idx === exerciseIndex + 1) {
+        return {
+          ...ex,
+          supersetGroupId: groupId,
+        };
+      }
+      return ex;
+    });
+
+    const cleaned = this.cleanSupersetInvariants(updatedExercises);
+    return {
+      ...workout,
+      exercises: cleaned,
+    };
+  }
+
+  /**
+   * Unlinks an exercise from its Superset or Giant Set group.
+   * Automatically dissolves any remaining 1-exercise orphan in the group.
+   */
+  unlinkSuperset(workout: WorkoutSession, exerciseIndex: number): WorkoutSession {
+    if (!workout.exercises || exerciseIndex < 0 || exerciseIndex >= workout.exercises.length) {
+      return workout;
+    }
+
+    const targetEx = workout.exercises[exerciseIndex];
+    if (!targetEx.supersetGroupId) {
+      return workout;
+    }
+
+    const updatedExercises = workout.exercises.map((ex, idx) => {
+      if (idx === exerciseIndex) {
+        return {
+          ...ex,
+          supersetGroupId: null,
+        };
+      }
+      return ex;
+    });
+
+    const cleaned = this.cleanSupersetInvariants(updatedExercises);
+    return {
+      ...workout,
+      exercises: cleaned,
+    };
+  }
+
+  /**
+   * Moves an exercise up in the workout sequence and enforces superset invariants.
+   */
+  moveExerciseUp(workout: WorkoutSession, exerciseIndex: number): WorkoutSession {
+    if (!workout.exercises || exerciseIndex <= 0 || exerciseIndex >= workout.exercises.length) {
+      return workout;
+    }
+
+    const updated = [...workout.exercises];
+    const temp = updated[exerciseIndex - 1];
+    updated[exerciseIndex - 1] = updated[exerciseIndex];
+    updated[exerciseIndex] = temp;
+
+    const reindexed = updated.map((ex, idx) => ({ ...ex, order: idx }));
+    const cleaned = this.cleanSupersetInvariants(reindexed);
+
+    return {
+      ...workout,
+      exercises: cleaned,
+    };
+  }
+
+  /**
+   * Moves an exercise down in the workout sequence and enforces superset invariants.
+   */
+  moveExerciseDown(workout: WorkoutSession, exerciseIndex: number): WorkoutSession {
+    if (!workout.exercises || exerciseIndex < 0 || exerciseIndex >= workout.exercises.length - 1) {
+      return workout;
+    }
+
+    const updated = [...workout.exercises];
+    const temp = updated[exerciseIndex + 1];
+    updated[exerciseIndex + 1] = updated[exerciseIndex];
+    updated[exerciseIndex] = temp;
+
+    const reindexed = updated.map((ex, idx) => ({ ...ex, order: idx }));
+    const cleaned = this.cleanSupersetInvariants(reindexed);
+
+    return {
+      ...workout,
+      exercises: cleaned,
+    };
+  }
+
+  /**
    * Removes an exercise from the session and re-indexes order.
    */
   removeExerciseFromWorkout(workout: WorkoutSession, exerciseId: string): WorkoutSession {
@@ -294,10 +443,11 @@ export class WorkoutRepository {
       ...ex,
       order: idx,
     }));
+    const cleaned = this.cleanSupersetInvariants(reindexed);
 
     return {
       ...workout,
-      exercises: reindexed,
+      exercises: cleaned,
     };
   }
 
@@ -336,6 +486,14 @@ export class WorkoutRepository {
         if (typeof nextSet.rir === 'number') {
           if (isNaN(nextSet.rir) || nextSet.rir < 0 || nextSet.rir > 10) {
             throw new Error('RIR must be a number between 0 and 10.');
+          }
+        }
+
+        // Validate setType
+        if (nextSet.setType !== undefined) {
+          const validTypes: SetType[] = ['normal', 'warmup', 'drop', 'failure'];
+          if (!validTypes.includes(nextSet.setType)) {
+            throw new Error(`Invalid setType: ${nextSet.setType}`);
           }
         }
 
@@ -777,6 +935,7 @@ export class WorkoutRepository {
         weight: typeof s.weight === 'number' && s.weight >= 0 ? s.weight : 0,
         reps: typeof s.reps === 'number' && s.reps > 0 ? s.reps : 10,
         rir: typeof s.rir === 'number' ? s.rir : 2,
+        setType: s.setType || 'normal',
         notes: s.notes ? s.notes : undefined,
         completed: false,
       }));
@@ -786,6 +945,7 @@ export class WorkoutRepository {
         exerciseName: ex.exerciseName,
         categoryName: ex.categoryName,
         order: ex.order !== undefined ? ex.order : exIndex,
+        supersetGroupId: ex.supersetGroupId || null,
         plannedSets: ex.plannedSets || newSets.length,
         plannedTargetReps: ex.plannedTargetReps,
         plannedRestTime: ex.plannedRestTime || 90,
@@ -793,6 +953,8 @@ export class WorkoutRepository {
         actualSets: newSets,
       };
     });
+
+    const cleanedExercises = this.cleanSupersetInvariants(exercises);
 
     const session: WorkoutSession = {
       id: sessionId,
@@ -803,7 +965,7 @@ export class WorkoutRepository {
       updatedAt: now,
       version: 1,
       status: 'active',
-      exercises,
+      exercises: cleanedExercises,
       activeRestTimer: null,
     };
 

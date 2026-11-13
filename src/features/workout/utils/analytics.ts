@@ -12,7 +12,7 @@
  * - Time-aware athletic greeting
  */
 
-import { WorkoutSession } from '../types';
+import { WorkoutSession, SetType } from '../types';
 import { WorkoutTemplate } from '../../templates/types';
 
 export interface PersonalRecord {
@@ -197,18 +197,27 @@ export function calculatePersonalRecords(workouts: WorkoutSession[]): {
     if (!workout.exercises) continue;
     for (const ex of workout.exercises) {
       if (!ex.exerciseId || !ex.actualSets) continue;
-      for (const set of ex.actualSets) {
-        if (set.completed && typeof set.weight === 'number' && set.weight > 0 && set.reps > 0) {
-          const existing = prMap.get(ex.exerciseId);
-          if (!existing || set.weight > existing.maxWeight) {
-            prMap.set(ex.exerciseId, {
-              exerciseId: ex.exerciseId,
-              exerciseName: ex.exerciseName || 'Exercise',
-              maxWeight: set.weight,
-              reps: set.reps,
-              achievedAt: set.completedAt || workout.finishedAt || workout.startedAt,
-            });
-          }
+      const validCompletedSets = ex.actualSets.filter(
+        (s) => s.completed && typeof s.weight === 'number' && s.weight > 0 && s.reps > 0,
+      );
+      if (validCompletedSets.length === 0) continue;
+
+      // Prioritize working sets ('normal' / 'failure') to protect PRs from warm-up and drop sets
+      const workingSets = validCompletedSets.filter(
+        (s) => !s.setType || s.setType === 'normal' || s.setType === 'failure',
+      );
+      const setsToEvaluate = workingSets.length > 0 ? workingSets : validCompletedSets;
+
+      for (const set of setsToEvaluate) {
+        const existing = prMap.get(ex.exerciseId);
+        if (!existing || set.weight > existing.maxWeight) {
+          prMap.set(ex.exerciseId, {
+            exerciseId: ex.exerciseId,
+            exerciseName: ex.exerciseName || 'Exercise',
+            maxWeight: set.weight,
+            reps: set.reps,
+            achievedAt: set.completedAt || workout.finishedAt || workout.startedAt,
+          });
         }
       }
     }
@@ -315,7 +324,7 @@ export interface ExerciseHistoryEntry {
   workoutId: string;
   workoutName: string;
   date: string; // ISO 8601 timestamp (startedAt of the session)
-  maxWeight: number; // Highest weight in any completed set this session
+  maxWeight: number; // Highest weight in working completed sets (or fallback to any completed set)
   totalReps: number; // Total completed reps across all sets this session
   volume: number; // Sum of (weight * reps) for all completed sets this session
   sets: {
@@ -323,6 +332,7 @@ export interface ExerciseHistoryEntry {
     weight: number;
     reps: number;
     rir?: number;
+    setType?: SetType;
     notes?: string;
   }[];
 }
@@ -348,9 +358,15 @@ export function getExerciseHistory(
     const completedSets = exercise.actualSets.filter((s) => s.completed && s.reps > 0);
     if (completedSets.length === 0) continue;
 
-    const maxWeight = completedSets.reduce(
+    // Working sets ('normal' or 'failure') dictate top-weight progression over warm-up / drop sets
+    const workingSets = completedSets.filter(
+      (s) => !s.setType || s.setType === 'normal' || s.setType === 'failure',
+    );
+    const candidateSetsForMax = workingSets.length > 0 ? workingSets : completedSets;
+
+    const maxWeight = candidateSetsForMax.reduce(
       (max, s) => (s.weight > max ? s.weight : max),
-      completedSets[0].weight,
+      candidateSetsForMax[0].weight,
     );
     const totalReps = completedSets.reduce((sum, s) => sum + s.reps, 0);
     const volume = completedSets.reduce(
@@ -370,6 +386,7 @@ export function getExerciseHistory(
         weight: s.weight,
         reps: s.reps,
         rir: s.rir,
+        setType: s.setType || 'normal',
         notes: s.notes,
       })),
     });

@@ -14,7 +14,7 @@
  * - No letter-based or game-style placeholder tiles.
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Image,
@@ -23,6 +23,7 @@ import {
   ViewStyle,
   ImageErrorEventData,
   NativeSyntheticEvent,
+  Platform,
 } from 'react-native';
 import { useAppTheme } from '../../theme';
 import { radii } from '../../../constants/theme';
@@ -42,6 +43,23 @@ export interface ExerciseThumbnailProps {
   style?: StyleProp<ViewStyle>;
   testID?: string;
   hideWhenEmpty?: boolean;
+  isDetailView?: boolean;
+}
+
+function isGifUri(uri: string | null | undefined): boolean {
+  if (!uri) return false;
+  const cleanUri = uri.split('?')[0].toLowerCase();
+  return cleanUri.endsWith('.gif');
+}
+
+function findStaticImage(exercise: Exercise): string | null {
+  if (!exercise.images || exercise.images.length === 0) return null;
+  const staticImgs = exercise.images.filter(
+    (img) => !isGifUri(img.thumbnailUrl) && !isGifUri(img.url)
+  );
+  if (staticImgs.length === 0) return null;
+  const main = staticImgs.find((img) => img.isMain) || staticImgs[0];
+  return main.thumbnailUrl || main.url || null;
 }
 
 export const ExerciseThumbnail = React.memo(function ExerciseThumbnail({
@@ -51,6 +69,7 @@ export const ExerciseThumbnail = React.memo(function ExerciseThumbnail({
   style,
   testID,
   hideWhenEmpty = false,
+  isDetailView = false,
 }: ExerciseThumbnailProps) {
   const { colors } = useAppTheme();
   const [imageError, setImageError] = useState(false);
@@ -68,19 +87,39 @@ export const ExerciseThumbnail = React.memo(function ExerciseThumbnail({
     // 2. Check approved curated demonstration catalog
     const resolution = resolveExerciseDemonstration(exercise, catalog);
     if (resolution.status === 'approved' && resolution.demonstration?.thumbnailUri) {
-      return resolution.demonstration.thumbnailUri;
+      const thumb = resolution.demonstration.thumbnailUri;
+      // In compact thumbnail / picker / list view, avoid decoding multi-frame animated GIFs in iOS Safari WebKit
+      if (!isDetailView && isGifUri(thumb)) {
+        const staticFallback = findStaticImage(exercise);
+        if (staticFallback) return staticFallback;
+        return null;
+      }
+      return thumb;
     }
 
     // 3. Provider image fallback for standard library exercises
     if (!exercise.isCustom && exercise.images && exercise.images.length > 0) {
-      const main = exercise.images.find((img) => img.isMain) || exercise.images[0];
-      if (main?.thumbnailUrl || main?.url) {
-        return main.thumbnailUrl || main.url;
+      const staticImgs = exercise.images.filter(
+        (img) => !isGifUri(img.thumbnailUrl) && !isGifUri(img.url)
+      );
+      const mainStatic = staticImgs.find((img) => img.isMain) || staticImgs[0];
+      if (mainStatic?.thumbnailUrl || mainStatic?.url) {
+        return mainStatic.thumbnailUrl || mainStatic.url;
       }
+      // If only GIF is available and detail view requested, allow it
+      if (isDetailView) {
+        const anyMain = exercise.images.find((img) => img.isMain) || exercise.images[0];
+        return anyMain?.thumbnailUrl || anyMain?.url || null;
+      }
+      return null;
     }
 
     return null;
-  }, [exercise, catalog]);
+  }, [exercise, catalog, isDetailView]);
+
+  useEffect(() => {
+    setImageError(false);
+  }, [mediaUri]);
 
   const containerTestId = testID || `exercise-thumbnail-${exercise?.id || 'unknown'}`;
   const borderRadius = size > 40 ? radii.md : radii.sm;
@@ -112,6 +151,7 @@ export const ExerciseThumbnail = React.memo(function ExerciseThumbnail({
           resizeMode="cover"
           fadeDuration={0}
           onError={(_e: NativeSyntheticEvent<ImageErrorEventData>) => setImageError(true)}
+          {...(Platform.OS === 'web' ? ({ loading: 'lazy', decoding: 'async' } as any) : {})}
         />
       </View>
     );

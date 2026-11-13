@@ -467,6 +467,7 @@ export default function ExerciseDetailScreen() {
                 style={styles.exerciseImage}
                 resizeMode="contain"
                 testID="exercise-detail-image"
+                {...(Platform.OS === 'web' ? ({ decoding: 'async' } as any) : {})}
               />
             </View>
             {approvedCuratedDemo ? (

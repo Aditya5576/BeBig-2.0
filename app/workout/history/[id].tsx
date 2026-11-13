@@ -3,7 +3,7 @@ import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, TextInput, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ScreenContainer, Text, Button, Card, SyncStatusChip } from '../../../src/components/ui';
-import { workoutRepository, WorkoutSession } from '../../../src/features/workout';
+import { workoutRepository, WorkoutSession, getSupersetDisplayInfo } from '../../../src/features/workout';
 import { templateRepository, WorkoutTemplate } from '../../../src/features/templates';
 import {
   WORKOUT_FOCUS_OPTIONS,
@@ -331,9 +331,14 @@ export default function WorkoutHistoryDetailScreen() {
             Exercise Performance
           </Text>
 
-          {displayExercises.map((ex) => {
+          {displayExercises.map((ex, exIndex) => {
             const finishedSets = ex.actualSets.filter((s) => s.completed);
             const setsToRender = finishedSets.length > 0 ? finishedSets : ex.actualSets;
+            const supersetInfo = getSupersetDisplayInfo(displayExercises, ex.exerciseId);
+            const isLinkedWithNext =
+              Boolean(ex.supersetGroupId) &&
+              exIndex < displayExercises.length - 1 &&
+              displayExercises[exIndex + 1].supersetGroupId === ex.supersetGroupId;
 
             // Progression logic for this exercise in history
             const currSnap = currentWorkoutSnapshots.find((s) => s.exerciseId === ex.exerciseId) || null;
@@ -344,7 +349,24 @@ export default function WorkoutHistoryDetailScreen() {
             return (
               <Card
                 key={ex.exerciseId}
-                style={styles.exerciseCard}
+                style={[
+                  styles.exerciseCard,
+                  supersetInfo.isInGroup && {
+                    borderLeftWidth: 4,
+                    borderLeftColor: supersetInfo.accentColor,
+                    borderColor:
+                      supersetInfo.groupType === 'giant_set'
+                        ? 'rgba(56, 189, 248, 0.28)'
+                        : 'rgba(0, 229, 153, 0.28)',
+                  },
+                  {
+                    marginBottom: isLinkedWithNext
+                      ? 8
+                      : exIndex === displayExercises.length - 1
+                      ? 0
+                      : 14,
+                  },
+                ]}
                 testID={`history-exercise-${ex.exerciseId}`}
               >
                 {/* Exercise Title Header */}
@@ -359,14 +381,47 @@ export default function WorkoutHistoryDetailScreen() {
                   testID={`history-exercise-header-${ex.exerciseId}`}
                 >
                   <View style={styles.exerciseTitleGroup}>
-                    <Text variant="titleMedium" color="primary" style={styles.exerciseName}>
-                      {ex.exerciseName || 'Exercise'}
-                    </Text>
-                    {ex.categoryName ? (
-                      <Text variant="caption" color="muted">
-                        {ex.categoryName}
+                    <View style={styles.historyTopStrip}>
+                      <View style={styles.indexBadge}>
+                        <Text variant="caption" color="accent" style={styles.indexBadgeText}>
+                          #{exIndex + 1}
+                        </Text>
+                      </View>
+                      {supersetInfo.isInGroup && (
+                        <View
+                          style={[
+                            styles.historySupersetPillBadge,
+                            {
+                              borderColor: supersetInfo.accentColor,
+                              backgroundColor:
+                                supersetInfo.groupType === 'giant_set'
+                                  ? 'rgba(56, 189, 248, 0.12)'
+                                  : 'rgba(0, 229, 153, 0.12)',
+                            },
+                          ]}
+                          testID={`history-superset-badge-${ex.exerciseId}`}
+                        >
+                          <Text
+                            style={[
+                              styles.historySupersetPillText,
+                              { color: supersetInfo.accentColor },
+                            ]}
+                          >
+                            {supersetInfo.groupLabel}
+                          </Text>
+                        </View>
+                      )}
+                      {ex.categoryName ? (
+                        <Text variant="caption" color="muted" style={styles.categoryTag} numberOfLines={1}>
+                          {ex.categoryName}
+                        </Text>
+                      ) : null}
+                    </View>
+                    <View style={styles.historyNameRow}>
+                      <Text variant="titleMedium" color="primary" style={styles.exerciseName}>
+                        {ex.exerciseName || 'Exercise'}
                       </Text>
-                    ) : null}
+                    </View>
                   </View>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <View style={styles.setsBadge}>
@@ -392,9 +447,38 @@ export default function WorkoutHistoryDetailScreen() {
                         testID={`history-set-${ex.exerciseId}-${s.setNumber}`}
                       >
                         <View style={styles.setRow}>
-                          <View style={styles.setIndexBadge}>
-                            <Text variant="caption" color="primary" style={styles.setIndexText}>
-                              SET {s.setNumber}
+                          <View
+                            style={[
+                              styles.setIndexBadge,
+                              s.setType === 'drop'
+                                ? styles.historyBadgeDrop
+                                : s.setType === 'warmup'
+                                ? styles.historyBadgeWarmup
+                                : s.setType === 'failure'
+                                ? styles.historyBadgeFailure
+                                : null,
+                            ]}
+                          >
+                            <Text
+                              variant="caption"
+                              style={[
+                                styles.setIndexText,
+                                s.setType === 'drop'
+                                  ? styles.historyBadgeTextDrop
+                                  : s.setType === 'warmup'
+                                  ? styles.historyBadgeTextWarmup
+                                  : s.setType === 'failure'
+                                  ? styles.historyBadgeTextFailure
+                                  : null,
+                              ]}
+                            >
+                              {s.setType === 'drop'
+                                ? `DROP ${s.setNumber}`
+                                : s.setType === 'warmup'
+                                ? `WARMUP ${s.setNumber}`
+                                : s.setType === 'failure'
+                                ? `FAILURE ${s.setNumber}`
+                                : `SET ${s.setNumber}`}
                             </Text>
                           </View>
 
@@ -690,29 +774,79 @@ const createStyles = (colors: any) =>
       marginBottom: 2,
     },
     breakdownSection: {
-      gap: spacing.md,
+      gap: 0,
     },
     sectionHeader: {
       marginBottom: spacing.xs,
     },
     exerciseCard: {
-      padding: spacing.md,
-      gap: spacing.sm,
+      padding: 12,
+      gap: 10,
+      backgroundColor: '#141824',
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: colors.borderLight,
     },
     exerciseHeader: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
       borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-      paddingBottom: spacing.xs,
+      borderBottomColor: colors.borderLight,
+      paddingBottom: 8,
     },
     exerciseTitleGroup: {
       flex: 1,
-      gap: 2,
+      gap: 4,
+      minWidth: 0,
+    },
+    historyTopStrip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      flexWrap: 'wrap',
+    },
+    indexBadge: {
+      backgroundColor: 'rgba(56, 189, 248, 0.12)',
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 4,
+      borderWidth: 1,
+      borderColor: 'rgba(56, 189, 248, 0.25)',
+      flexShrink: 0,
+    },
+    indexBadgeText: {
+      fontWeight: '700',
+      fontSize: 11,
+      color: colors.primary,
+    },
+    categoryTag: {
+      fontSize: 11,
+      fontWeight: '500',
+      color: colors.textMuted,
+      flexShrink: 1,
+    },
+    historyNameRow: {
+      width: '100%',
+      marginTop: 2,
+    },
+    historySupersetPillBadge: {
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 4,
+      borderWidth: 1,
+      alignSelf: 'center',
+    },
+    historySupersetPillText: {
+      fontSize: 10,
+      fontWeight: '800',
+      letterSpacing: 0.5,
     },
     exerciseName: {
       fontWeight: '700',
+      fontSize: 16,
+      lineHeight: 20,
+      color: '#F8FAFC',
     },
     setsBadge: {
       backgroundColor: 'rgba(255, 255, 255, 0.08)',
@@ -772,6 +906,33 @@ const createStyles = (colors: any) =>
       paddingHorizontal: spacing.xs,
       paddingVertical: 2,
       borderRadius: radii.xs || 4,
+    },
+    historyBadgeDrop: {
+      backgroundColor: 'rgba(168, 85, 247, 0.15)',
+      borderColor: 'rgba(168, 85, 247, 0.4)',
+      borderWidth: 1,
+    },
+    historyBadgeTextDrop: {
+      color: '#C084FC',
+      fontWeight: '800',
+    },
+    historyBadgeWarmup: {
+      backgroundColor: 'rgba(245, 158, 11, 0.15)',
+      borderColor: 'rgba(245, 158, 11, 0.4)',
+      borderWidth: 1,
+    },
+    historyBadgeTextWarmup: {
+      color: '#FBBF24',
+      fontWeight: '800',
+    },
+    historyBadgeFailure: {
+      backgroundColor: 'rgba(239, 68, 68, 0.15)',
+      borderColor: 'rgba(239, 68, 68, 0.4)',
+      borderWidth: 1,
+    },
+    historyBadgeTextFailure: {
+      color: '#F87171',
+      fontWeight: '800',
     },
     setIndexText: {
       fontSize: 10,
