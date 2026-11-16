@@ -2,7 +2,7 @@ import { useAppTheme } from '../../src/features/theme';
 import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, ScrollView, Image, ActivityIndicator, Alert, Platform, Pressable } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ScreenContainer, Text, Button, Card, useBottomContentInset } from '../../src/components/ui';
+import { ScreenContainer, Text, Button, Card, useBottomContentInset, SyncStatusChip } from '../../src/components/ui';
 import * as FileSystem from 'expo-file-system/legacy';
 import {
   exerciseRepository,
@@ -19,7 +19,6 @@ import {
 import { useAuthStore } from '../../src/features/auth';
 import { spacing, radii } from '../../src/constants/theme';
 import { useEntitySyncStatus } from '../../src/services/sync';
-import { SyncStatusChip } from '../../src/components/ui';
 
 function CustomExerciseSyncStatus({ exerciseId, isCustom }: { exerciseId: string; isCustom: boolean }) {
   const status = useEntitySyncStatus('custom_exercise', exerciseId);

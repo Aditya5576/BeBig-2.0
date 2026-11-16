@@ -45,7 +45,7 @@ const formatShortDate = (dateStr?: string) => {
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 };
 
-export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(({
+export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(function ActiveExerciseCard({
   exercise,
   exIndex,
   totalExercisesCount,
@@ -64,7 +64,7 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(({
   onToggleCompleteSet,
   onLayout,
   style,
-}) => {
+}) {
   const { colors } = useAppTheme();
   const styles = createStyles(colors);
   const { width: windowWidth } = useWindowDimensions();

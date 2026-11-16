@@ -3,7 +3,13 @@
  */
 
 export * from './types';
-export * from './cloudErrors';
+export {
+  CloudErrorKind,
+  CloudErrorOptions,
+  CloudError,
+  isCloudError,
+  classifySupabaseError,
+} from './cloudErrors';
 export * from './workoutCloudService';
 export * from './templateCloudService';
 export * from './customExerciseCloudService';

@@ -13,9 +13,11 @@ import {
   CloudPullResult,
   WorkoutCloudRecord,
   WorkoutCloudInput,
+} from './types';
+import {
   classifySupabaseError,
   CloudError,
-} from './types';
+} from './cloudErrors';
 import { normalizeUtcTimestamp } from './timestamp';
 
 export class WorkoutCloudService {

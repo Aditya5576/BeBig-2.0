@@ -12,7 +12,7 @@ import {
   Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ScreenContainer, Text, Button, Card, Icon, useBottomContentInset } from '../../src/components/ui';
+import { ScreenContainer, Text, Button, Card, Icon, useBottomContentInset, SyncStatusChip } from '../../src/components/ui';
 import {
   templateRepository,
   ExercisePickerModal,
@@ -21,9 +21,8 @@ import {
 } from '../../src/features/templates';
 import { Exercise } from '../../src/features/exercises';
 import { spacing, radii } from '../../src/constants/theme';
-import { WORKOUT_FOCUS_OPTIONS, getTemplateFocus, getSuggestedSessionNumber } from '../../src/features/templates/utils/templateUtils';
+import { WORKOUT_FOCUS_OPTIONS } from '../../src/features/templates/utils/templateUtils';
 import { useEntitySyncStatus } from '../../src/services/sync';
-import { SyncStatusChip } from '../../src/components/ui';
 
 function TemplateSyncStatus({ templateId }: { templateId: string }) {
   const status = useEntitySyncStatus('template', templateId);

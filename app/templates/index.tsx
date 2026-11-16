@@ -10,13 +10,12 @@ import {
   TextInput,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { ScreenContainer, ScreenFlatList, Text, Button, Card, Icon } from '../../src/components/ui';
+import { ScreenContainer, ScreenFlatList, Text, Button, Card, Icon, SyncStatusChip } from '../../src/components/ui';
 import { templateRepository, WorkoutTemplate } from '../../src/features/templates';
 import { workoutRepository } from '../../src/features/workout';
 import { getTemplateFocus } from '../../src/features/templates/utils/templateUtils';
 import { spacing, radii } from '../../src/constants/theme';
 import { useEntitySyncStatus } from '../../src/services/sync';
-import { SyncStatusChip } from '../../src/components/ui';
 
 function TemplateSyncStatus({ templateId }: { templateId: string }) {
   const status = useEntitySyncStatus('template', templateId);
@@ -468,7 +467,7 @@ export default function TemplatesListScreen() {
             BUILD YOUR WORKOUT LIBRARY
           </Text>
           <Text variant="caption" color="muted" style={styles.emptySubtext}>
-            No workout templates yet. Save your favorite workouts here and start them whenever you're ready.
+            {"No workout templates yet. Save your favorite workouts here and start them whenever you're ready."}
           </Text>
           <Button
             testID="empty-create-template-button"

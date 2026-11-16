@@ -8,8 +8,6 @@ import { WorkoutExercise } from '../../features/workout/types';
 import { TemplateExercise } from '../../features/templates/types';
 import { ExerciseCategory, ExerciseMuscle, ExerciseEquipment } from '../../features/exercises/types';
 
-export * from './cloudErrors';
-
 export interface CloudPullOptions {
   /**
    * ISO 8601 UTC server watermark. Fetches rows where updated_at >= sinceUpdatedAt.

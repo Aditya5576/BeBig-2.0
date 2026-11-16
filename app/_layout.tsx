@@ -3,7 +3,6 @@ import { View } from 'react-native';
 import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { colors } from '../src/constants/theme';
 import { useSyncLifecycle } from '../src/services/sync';
 import { useAuthStore, resolveAuthenticatedUserRoute } from '../src/features/auth';
 import { WebAlertModal, ReleaseNotesModal } from '../src/components/ui';
@@ -16,10 +15,9 @@ import '../src/features/workout/services/workoutNotificationService';
 initErrorMonitoring();
 
 function useProtectedRoute() {
-  const router = typeof useRouter === 'function' ? useRouter() : null;
-  const segments = typeof useSegments === 'function' ? useSegments() : [];
-  const navigationState =
-    typeof useRootNavigationState === 'function' ? useRootNavigationState() : { key: 'ready' };
+  const router = useRouter();
+  const segments = useSegments();
+  const navigationState = useRootNavigationState();
   const status = useAuthStore((state) => state.status);
   const userId = useAuthStore((state) => state.user?.id);
 
@@ -48,8 +46,9 @@ function useProtectedRoute() {
     if (!navigationState?.key) return;
     if (status === 'initializing') return; // Do NOT redirect prematurely while checking session
 
-    const firstSegment = segments[0];
-    const secondSegment = segments[1];
+    const rawSegments = segments as string[];
+    const firstSegment = rawSegments[0];
+    const secondSegment = rawSegments[1];
     const isProtected = ['home', 'workout', 'templates', 'exercises', 'settings'].includes(firstSegment);
 
     if (status === 'unauthenticated' && isProtected) {
@@ -60,7 +59,7 @@ function useProtectedRoute() {
     const isGuest = useAuthStore.getState().isGuest;
     const isQuestionnaireRoute =
       firstSegment === 'onboarding' &&
-      ['goal', 'experience', 'preferences'].includes(secondSegment);
+      Boolean(secondSegment && ['goal', 'experience', 'preferences'].includes(secondSegment));
 
     if (isGuest && isQuestionnaireRoute) {
       router.replace('/home');

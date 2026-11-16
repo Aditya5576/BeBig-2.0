@@ -1,8 +1,8 @@
 import { useAppTheme } from '../../src/features/theme';
 import React, { useState, useCallback, useMemo } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert, TextInput } from 'react-native';
+import { View, StyleSheet, Pressable, ActivityIndicator, Alert, TextInput } from 'react-native';
 import { useRouter, useFocusEffect as routerFocusEffect } from 'expo-router';
-import { ScreenContainer, ScreenScrollView, Text, Button, Card, Icon } from '../../src/components/ui';
+import { ScreenContainer, ScreenScrollView, Text, Button, Card, Icon, SyncStatusChip } from '../../src/components/ui';
 import {
   workoutRepository,
   WorkoutSession,
@@ -12,7 +12,6 @@ import {
 } from '../../src/features/workout';
 import { spacing, radii } from '../../src/constants/theme';
 import { useEntitySyncStatus } from '../../src/services/sync';
-import { SyncStatusChip } from '../../src/components/ui';
 
 function HistorySyncStatus({ workoutId }: { workoutId: string }) {
   const status = useEntitySyncStatus('workout', workoutId);

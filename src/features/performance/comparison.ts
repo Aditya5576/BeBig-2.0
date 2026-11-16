@@ -8,7 +8,12 @@
  * performance classification (PERF-5D), and UI. RIR is excluded.
  */
 
-import { ExercisePerformanceSnapshot, PerformanceComparison } from './types';
+import {
+  ExercisePerformanceSnapshot,
+  PerformanceComparison,
+  SetPerformance,
+  SetComparisonItem,
+} from './types';
 
 /**
  * Safely computes raw numeric difference and percentage change between two values.
@@ -148,8 +153,6 @@ export function compareExercisePerformance(
   const previousSnapshot = findPreviousPerformance(currentSnapshot, historicalSnapshots);
   return comparePerformances(currentSnapshot, previousSnapshot);
 }
-
-import { SetPerformance, SetComparisonItem } from './types';
 
 /**
  * Compares current workout sets against previous workout sets on a set-by-set basis (Set 1 -> Set 1, Set 2 -> Set 2).

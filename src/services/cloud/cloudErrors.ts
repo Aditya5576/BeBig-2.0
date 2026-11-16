@@ -1,4 +1,4 @@
-﻿/**
+/**
  * BeBig 2.0 — Cloud Data Access Error Hierarchy
  *
  * Categorizes raw Supabase and PostgREST errors into structured, typed error kinds

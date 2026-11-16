@@ -26,7 +26,7 @@ export interface ActiveSetRowProps {
   ) => void;
 }
 
-export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
+export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow({
   exercise,
   set,
   previousSet,
@@ -36,7 +36,7 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(({
   onDeleteSet,
   onUpdateSetField,
   onToggleCompleteSet,
-}) => {
+}) {
   const { colors } = useAppTheme();
   const { width: windowWidth } = useWindowDimensions();
   const isNarrow = windowWidth < 380;

@@ -14,9 +14,6 @@ import {
   Modal,
 } from 'react-native';
 import { useRouter, useFocusEffect as routerFocusEffect } from 'expo-router';
-
-const useFocusEffect =
-  typeof routerFocusEffect === 'function' ? routerFocusEffect : (fn: any) => fn();
 import { ScreenContainer, Text, Button, Card, Icon } from '../../src/components/ui';
 import {
   workoutRepository,
@@ -34,8 +31,10 @@ import { buildLastPerformanceMap } from '../../src/features/workout/services/pre
 import { Exercise } from '../../src/features/exercises';
 import { spacing, radii } from '../../src/constants/theme';
 import { RestTimerOverlay } from '../../src/features/workout/components/RestTimerOverlay';
-
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+const useFocusEffect =
+  typeof routerFocusEffect === 'function' ? routerFocusEffect : (fn: any) => fn();
 
 export default function ActiveWorkoutScreen() {
   const { colors } = useAppTheme();

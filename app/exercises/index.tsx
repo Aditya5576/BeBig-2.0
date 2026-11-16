@@ -3,7 +3,6 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   View,
   StyleSheet,
-  FlatList,
   TextInput,
   Pressable,
   ActivityIndicator,
@@ -11,11 +10,9 @@ import {
   Platform,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { ScreenContainer, ScreenScrollView, ScreenFlatList, Text, Button, Card, Icon } from '../../src/components/ui';
-import { exerciseRepository, Exercise, STANDARD_CATEGORIES, ExerciseThumbnail, ExerciseCard } from '../../src/features/exercises';
+import { ScreenContainer, ScreenFlatList, Text, Button, Icon } from '../../src/components/ui';
+import { exerciseRepository, Exercise, STANDARD_CATEGORIES, ExerciseCard } from '../../src/features/exercises';
 import { spacing, radii } from '../../src/constants/theme';
-import { useEntitySyncStatus } from '../../src/services/sync';
-import { SyncStatusChip } from '../../src/components/ui';
 
 
 export default function ExerciseListScreen() {

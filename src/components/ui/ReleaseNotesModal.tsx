@@ -13,7 +13,6 @@ import {
   View,
   ScrollView,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSegments } from 'expo-router';
 import { Text } from './Text';
 import { Button } from './Button';
@@ -34,25 +33,8 @@ export function ReleaseNotesModal({
   autoCheck = true,
 }: ReleaseNotesModalProps) {
   const { colors } = useAppTheme();
-  let insets = { top: 0, bottom: 0, left: 0, right: 0 };
-  try {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    insets = useSafeAreaInsets();
-  } catch {
-    insets = { top: 0, bottom: 0, left: 0, right: 0 };
-  }
-
-  let segments: string[] = [];
-  try {
-    if (typeof useSegments === 'function') {
-      const segs = useSegments();
-      if (Array.isArray(segs)) {
-        segments = segs;
-      }
-    }
-  } catch {
-    segments = [];
-  }
+  const rawSegments = useSegments();
+  const segments = Array.isArray(rawSegments) ? rawSegments : [];
 
   const firstSegment = segments[0];
   const secondSegment = segments[1];
@@ -141,7 +123,7 @@ export function ReleaseNotesModal({
               </Text>
             </View>
             <Text variant="titleMedium" color="primary" style={styles.headerTitle}>
-              🎉 What's New
+              {"🎉 What's New"}
             </Text>
           </View>
 

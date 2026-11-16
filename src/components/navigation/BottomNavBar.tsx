@@ -11,34 +11,16 @@ export function BottomNavBar() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
-  const router = typeof useRouter === 'function' ? useRouter() : null;
-  let segments: string[] = [];
-  try {
-    if (typeof useSegments === 'function') {
-      const segs = useSegments();
-      if (Array.isArray(segs)) {
-        segments = segs;
-      }
-    }
-  } catch {
-    segments = [];
-  }
-  
-  let insets = { top: 0, bottom: 0, left: 0, right: 0 };
-  try {
-    const hookInsets = useSafeAreaInsets();
-    if (hookInsets) {
-      insets = hookInsets;
-    }
-  } catch {
-    // In environments/tests without SafeAreaProvider
-  }
+  const router = useRouter();
+  const segments = useSegments();
+  const insets = useSafeAreaInsets();
 
   const status = useAuthStore((state) => state.status);
   const isGuest = useAuthStore((state) => state.isGuest);
 
-  const firstSegment = segments[0];
-  const secondSegment = segments[1];
+  const rawSegments = segments as string[];
+  const firstSegment = rawSegments[0];
+  const secondSegment = rawSegments[1];
 
   // Hidden conditions:
   // 1. Not logged in and not guest

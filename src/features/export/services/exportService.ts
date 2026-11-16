@@ -15,6 +15,8 @@ import * as XLSX from 'xlsx';
 import type { RGB } from 'pdf-lib';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
+import { WorkoutSession } from '../../workout/types';
+import { WorkoutTemplate } from '../../templates/types';
 
 /**
  * Loads pdf-lib from its standalone pre-bundled distribution.
@@ -29,8 +31,6 @@ function getPdfLib() {
     rgb: pdfLib.rgb as typeof import('pdf-lib').rgb,
   };
 }
-import { WorkoutSession } from '../../workout/types';
-import { WorkoutTemplate } from '../../templates/types';
 
 export type ExportFormat = 'xlsx' | 'pdf' | 'json' | 'csv';
 
