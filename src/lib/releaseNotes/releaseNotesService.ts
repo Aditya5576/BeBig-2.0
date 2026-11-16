@@ -17,6 +17,16 @@ export interface ReleaseNoteItem {
 }
 
 export const CURRENT_RELEASE_NOTES: Record<string, ReleaseNoteItem> = {
+  '2.4.0': {
+    version: '2.4.0',
+    title: "What's New in BeBig 2.4",
+    highlights: [
+      '3.5s Cinematic Splash & Brand Identity: Redesigned Obsidian Athletic splash screen with the progressive-overload barbell lockup and framed Electric Blue header emblem badges.',
+      'Modern Athletic Typography: Upgraded app-wide typography with Plus Jakarta Sans and tabular JetBrains Mono workout metrics.',
+      'Instant Multi-Word Custom Exercise Search: Cold-start hydration and order-independent keyword tokenization so custom movements resolve in 0ms.',
+      'Resilient Workout Summary Recovery: Hardened workout summary route handling against missing or expired session IDs after browser reloads.',
+    ],
+  },
   '2.2.0': {
     version: '2.2.0',
     title: "What's New in BeBig 2.2",

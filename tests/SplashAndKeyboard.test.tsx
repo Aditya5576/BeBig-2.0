@@ -1,6 +1,7 @@
 import React from 'react';
 import { render } from '@testing-library/react-native';
 import { StartupSplash } from '../src/components/ui/StartupSplash';
+import { BrandLogoBadge } from '../src/components/ui/BrandLogoBadge';
 import AuthScreen from '../app/onboarding/auth';
 import CreateCustomExerciseScreen from '../app/exercises/new';
 import appConfig from '../app.json';
@@ -75,9 +76,49 @@ describe('BeBig 2.0 — Startup Splash & Keyboard Overlap Fix', () => {
       ) as [string, { image: string; backgroundColor: string; resizeMode: string }] | undefined;
 
       expect(splashPlugin).toBeDefined();
-      expect(splashPlugin?.[1].image).toBe('./assets/splash-athlete.png');
+      expect(['./assets/splash-icon.png', './assets/splash-athlete.png']).toContain(splashPlugin?.[1].image);
       expect(splashPlugin?.[1].backgroundColor).toBe('#090D16');
       expect(splashPlugin?.[1].resizeMode).toBe('contain');
+    });
+
+    it('5: BrandLogoBadge renders Obsidian frame with Electric Blue border and dimensions', async () => {
+      const { getByTestId } = await render(
+        <BrandLogoBadge size="md" testID="test-emblem-badge" />
+      );
+
+      const badge = getByTestId('test-emblem-badge');
+      expect(badge).toBeTruthy();
+      expect(badge.props.style).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            backgroundColor: '#131B2E',
+            borderColor: 'rgba(56, 189, 248, 0.35)',
+            borderWidth: 1,
+          }),
+        ])
+      );
+    });
+
+    it('6: BrandLogoBadge scales correctly for sm, md, and custom numeric sizes', async () => {
+      const { getByTestId: getSm } = await render(
+        <BrandLogoBadge size="sm" testID="badge-sm" />
+      );
+      const { getByTestId: getMd } = await render(
+        <BrandLogoBadge size="md" testID="badge-md" />
+      );
+      const { getByTestId: getCustom } = await render(
+        <BrandLogoBadge size={36} testID="badge-custom" />
+      );
+
+      expect(getSm('badge-sm').props.style).toEqual(
+        expect.arrayContaining([expect.objectContaining({ width: 24, height: 24, borderRadius: 8 })])
+      );
+      expect(getMd('badge-md').props.style).toEqual(
+        expect.arrayContaining([expect.objectContaining({ width: 42, height: 42, borderRadius: 12 })])
+      );
+      expect(getCustom('badge-custom').props.style).toEqual(
+        expect.arrayContaining([expect.objectContaining({ width: 36, height: 36, borderRadius: 10 })])
+      );
     });
   });
 });

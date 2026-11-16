@@ -2,7 +2,7 @@ import { useAppTheme } from '../src/features/theme';
 import React, { useState, useCallback, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, Alert, Image } from 'react-native';
 import { useRouter, useFocusEffect as routerFocusEffect } from 'expo-router';
-import { ScreenContainer, ScreenScrollView, Text, Button, Card, Icon } from '../src/components/ui';
+import { ScreenContainer, ScreenScrollView, Text, Button, Card, Icon, BrandLogoBadge } from '../src/components/ui';
 import { useOnboardingStore } from '../src/features/onboarding';
 import { useAuthStore } from '../src/features/auth';
 import {
@@ -255,13 +255,20 @@ export default function HomeScreen() {
         {/* 1. Header: Clean and Personal */}
         <View style={styles.header}>
           <View style={styles.headerRow}>
-            <View style={styles.headerTextGroup}>
-              <Text variant="display" color="primary" testID="home-title" style={styles.greetingTitle}>
-                {`${greeting}, ${athleteName}`}
-              </Text>
-              <Text variant="caption" color="secondary" style={styles.headerSubtitle}>
-                Keep showing up. Progress adds up.
-              </Text>
+            <View style={styles.headerBrandGroup}>
+              <BrandLogoBadge
+                size="md"
+                testID="home-brand-emblem"
+                accessibilityLabel="BeBig Emblem"
+              />
+              <View style={styles.headerTextGroup}>
+                <Text variant="display" color="primary" testID="home-title" style={styles.greetingTitle}>
+                  {`${greeting}, ${athleteName}`}
+                </Text>
+                <Text variant="caption" color="secondary" style={styles.headerSubtitle}>
+                  Keep showing up. Progress adds up.
+                </Text>
+              </View>
             </View>
 
             <Pressable
@@ -675,6 +682,12 @@ const createStyles = (colors: any) =>
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
+    },
+    headerBrandGroup: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      flex: 1,
     },
     headerTextGroup: {
       flex: 1,

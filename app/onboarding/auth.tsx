@@ -9,7 +9,7 @@ import {
   Platform,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ScreenContainer, Text, Button, Card, Input, Icon } from '../../src/components/ui';
+import { ScreenContainer, Text, Button, Card, Input, Icon, BrandLogoBadge } from '../../src/components/ui';
 import { useOnboardingStore } from '../../src/features/onboarding';
 import { authService, useAuthStore, resolveAuthenticatedUserRoute, mapAuthError } from '../../src/features/auth';
 import { profileService } from '../../src/features/profile';
@@ -325,6 +325,11 @@ export default function AuthScreen({
         </Pressable>
 
         <View style={styles.brandBadge}>
+          <BrandLogoBadge
+            size="sm"
+            testID="auth-brand-emblem"
+            accessibilityLabel="BeBig Emblem"
+          />
           <Text variant="caption" color="accent" style={styles.brandBadgeText}>
             BEBIG 2.0
           </Text>
@@ -689,10 +694,14 @@ const createStyles = (colors: any) => StyleSheet.create({
     marginTop: -2,
   },
   brandBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     backgroundColor: colors.surfaceElevated,
     borderWidth: 1,
     borderColor: colors.borderLight,
-    paddingHorizontal: spacing.sm + 4,
+    paddingLeft: 4,
+    paddingRight: spacing.sm + 4,
     paddingVertical: 3,
     borderRadius: radii.full,
   },

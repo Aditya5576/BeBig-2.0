@@ -13,7 +13,7 @@ import {
   StyleProp,
   TextStyle,
 } from 'react-native';
-import { typography, TypographyKey } from '../../constants/theme';
+import { typography, TypographyKey, fontFamilies } from '../../constants/theme';
 
 export type TextVariant = TypographyKey;
 export type TextColor = 'primary' | 'secondary' | 'muted' | 'inverse' | 'accent';
@@ -69,5 +69,6 @@ const createStyles = (colors: any) => StyleSheet.create({
   base: {
     includeFontPadding: false,
     textAlignVertical: 'center',
+    fontFamily: fontFamilies.sans,
   },
 });

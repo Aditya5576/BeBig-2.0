@@ -18,10 +18,12 @@ const mobileWebStyles = `
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
     background-color: #090D16;
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Segoe UI", Roboto, sans-serif;
     touch-action: pan-x pan-y;
   }
   input, textarea, select {
     font-size: 16px !important;
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
     outline: none;
   }
   * {
@@ -54,6 +56,14 @@ export default function Root({ children }: PropsWithChildren) {
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="BeBig" />
         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+
+        {/* Google Fonts: Plus Jakarta Sans & JetBrains Mono */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+          rel="stylesheet"
+        />
 
         <ScrollViewStyleReset />
         <style dangerouslySetInnerHTML={{ __html: mobileWebStyles }} />

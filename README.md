@@ -1,9 +1,13 @@
+<p align="center">
+  <img src="assets/bebig-only-logo.png" alt="BeBig 2.0 Emblem" width="140" />
+</p>
+
 # BeBig 2.0 🏋️‍♂️
 
 A production-grade, local-first gym workout tracking Progressive Web Application (PWA) and mobile platform engineered for serious lifters, strength athletes, and fitness enthusiasts. Built with Expo, React Native, TypeScript, Supabase, and resilient offline-first storage.
 
 [![Production App](https://img.shields.io/badge/Production-Live-success?style=for-the-badge&logo=vercel)](https://be-big-2-0.vercel.app)
-[![Version](https://img.shields.io/badge/Version-v2.1.1-blue?style=for-the-badge)](https://github.com/Aditya5576/BeBig-2.0)
+[![Version](https://img.shields.io/badge/Version-v2.4.0-blue?style=for-the-badge)](https://github.com/Aditya5576/BeBig-2.0)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Strict-3178C6?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org/)
 [![Expo](https://img.shields.io/badge/Expo-SDK_57-000020?style=for-the-badge&logo=expo)](https://expo.dev/)
 
@@ -18,7 +22,18 @@ A production-grade, local-first gym workout tracking Progressive Web Application
 
 ---
 
-## 🚀 Latest Release — v2.1.1
+## 🚀 Latest Release — v2.4.0
+
+### What's New in v2.4.0
+- **3.5s Cinematic Splash & Brand Identity**: Redesigned Obsidian Athletic startup sequence featuring the barbell progressive-overload emblem, ambient Electric Blue / Emerald breathing glow rings, and framed `#131B2E` header badges (`BrandLogoBadge`).
+- **Modern Athletic Typography**: App-wide typography powered by `Plus Jakarta Sans` for crisp athletic headings, body text, and badges, paired with tabular `JetBrains Mono` for high-precision workout numbers, PR weights, and rest timer countdowns.
+- **Instant Multi-Word Custom Exercise Search**: Cold-start cache hydration and order-independent keyword tokenization delivering instant 0ms custom movement search resolution.
+- **Resilient Workout Summary Recovery**: Hardened `/workout/summary` route handling against missing or expired session parameters following browser reloads, preventing blank 404 screens.
+- **Versioned "What's New" Release Modal**: Built-in interactive release modal automatically highlighting key v2.4.0 updates upon app launch.
+
+---
+
+## 🚀 Previous Release — v2.1.1
 
 ### What's New in v2.1.1
 - **Per-Set Notes Accessibility**: Per-set notes are readily discoverable and accessible directly within active workout set rows.

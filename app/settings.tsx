@@ -2,7 +2,7 @@ import { useAppTheme, useThemeStore } from '../src/features/theme';
 import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, TextInput, Image, Alert, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ScreenContainer, ScreenScrollView, Text, Button, Card, Icon } from '../src/components/ui';
+import { ScreenContainer, ScreenScrollView, Text, Button, Card, Icon, BrandLogoBadge } from '../src/components/ui';
 import { useAuthStore } from '../src/features/auth';
 import {
   useOnboardingStore,
@@ -752,14 +752,21 @@ export default function SettingsScreen() {
       <ScreenScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Top Screen Header */}
         <View style={styles.headerRow}>
-          <Text
-            variant="titleLarge"
-            color="primary"
-            testID="settings-screen-title"
-            style={styles.screenTitle}
-          >
-            Profile & Settings
-          </Text>
+          <View style={styles.headerTitleGroup}>
+            <BrandLogoBadge
+              size="md"
+              testID="settings-brand-emblem"
+              accessibilityLabel="BeBig Emblem"
+            />
+            <Text
+              variant="titleLarge"
+              color="primary"
+              testID="settings-screen-title"
+              style={styles.screenTitle}
+            >
+              Profile & Settings
+            </Text>
+          </View>
         </View>
 
         {/* Banners */}
@@ -1626,9 +1633,15 @@ export default function SettingsScreen() {
           </Text>
           <View style={styles.appInfoContent}>
             <View style={styles.appInfoRow}>
-              <Text variant="bodyBold" color="primary">
-                BeBig 2.0
-              </Text>
+              <View style={styles.appInfoBrandRow}>
+                <BrandLogoBadge
+                  size="sm"
+                  accessibilityLabel="BeBig Emblem"
+                />
+                <Text variant="bodyBold" color="primary">
+                  BeBig 2.0
+                </Text>
+              </View>
               <Text variant="caption" color="muted" style={styles.versionText} testID="settings-version-text">
                 {env.displayVersion}
               </Text>
@@ -1660,6 +1673,11 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   headerRow: {
     paddingVertical: 2,
+  },
+  headerTitleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
   screenTitle: {
     fontWeight: '800',
@@ -1914,6 +1932,11 @@ const createStyles = (colors: any) => StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  appInfoBrandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
   },
   developerCredit: {
     fontSize: 11,

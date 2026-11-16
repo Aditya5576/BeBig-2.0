@@ -2,7 +2,7 @@ import { useAppTheme } from '../../src/features/theme';
 import React from 'react';
 import { View, StyleSheet, ScrollView, Image, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ScreenContainer, Text, Button, Card } from '../../src/components/ui';
+import { ScreenContainer, Text, Button, Card, BrandLogoBadge } from '../../src/components/ui';
 import { useOnboardingStore } from '../../src/features/onboarding';
 import { spacing, radii } from '../../src/constants/theme';
 
@@ -52,6 +52,11 @@ export default function WelcomeScreen() {
         <View style={styles.headerSection}>
           <View style={styles.badgeContainer}>
             <View style={styles.badge}>
+              <BrandLogoBadge
+                size="sm"
+                testID="welcome-brand-emblem"
+                accessibilityLabel="BeBig Emblem"
+              />
               <Text variant="caption" color="accent" style={styles.badgeText}>
                 BeBig 2.0 • Athletic Intelligence
               </Text>
@@ -192,11 +197,15 @@ const createStyles = (colors: any) => StyleSheet.create({
     paddingTop: spacing.sm,
   },
   badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     backgroundColor: colors.surfaceElevated,
     borderColor: colors.primary,
     borderWidth: 1,
     borderRadius: radii.full,
-    paddingHorizontal: spacing.md,
+    paddingLeft: 4,
+    paddingRight: spacing.md,
     paddingVertical: 4,
   },
   badgeText: {

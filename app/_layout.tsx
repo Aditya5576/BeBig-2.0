@@ -1,14 +1,26 @@
-import React, { useEffect } from 'react';
-import { View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, StyleSheet } from 'react-native';
 import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useSyncLifecycle } from '../src/services/sync';
 import { useAuthStore, resolveAuthenticatedUserRoute } from '../src/features/auth';
-import { WebAlertModal, ReleaseNotesModal } from '../src/components/ui';
+import { WebAlertModal, ReleaseNotesModal, StartupSplash } from '../src/components/ui';
 import { BottomNavBar } from '../src/components/navigation';
 import { initErrorMonitoring, wrapRootLayout, setUserContext } from '../src/services/monitoring/errorMonitoring';
 import { useThemeStore, useWebThemeSync, useAppTheme } from '../src/features/theme';
+import { useFonts } from 'expo-font';
+import {
+  PlusJakartaSans_400Regular,
+  PlusJakartaSans_500Medium,
+  PlusJakartaSans_600SemiBold,
+  PlusJakartaSans_700Bold,
+  PlusJakartaSans_800ExtraBold,
+} from '@expo-google-fonts/plus-jakarta-sans';
+import {
+  JetBrainsMono_600SemiBold,
+  JetBrainsMono_700Bold,
+} from '@expo-google-fonts/jetbrains-mono';
 import '../src/features/workout/services/workoutNotificationService';
 
 // Initialize monitoring eagerly if configured
@@ -82,6 +94,9 @@ function useProtectedRoute() {
   }, [status, userId, segments, navigationState?.key, router]);
 }
 
+// In-memory cold-boot showcase tracker across JS session lifecycle
+let hasShownSessionStartupSplash = false;
+
 export default wrapRootLayout(function RootLayout() {
   useSyncLifecycle();
   useProtectedRoute();
@@ -90,8 +105,49 @@ export default wrapRootLayout(function RootLayout() {
   const { colors, activeMode } = useAppTheme();
   const isHydrated = useThemeStore((state) => state.isHydrated);
 
-  if (!isHydrated) {
-    return null; // Or a splash screen
+  // Modern athletic typography: Plus Jakarta Sans & JetBrains Mono
+  const [fontsLoaded] = useFonts({
+    PlusJakartaSans_400Regular,
+    PlusJakartaSans_500Medium,
+    PlusJakartaSans_600SemiBold,
+    PlusJakartaSans_700Bold,
+    PlusJakartaSans_800ExtraBold,
+    JetBrainsMono_600SemiBold,
+    JetBrainsMono_700Bold,
+    'PlusJakartaSans-Regular': PlusJakartaSans_400Regular,
+    'PlusJakartaSans-Medium': PlusJakartaSans_500Medium,
+    'PlusJakartaSans-SemiBold': PlusJakartaSans_600SemiBold,
+    'PlusJakartaSans-Bold': PlusJakartaSans_700Bold,
+    'PlusJakartaSans-ExtraBold': PlusJakartaSans_800ExtraBold,
+    'JetBrainsMono-SemiBold': JetBrainsMono_600SemiBold,
+    'JetBrainsMono-Bold': JetBrainsMono_700Bold,
+  });
+
+  // Intentional cinematic cold launch showcase gate (3.5 seconds / 3500ms)
+  const [showColdBootSplash, setShowColdBootSplash] = useState(() => {
+    if (process.env.NODE_ENV === 'test') {
+      return false;
+    }
+    return !hasShownSessionStartupSplash;
+  });
+
+  useEffect(() => {
+    if (!showColdBootSplash) return;
+    const splashTimer = setTimeout(() => {
+      hasShownSessionStartupSplash = true;
+      setShowColdBootSplash(false);
+    }, 3550);
+
+    return () => clearTimeout(splashTimer);
+  }, [showColdBootSplash]);
+
+  if (!isHydrated || (!fontsLoaded && process.env.NODE_ENV !== 'test')) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#090D16' }}>
+        <StatusBar style="light" />
+        <StartupSplash />
+      </View>
+    );
   }
 
   return (
@@ -129,8 +185,24 @@ export default wrapRootLayout(function RootLayout() {
         </Stack>
         <BottomNavBar />
       </View>
+      {showColdBootSplash && (
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            { zIndex: 99999, backgroundColor: '#090D16' },
+          ]}
+          pointerEvents="auto"
+        >
+          <StartupSplash
+            onFinish={() => {
+              hasShownSessionStartupSplash = true;
+              setShowColdBootSplash(false);
+            }}
+          />
+        </View>
+      )}
       <WebAlertModal />
-      <ReleaseNotesModal />
+      {!showColdBootSplash && <ReleaseNotesModal />}
     </SafeAreaProvider>
   );
 });
