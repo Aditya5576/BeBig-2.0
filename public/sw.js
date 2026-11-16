@@ -11,7 +11,7 @@
  * - NEVER force-reloads client pages (active workouts are never disrupted)
  */
 
-const CACHE_NAME = 'bebig-pwa-v1';
+const CACHE_NAME = 'bebig-pwa-v2.4.0'; // CACHE_NAME = 'bebig-pwa-v1'
 
 // Minimal core assets precached on install
 const PRECACHE_ASSETS = [
@@ -26,6 +26,7 @@ const PRECACHE_ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(PRECACHE_ASSETS).catch((err) => {
@@ -34,7 +35,6 @@ self.addEventListener('install', (event) => {
       });
     })
   );
-  self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
@@ -43,6 +43,7 @@ self.addEventListener('activate', (event) => {
       return Promise.all(
         keys.map((key) => {
           if (key.startsWith('bebig-') && key !== CACHE_NAME) {
+            console.log('[SW] Purging stale cache:', key);
             return caches.delete(key);
           }
         })

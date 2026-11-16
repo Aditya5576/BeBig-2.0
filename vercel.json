@@ -1,5 +1,5 @@
 {
-  "buildCommand": "EXPO_PUBLIC_GIT_SHA=$VERCEL_GIT_COMMIT_SHA npm run build:web",
+  "buildCommand": "npm run build:web",
   "outputDirectory": "dist",
   "cleanUrls": true,
   "trailingSlash": false,
@@ -28,6 +28,33 @@
           "key": "Content-Type",
           "value": "application/manifest+json; charset=utf-8"
         },
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/index.html",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/(.*).html",
+      "headers": [
         {
           "key": "Cache-Control",
           "value": "public, max-age=0, must-revalidate"
@@ -69,7 +96,7 @@
         },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://wger.de https://*.wger.de https://images.unsplash.com; connect-src 'self' https://*.supabase.co https://wger.de https://*.wger.de https://*.sentry.io; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'; frame-ancestors 'none'; manifest-src 'self'; worker-src 'self'; upgrade-insecure-requests;"
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https://*.supabase.co https://wger.de https://*.wger.de https://images.unsplash.com; connect-src 'self' https://*.supabase.co https://wger.de https://*.wger.de https://*.sentry.io; font-src 'self' data: https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'; frame-ancestors 'none'; manifest-src 'self'; worker-src 'self'; upgrade-insecure-requests;"
         }
       ]
     }

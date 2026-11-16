@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Platform } from 'react-native';
 import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -104,6 +104,15 @@ export default wrapRootLayout(function RootLayout() {
   useWebThemeSync();
   const { colors, activeMode } = useAppTheme();
   const isHydrated = useThemeStore((state) => state.isHydrated);
+
+  // Web Service Worker auto-update check on app mount
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistration().then((reg) => {
+        reg?.update().catch(() => {});
+      }).catch(() => {});
+    }
+  }, []);
 
   // Modern athletic typography: Plus Jakarta Sans & JetBrains Mono
   const [fontsLoaded] = useFonts({
