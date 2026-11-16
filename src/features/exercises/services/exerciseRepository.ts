@@ -123,6 +123,8 @@ export class ExerciseRepository {
     let customMatches: Exercise[] = [];
     if (isFirstPage && (!options.source || options.source === 'all' || options.source === 'custom')) {
       const allCustom = await customExerciseStorage.getCustomExercises(scope);
+      allCustom.forEach((c) => this.customExerciseMemoryMap.set(c.id, c));
+      exerciseCacheStorage.setCustomExercises(allCustom);
       if (hasQuery) {
         customMatches = filterAndRankExercises(allCustom, rawQuery, options.category);
       } else {
@@ -380,16 +382,34 @@ export class ExerciseRepository {
   }
 
   /**
+   * Hydrates exercise cache and custom exercises from storage on cold start.
+   */
+  async hydrate(scope?: UserScope | null): Promise<void> {
+    await exerciseCacheStorage.ensureHydrated(scope);
+    const customs = exerciseCacheStorage.getCustomExercisesSync();
+    customs.forEach((c) => this.customExerciseMemoryMap.set(c.id, c));
+  }
+
+  /**
    * Returns cached exercises synchronously or locally without network delay.
+   * Merges custom exercises into unified cache search index.
    */
   getCachedExercises(options: ExerciseFilterOptions = {}): Exercise[] {
-    if (options.source === 'custom') {
-      return []; // Custom exercises are retrieved asynchronously
+    // Trigger background hydration on cold start if not yet hydrated
+    if (!exerciseCacheStorage.getIsHydrated()) {
+      void this.hydrate().catch(() => {});
     }
+
+    // Sync any custom exercises currently held in memory map into the cache storage if not already there
+    if (this.customExerciseMemoryMap.size > 0 && exerciseCacheStorage.getCustomExercisesSync().length === 0) {
+      exerciseCacheStorage.setCustomExercises(Array.from(this.customExerciseMemoryMap.values()));
+    }
+
     const cached = exerciseCacheStorage.searchCached({
       query: options.query,
       category: options.category,
       limit: options.limit,
+      source: options.source,
     });
 
     const optionsKey = `${options.equipment || 'standard'}::${Boolean(options.query && options.query.trim().length > 0)}`;
@@ -473,9 +493,11 @@ export class ExerciseRepository {
     // 1. Local durable save first (Source of Truth)
     await customExerciseStorage.saveCustomExercise(newExercise, resolvedScope);
     this.customExerciseMemoryMap.set(newExercise.id, newExercise);
+    exerciseCacheStorage.saveCustomExercise(newExercise);
 
-    // Invalidate candidate cache so new custom exercise immediately shows up in queries
-    this.invalidateCandidateCache();
+    // Invalidate provider candidate cache so new custom exercise immediately shows up in queries
+    this.customExercisesVersion++;
+    this.candidateCache.clear();
 
     // 2. Mark pending upload in sync metadata (authenticated only)
     if (resolvedScope && resolvedScope.ownerType === 'authenticated') {
@@ -563,7 +585,9 @@ export class ExerciseRepository {
     // 1. Local durable save first (Source of Truth)
     await customExerciseStorage.saveCustomExercise(updated, resolvedScope);
     this.customExerciseMemoryMap.set(updated.id, updated);
-    this.invalidateCandidateCache(updated.id);
+    exerciseCacheStorage.saveCustomExercise(updated);
+    this.customExercisesVersion++;
+    this.candidateCache.clear();
 
     // 2. Mark pending upload in sync metadata (authenticated only)
     if (resolvedScope && resolvedScope.ownerType === 'authenticated') {
@@ -654,6 +678,7 @@ export class ExerciseRepository {
     this.customExercisesVersion++;
     if (id) {
       this.customExerciseMemoryMap.delete(id);
+      exerciseCacheStorage.deleteCustomExercise(id);
       this.candidateCache.forEach((list, key) => {
         this.candidateCache.set(
           key,
@@ -663,6 +688,7 @@ export class ExerciseRepository {
     } else {
       this.candidateCache.clear();
       this.customExerciseMemoryMap.clear();
+      exerciseCacheStorage.setCustomExercises([]);
     }
   }
 
@@ -673,6 +699,7 @@ export class ExerciseRepository {
     this.customExercisesVersion++;
     this.candidateCache.clear();
     this.customExerciseMemoryMap.clear();
+    exerciseCacheStorage.setCustomExercises([]);
     customExerciseStorage.clearMemoryCache();
   }
 }

@@ -125,15 +125,17 @@ export function calculateExerciseMatchScore(targetName: string, query: string): 
   if (colTarget.startsWith(colQuery)) return 65;
   if (colTarget.includes(colQuery)) return 60;
 
-  // 6. Token-by-token comparison
+  // 6. Token-by-token comparison (multi-word, order-independent keyword matching)
   const targetTokens = normTarget.split(' ').filter(Boolean);
   const queryTokens = normQuery.split(' ').filter(Boolean);
 
-  if (queryTokens.length > 1) {
+  if (queryTokens.length > 0) {
     let matchedTokens = 0;
     for (const qToken of queryTokens) {
       const match = targetTokens.some((tToken) => {
-        if (tToken === qToken || tToken.startsWith(qToken)) return true;
+        if (tToken === qToken) return true;
+        if (tToken.startsWith(qToken) || qToken.startsWith(tToken)) return true;
+        if (tToken.includes(qToken)) return true;
         // Allow 1 typo for tokens of length >= 4
         if (qToken.length >= 4 && damerauLevenshtein(tToken, qToken) <= 1) return true;
         return false;
@@ -142,7 +144,7 @@ export function calculateExerciseMatchScore(targetName: string, query: string): 
     }
 
     if (matchedTokens === queryTokens.length) {
-      return 55;
+      return queryTokens.length > 1 ? 65 : 60;
     }
   }
 
@@ -204,7 +206,7 @@ export function filterAndRankExercises(
     // 1. Primary score based on exercise name
     let score = calculateExerciseMatchScore(ex.name, q);
 
-    // 2. Secondary fallback: check description, category, and muscles
+    // 2. Secondary fallback: check description, category, equipment, and muscles
     if (score === 0) {
       const qLower = q.toLowerCase();
       const descMatch = ex.description ? ex.description.toLowerCase().includes(qLower) : false;
@@ -215,11 +217,29 @@ export function filterAndRankExercises(
 
       if (descMatch || catMatch || muscleMatch) {
         score = 15; // Low score ensures name matches always rank above metadata
+      } else {
+        // Multi-word keyword tokenization across combined exercise metadata
+        const normQ = normalizeString(q);
+        const qTokens = normQ.split(/\s+/).filter(Boolean);
+        if (qTokens.length > 1) {
+          const combinedText = normalizeString(
+            `${ex.name} ${ex.categoryName || ''} ${ex.description || ''} ${(ex.equipment || []).map((eq) => eq.name).join(' ')} ${(ex.primaryMuscles || []).map((m) => m.name).join(' ')}`,
+          );
+          const combinedTokens = combinedText.split(/\s+/).filter(Boolean);
+          const allMatched = qTokens.every((qT) =>
+            combinedTokens.some((cT) => cT === qT || cT.startsWith(qT) || qT.startsWith(cT) || cT.includes(qT)),
+          );
+          if (allMatched) {
+            score = 25;
+          }
+        }
       }
     }
 
     if (score > 0) {
-      scored.push({ exercise: ex, score });
+      // Prioritize user custom exercises slightly on match ties
+      const finalScore = ex.isCustom ? score + 1 : score;
+      scored.push({ exercise: ex, score: finalScore });
     }
   }
 

@@ -83,6 +83,13 @@ export default function WorkoutSummaryScreen() {
 
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id?: string }>();
+  const rawParam = id as string | string[] | undefined;
+  const rawId =
+    typeof rawParam === 'string'
+      ? rawParam.trim()
+      : Array.isArray(rawParam) && typeof rawParam[0] === 'string'
+        ? rawParam[0].trim()
+        : '';
 
   const [workout, setWorkout] = useState<WorkoutSession | null>(null);
   const [allWorkouts, setAllWorkouts] = useState<WorkoutSession[]>([]);
@@ -110,33 +117,47 @@ export default function WorkoutSummaryScreen() {
   };
 
   useEffect(() => {
+    let isMounted = true;
     async function loadSummary() {
       setLoading(true);
       try {
-        if (id) {
-          const found = await workoutRepository.getCompletedWorkoutById(id);
-          if (found) {
-            setWorkout(found);
-          }
-        } else {
-          const completed = await workoutRepository.getCompletedWorkouts();
-          if (completed.length > 0) {
-            setWorkout(completed[0]);
-          }
-        }
         const allCompleted = await workoutRepository.getCompletedWorkouts();
-        setAllWorkouts(allCompleted);
+        if (isMounted) setAllWorkouts(allCompleted);
+
+        let targetWorkout: WorkoutSession | null = null;
+        if (rawId) {
+          targetWorkout = await workoutRepository.getCompletedWorkoutById(rawId);
+        }
+
+        // If not found by specific ID, fallback to most recent completed workout
+        if (!targetWorkout && allCompleted.length > 0) {
+          targetWorkout = allCompleted[0];
+        }
+
+        if (isMounted) {
+          setWorkout(targetWorkout);
+        }
+
         const tpls = await templateRepository.getTemplates();
-        setAllTemplates(tpls);
+        if (isMounted) {
+          setAllTemplates(tpls);
+        }
       } catch {
-        setWorkout(null);
+        if (isMounted) {
+          setWorkout(null);
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     }
 
     void loadSummary();
-  }, [id]);
+    return () => {
+      isMounted = false;
+    };
+  }, [rawId]);
 
   const openSaveModal = () => {
     if (!workout) return;
@@ -279,9 +300,13 @@ export default function WorkoutSummaryScreen() {
   if (!workout) {
     return (
       <ScreenContainer>
-        <View style={styles.centerContainer}>
-          <Text variant="titleMedium" color="primary">
+        <View style={styles.centerContainer} testID="workout-summary-fallback">
+          <Icon name="dumbbell" size={44} color={colors.textSecondary} style={{ marginBottom: spacing.md }} />
+          <Text variant="titleMedium" color="primary" style={{ marginBottom: spacing.xs, textAlign: 'center' }}>
             Workout summary not found.
+          </Text>
+          <Text variant="bodySmall" color="secondary" style={{ marginBottom: spacing.lg, textAlign: 'center', maxWidth: 280 }}>
+            This session may have been cleared or expired. Return to the home screen to start a new workout.
           </Text>
           <Button
             testID="summary-done-button"
@@ -306,8 +331,8 @@ export default function WorkoutSummaryScreen() {
     return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
   };
 
-  const completedExercises = workout.exercises.filter(
-    (ex) => ex.actualSets && ex.actualSets.some((s) => s.completed),
+  const completedExercises = (workout.exercises || []).filter(
+    (ex) => ex && Array.isArray(ex.actualSets) && ex.actualSets.some((s) => s && s.completed),
   );
 
   return (
@@ -595,7 +620,7 @@ export default function WorkoutSummaryScreen() {
           </Text>
 
           {completedExercises.map((ex) => {
-            const finishedSets = ex.actualSets.filter((s) => s.completed);
+            const finishedSets = (ex.actualSets || []).filter((s) => s && s.completed);
             return (
               <Card key={ex.exerciseId} style={styles.exerciseCard}>
                 <View style={styles.exerciseCardHeader}>
@@ -618,8 +643,8 @@ export default function WorkoutSummaryScreen() {
                               SET {s.setNumber}
                             </Text>
                             <Text variant="bodyBold" color="primary" style={styles.setData}>
-                              {s.weight > 0 ? `${s.weight} kg × ` : ''}
-                              {s.reps} reps
+                              {(s.weight ?? 0) > 0 ? `${s.weight} kg × ` : ''}
+                              {s.reps ?? 0} reps
                               {s.rir !== undefined ? ` (RIR ${s.rir})` : ''}
                             </Text>
                           </View>

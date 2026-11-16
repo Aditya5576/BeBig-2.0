@@ -80,6 +80,18 @@ jest.mock('../src/lib/supabase', () => {
   };
 });
 
+jest.mock('../src/services/sync', () => ({
+  syncMetadataStore: {
+    getRecord: jest.fn().mockResolvedValue(null),
+    markPendingUpload: jest.fn().mockResolvedValue(undefined),
+    markPendingDelete: jest.fn().mockResolvedValue(undefined),
+    removeRecord: jest.fn().mockResolvedValue(undefined),
+  },
+  syncLifecycleManager: {
+    triggerSync: jest.fn().mockResolvedValue(undefined),
+  },
+}));
+
 describe('Unified Custom Exercise Creation UI', () => {
   const testUser: UserScope = {
     ownerId: 'unified_test_user',

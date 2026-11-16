@@ -11,6 +11,8 @@
 import { platformStorage } from '../../../lib/storage';
 import { Exercise, ExerciseCategory } from '../types';
 import { filterAndRankExercises } from '../utils/exerciseSearch';
+import { customExerciseStorage } from './customExerciseStorage';
+import { UserScope } from '../../auth/utils/userScope';
 
 const EXERCISE_CATALOG_KEY = 'bebig.exercises.cache.catalog';
 const EXERCISE_CACHE_TIME_KEY = 'bebig.exercises.cache.timestamp';
@@ -260,6 +262,7 @@ export const SEED_EXERCISES: Exercise[] = [
 
 class ExerciseCacheStorage {
   private memoryCatalog: Map<string, Exercise> = new Map();
+  private customCatalog: Map<string, Exercise> = new Map();
   private isHydrated: boolean = false;
   private inFlightHydration: Promise<void> | null = null;
   private catalogRevision: number = 0;
@@ -269,6 +272,53 @@ class ExerciseCacheStorage {
   constructor() {
     // Pre-populate memory with seed exercises synchronously
     SEED_EXERCISES.forEach((ex) => this.memoryCatalog.set(ex.id, ex));
+  }
+
+  /**
+   * Sets and indexes custom exercises in memory for instant unified search.
+   */
+  setCustomExercises(exercises: Exercise[]): void {
+    this.customCatalog.clear();
+    if (Array.isArray(exercises)) {
+      exercises.forEach((ex) => {
+        if (ex && ex.id) {
+          this.customCatalog.set(ex.id, ex);
+        }
+      });
+    }
+    this.catalogRevision++;
+    this.lastSearchKey = '';
+    this.lastSearchResult = [];
+  }
+
+  /**
+   * Adds or updates a single custom exercise in the unified search index.
+   */
+  saveCustomExercise(exercise: Exercise): void {
+    if (exercise && exercise.id) {
+      this.customCatalog.set(exercise.id, exercise);
+      this.catalogRevision++;
+      this.lastSearchKey = '';
+      this.lastSearchResult = [];
+    }
+  }
+
+  /**
+   * Removes a custom exercise from the unified search index.
+   */
+  deleteCustomExercise(id: string): void {
+    if (this.customCatalog.delete(id)) {
+      this.catalogRevision++;
+      this.lastSearchKey = '';
+      this.lastSearchResult = [];
+    }
+  }
+
+  /**
+   * Synchronously returns all currently indexed custom exercises.
+   */
+  getCustomExercisesSync(): Exercise[] {
+    return Array.from(this.customCatalog.values());
   }
 
   /**
@@ -285,21 +335,32 @@ class ExerciseCacheStorage {
    */
   getCachedExerciseByIdSync(id: string): Exercise | null {
     if (!id) return null;
-    return this.memoryCatalog.get(id) || null;
+    return this.customCatalog.get(id) || this.memoryCatalog.get(id) || null;
   }
 
   /**
-   * Hydrates memory catalog from persistent platformStorage (IndexedDB on web).
+   * Returns true if persistent cache hydration has already completed.
    */
-  async ensureHydrated(): Promise<void> {
+  getIsHydrated(): boolean {
+    return this.isHydrated;
+  }
+
+  /**
+   * Hydrates memory catalog and custom exercises from persistent platformStorage.
+   */
+  async ensureHydrated(scope?: UserScope | null): Promise<void> {
     if (this.isHydrated) return;
     if (this.inFlightHydration) return this.inFlightHydration;
 
     this.inFlightHydration = (async () => {
       try {
-        const raw = await platformStorage.getItem(EXERCISE_CATALOG_KEY);
-        if (raw) {
-          const parsed = JSON.parse(raw) as Exercise[];
+        const [rawCatalog, customExercises] = await Promise.all([
+          platformStorage.getItem(EXERCISE_CATALOG_KEY).catch(() => null),
+          customExerciseStorage.getCustomExercises(scope).catch(() => []),
+        ]);
+
+        if (rawCatalog) {
+          const parsed = JSON.parse(rawCatalog) as Exercise[];
           if (Array.isArray(parsed) && parsed.length > 0) {
             parsed.forEach((ex) => {
               if (ex && ex.id) {
@@ -308,11 +369,22 @@ class ExerciseCacheStorage {
             });
           }
         }
+
+        if (Array.isArray(customExercises) && customExercises.length > 0) {
+          customExercises.forEach((ex) => {
+            if (ex && ex.id) {
+              this.customCatalog.set(ex.id, ex);
+            }
+          });
+        }
       } catch {
         // Fall back to memory catalog
       } finally {
         this.isHydrated = true;
         this.inFlightHydration = null;
+        this.catalogRevision++;
+        this.lastSearchKey = '';
+        this.lastSearchResult = [];
       }
     })();
 
@@ -372,27 +444,56 @@ class ExerciseCacheStorage {
    */
   async getCachedExerciseById(id: string): Promise<Exercise | null> {
     if (!id) return null;
+    const custom = this.customCatalog.get(id);
+    if (custom) return custom;
     const mem = this.memoryCatalog.get(id);
     if (mem) return mem;
 
     await this.ensureHydrated();
-    return this.memoryCatalog.get(id) || null;
+    return this.customCatalog.get(id) || this.memoryCatalog.get(id) || null;
   }
 
   /**
    * Instant local search against cached catalog with query-memoization.
+   * Merges custom exercises and provider catalog into a unified index.
    */
-  searchCached(options: { query?: string; category?: string; limit?: number } = {}): Exercise[] {
+  searchCached(
+    options: {
+      query?: string;
+      category?: string;
+      limit?: number;
+      source?: 'all' | 'custom' | 'external';
+    } = {},
+  ): Exercise[] {
     const query = options.query?.trim() || '';
     const category = options.category && options.category !== 'all' ? options.category : '';
-    const cacheKey = `${this.catalogRevision}::${category}::${query.toLowerCase()}`;
+    const source = options.source || 'all';
+    const cacheKey = `${this.catalogRevision}::${source}::${category}::${query.toLowerCase()}`;
 
     let baseResults: Exercise[];
     if (this.lastSearchKey === cacheKey) {
       baseResults = this.lastSearchResult;
     } else {
-      const all = Array.from(this.memoryCatalog.values());
-      let filtered = all;
+      let pool: Exercise[];
+      if (source === 'custom') {
+        pool = Array.from(this.customCatalog.values());
+      } else if (source === 'external') {
+        pool = Array.from(this.memoryCatalog.values());
+      } else {
+        // 'all': unified index with custom exercises placed first
+        const customItems = Array.from(this.customCatalog.values());
+        const providerItems = Array.from(this.memoryCatalog.values());
+        const mergedMap = new Map<string, Exercise>();
+        customItems.forEach((c) => mergedMap.set(c.id, c));
+        providerItems.forEach((p) => {
+          if (!mergedMap.has(p.id)) {
+            mergedMap.set(p.id, p);
+          }
+        });
+        pool = Array.from(mergedMap.values());
+      }
+
+      let filtered = pool;
       if (category) {
         filtered = filtered.filter((e) => e.category === category);
       }
@@ -417,10 +518,13 @@ class ExerciseCacheStorage {
    * Clear cache (useful for dev tools / testing).
    */
   async clearCache(): Promise<void> {
+    this.isHydrated = false;
+    this.inFlightHydration = null;
     this.catalogRevision++;
     this.lastSearchKey = '';
     this.lastSearchResult = [];
     this.memoryCatalog.clear();
+    this.customCatalog.clear();
     SEED_EXERCISES.forEach((ex) => this.memoryCatalog.set(ex.id, ex));
     try {
       await platformStorage.removeItem(EXERCISE_CATALOG_KEY);
