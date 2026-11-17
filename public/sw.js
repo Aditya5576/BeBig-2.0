@@ -11,7 +11,7 @@
  * - NEVER force-reloads client pages (active workouts are never disrupted)
  */
 
-const CACHE_NAME = 'bebig-pwa-v2.4.0'; // CACHE_NAME = 'bebig-pwa-v1'
+const CACHE_NAME = 'bebig-pwa-v2.4.1'; // CACHE_NAME = 'bebig-pwa-v1'
 
 // Minimal core assets precached on install
 const PRECACHE_ASSETS = [
@@ -90,6 +90,8 @@ self.addEventListener('fetch', (event) => {
   // 6. Navigation requests (HTML documents):
   // Network-First with cache fallback. Always attempt fresh HTML from server first
   // so deep routes and fresh builds stay current. Fall back to cached page or app shell offline.
+  // CRITICAL: If server responds with 404/5xx or network fails, fall back to cached '/' app shell
+  // so deep routes (e.g. /workout/active, /exercises, /workout/summary) NEVER fail with "Site not found".
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
@@ -97,6 +99,14 @@ self.addEventListener('fetch', (event) => {
           if (response && response.status === 200 && response.type === 'basic') {
             const clone = response.clone();
             caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+            return response;
+          }
+          if (!response || response.status >= 400) {
+            // Server returned 404 or error for deep route: fallback to cached root index app shell
+            return caches.match('/').then((cached) => {
+              if (cached) return cached;
+              return caches.match('/index.html').then((cachedIndex) => cachedIndex || response);
+            });
           }
           return response;
         })
@@ -106,7 +116,10 @@ self.addEventListener('fetch', (event) => {
               return cachedResponse;
             }
             // Fallback to cached root index app shell
-            return caches.match('/');
+            return caches.match('/').then((cachedRoot) => {
+              if (cachedRoot) return cachedRoot;
+              return caches.match('/index.html');
+            });
           });
         })
     );

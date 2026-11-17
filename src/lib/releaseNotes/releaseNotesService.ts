@@ -17,6 +17,15 @@ export interface ReleaseNoteItem {
 }
 
 export const CURRENT_RELEASE_NOTES: Record<string, ReleaseNoteItem> = {
+  '2.4.1': {
+    version: '2.4.1',
+    title: "What's New in BeBig 2.4.1",
+    highlights: [
+      'iPhone Safari & Home Screen PWA Stability: Hardened exercise library and workout picker against WebKit memory kills and multi-touch freezes.',
+      'Single-Layer Inline Exercise Picker: Eliminated nested modal DOM portals on web with dynamic 100dvh viewport height to prevent iOS keyboard clipping.',
+      'Resilient Route Handling & Offline Fallback: Protected static creation routes and added smart service worker navigation fallback, eliminating "Site not found" reloads.',
+    ],
+  },
   '2.4.0': {
     version: '2.4.0',
     title: "What's New in BeBig 2.4",

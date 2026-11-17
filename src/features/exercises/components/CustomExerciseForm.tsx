@@ -14,7 +14,7 @@
  * - Pure callback delegation (`onSuccess`, `onCancel`) preserving caller context.
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -98,6 +98,14 @@ export function CustomExerciseForm({
     file?: any;
   } | null>(null);
 
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -112,6 +120,7 @@ export function CustomExerciseForm({
     Keyboard.dismiss();
     try {
       const picked = await pickExercisePhoto();
+      if (!isMountedRef.current) return;
       if (picked.canceled) {
         if (picked.error) {
           Alert.alert('Permission Required', picked.error);
@@ -132,7 +141,9 @@ export function CustomExerciseForm({
       });
       setError(null);
     } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Could not select photo.');
+      if (isMountedRef.current) {
+        Alert.alert('Error', err?.message || 'Could not select photo.');
+      }
     }
   };
 
@@ -224,8 +235,13 @@ export function CustomExerciseForm({
 
       await onSuccess(updatedExercise);
     } catch (err: any) {
-      setError(err?.message || 'Failed to save custom exercise.');
-      setSaving(false);
+      if (isMountedRef.current) {
+        setError(err?.message || 'Failed to save custom exercise.');
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setSaving(false);
+      }
     }
   };
 

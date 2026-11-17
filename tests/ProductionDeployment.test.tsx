@@ -57,13 +57,19 @@ describe('Production Deployment Configuration', () => {
       expect(frameOptions.value).toBe('DENY');
     });
 
-    it('configures rewrites for all dynamic routes', () => {
+    it('configures rewrites for all dynamic routes and SPA fallback', () => {
       const config = JSON.parse(fs.readFileSync(vercelJsonPath, 'utf8'));
       expect(config.rewrites).toEqual([
+        { source: '/exercises/new', destination: '/exercises/new.html' },
+        { source: '/templates/new', destination: '/templates/new.html' },
         { source: '/exercises/:id', destination: '/exercises/[id].html' },
         { source: '/templates/:id', destination: '/templates/[id].html' },
         { source: '/workout/history/:id', destination: '/workout/history/[id].html' },
         { source: '/workout/progress/exercise/:id', destination: '/workout/progress/exercise/[id].html' },
+        {
+          source: '/((?!_expo|assets|icons|sw\\.js|manifest\\.json|favicon\\.png|apple-touch-icon\\.png).*)',
+          destination: '/index.html',
+        },
       ]);
     });
   });

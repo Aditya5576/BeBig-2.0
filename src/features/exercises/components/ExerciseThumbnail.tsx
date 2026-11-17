@@ -66,44 +66,48 @@ export const ExerciseThumbnail = React.memo(function ExerciseThumbnail({
 
   // Deterministically resolve media source using exact exercise ID
   const mediaUri = useMemo(() => {
-    if (!exercise) return null;
+    try {
+      if (!exercise) return null;
 
-    // 1. User-uploaded custom exercise photo (absolute priority)
-    if (hasCustomPhoto(exercise)) {
-      const customUri = getCustomPhotoUri(exercise);
-      if (customUri) return customUri;
-    }
+      // 1. User-uploaded custom exercise photo (absolute priority)
+      if (hasCustomPhoto(exercise)) {
+        const customUri = getCustomPhotoUri(exercise);
+        if (customUri) return customUri;
+      }
 
-    // In compact thumbnail / picker / list view (!isDetailView):
-    // For catalog exercises (!exercise.isCustom), suppress external HTTP image requests
-    // to eliminate network thread saturation, memory pressure, and typing lag across FlatLists.
-    // Crisp, instant vector icon fallback renders at 0ms with zero network stalls.
-    if (!isDetailView) {
+      // In compact thumbnail / picker / list view (!isDetailView):
+      // For catalog exercises (!exercise.isCustom), suppress external HTTP image requests
+      // to eliminate network thread saturation, memory pressure, and typing lag across FlatLists.
+      // Crisp, instant vector icon fallback renders at 0ms with zero network stalls.
+      if (!isDetailView) {
+        return null;
+      }
+
+      // 2. Check approved curated demonstration catalog (Detail View only)
+      const resolution = resolveExerciseDemonstration(exercise, catalog);
+      if (resolution.status === 'approved' && resolution.demonstration?.thumbnailUri) {
+        const thumb = resolution.demonstration.thumbnailUri;
+        return thumb;
+      }
+
+      // 3. Provider image fallback for standard library exercises (Detail View only)
+      if (!exercise.isCustom && exercise.images && exercise.images.length > 0) {
+        const staticImgs = exercise.images.filter(
+          (img) => !isGifUri(img.thumbnailUrl) && !isGifUri(img.url)
+        );
+        const mainStatic = staticImgs.find((img) => img.isMain) || staticImgs[0];
+        if (mainStatic?.thumbnailUrl || mainStatic?.url) {
+          return mainStatic.thumbnailUrl || mainStatic.url;
+        }
+        // If only GIF is available and detail view requested, allow it
+        const anyMain = exercise.images.find((img) => img.isMain) || exercise.images[0];
+        return anyMain?.thumbnailUrl || anyMain?.url || null;
+      }
+
+      return null;
+    } catch {
       return null;
     }
-
-    // 2. Check approved curated demonstration catalog (Detail View only)
-    const resolution = resolveExerciseDemonstration(exercise, catalog);
-    if (resolution.status === 'approved' && resolution.demonstration?.thumbnailUri) {
-      const thumb = resolution.demonstration.thumbnailUri;
-      return thumb;
-    }
-
-    // 3. Provider image fallback for standard library exercises (Detail View only)
-    if (!exercise.isCustom && exercise.images && exercise.images.length > 0) {
-      const staticImgs = exercise.images.filter(
-        (img) => !isGifUri(img.thumbnailUrl) && !isGifUri(img.url)
-      );
-      const mainStatic = staticImgs.find((img) => img.isMain) || staticImgs[0];
-      if (mainStatic?.thumbnailUrl || mainStatic?.url) {
-        return mainStatic.thumbnailUrl || mainStatic.url;
-      }
-      // If only GIF is available and detail view requested, allow it
-      const anyMain = exercise.images.find((img) => img.isMain) || exercise.images[0];
-      return anyMain?.thumbnailUrl || anyMain?.url || null;
-    }
-
-    return null;
   }, [exercise, catalog, isDetailView]);
 
   useEffect(() => {

@@ -10,7 +10,7 @@ import {
   Platform,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { ScreenContainer, ScreenFlatList, Text, Button, Icon } from '../../src/components/ui';
+import { ScreenContainer, ScreenFlatList, Text, Button, Icon, ErrorBoundary } from '../../src/components/ui';
 import { exerciseRepository, Exercise, STANDARD_CATEGORIES, ExerciseCard } from '../../src/features/exercises';
 import { spacing, radii } from '../../src/constants/theme';
 
@@ -406,80 +406,91 @@ export default function ExerciseListScreen() {
       )}
 
       {/* Main Content Area — Permanently mounted to preserve virtual keyboard and search focus */}
-      <ScreenFlatList
-        testID="exercise-list"
-        data={exercises}
-        keyExtractor={keyExtractor}
-        renderItem={renderItem}
-        ListEmptyComponent={
-          loading ? (
-            <View style={styles.centerContainer}>
-              <ActivityIndicator
-                testID="exercise-loading-indicator"
-                size="large"
-                color={colors.primary}
-              />
-              <Text variant="caption" color="muted" style={styles.loadingText}>
-                Loading exercises...
-              </Text>
-            </View>
-          ) : error ? (
-            <View style={styles.centerContainer} testID="exercise-error-state">
-              <Text variant="bodyBold" color="primary">
-                Unable to load exercises
-              </Text>
-              <Text variant="caption" color="muted" style={styles.errorSubtext}>
-                {error}
-              </Text>
-              <Button
-                testID="exercise-retry-button"
-                title="Try Again"
-                onPress={() => setRefreshTrigger((c) => c + 1)}
-                variant="secondary"
-                size="md"
-                style={styles.retryButton}
-              />
-            </View>
-          ) : (
-            <View style={styles.centerContainer} testID="exercise-empty-state">
-              <Text variant="bodyBold" color="primary">
-                No exercises found
-              </Text>
-              <Text variant="caption" color="muted" style={styles.errorSubtext}>
-                Try changing your search term or category filter, or create a custom exercise.
-              </Text>
-              <Button
-                testID="empty-create-exercise-button"
-                title="Create Custom Exercise"
-                onPress={() => router.push('/exercises/new' as any)}
-                variant="outline"
-                size="md"
-                style={styles.retryButton}
-              />
-            </View>
-          )
-        }
-        initialNumToRender={12}
-        maxToRenderPerBatch={10}
-        windowSize={7}
-        updateCellsBatchingPeriod={50}
-        removeClippedSubviews={Platform.OS !== 'web'}
-        contentContainerStyle={[
-          styles.listContent,
-          exercises.length === 0 && { flexGrow: 1, justifyContent: 'center' },
-        ]}
-        onEndReached={handleLoadMore}
-        onEndReachedThreshold={0.5}
-        keyboardDismissMode="on-drag"
-        keyboardShouldPersistTaps="handled"
-        ListFooterComponent={
-          loadingMore ? (
-            <View style={styles.footerLoading}>
-              <ActivityIndicator size="small" color={colors.primary} />
-            </View>
-          ) : null
-        }
-      />
+      <ErrorBoundary
+        testID="exercise-library-error-boundary"
+        fallbackTitle="Unable to display exercise list"
+        fallbackMessage="An unexpected render error occurred in the exercise library. Tap below to reload."
+      >
+        <ScreenFlatList
+          testID="exercise-list"
+          data={exercises}
+          keyExtractor={keyExtractor}
+          renderItem={renderItem}
+          getItemLayout={(_data, index) => ({
+            length: 107,
+            offset: 107 * index,
+            index,
+          })}
+          ListEmptyComponent={
+            loading ? (
+              <View style={styles.centerContainer}>
+                <ActivityIndicator
+                  testID="exercise-loading-indicator"
+                  size="large"
+                  color={colors.primary}
+                />
+                <Text variant="caption" color="muted" style={styles.loadingText}>
+                  Loading exercises...
+                </Text>
+              </View>
+            ) : error ? (
+              <View style={styles.centerContainer} testID="exercise-error-state">
+                <Text variant="bodyBold" color="primary">
+                  Unable to load exercises
+                </Text>
+                <Text variant="caption" color="muted" style={styles.errorSubtext}>
+                  {error}
+                </Text>
+                <Button
+                  testID="exercise-retry-button"
+                  title="Try Again"
+                  onPress={() => setRefreshTrigger((c) => c + 1)}
+                  variant="secondary"
+                  size="md"
+                  style={styles.retryButton}
+                />
+              </View>
+            ) : (
+              <View style={styles.centerContainer} testID="exercise-empty-state">
+                <Text variant="bodyBold" color="primary">
+                  No exercises found
+                </Text>
+                <Text variant="caption" color="muted" style={styles.errorSubtext}>
+                  Try changing your search term or category filter, or create a custom exercise.
+                </Text>
+                <Button
+                  testID="empty-create-exercise-button"
+                  title="Create Custom Exercise"
+                  onPress={() => router.push('/exercises/new' as any)}
+                  variant="outline"
+                  size="md"
+                  style={styles.retryButton}
+                />
+              </View>
+            )
+          }
+          initialNumToRender={Platform.OS === 'web' ? 10 : 12}
+          maxToRenderPerBatch={Platform.OS === 'web' ? 8 : 10}
+          windowSize={Platform.OS === 'web' ? 5 : 7}
+          updateCellsBatchingPeriod={50}
+          removeClippedSubviews={Platform.OS !== 'web'}
+          contentContainerStyle={[
+            styles.listContent,
+            exercises.length === 0 && { flexGrow: 1, justifyContent: 'center' },
+          ]}
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.5}
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
+          ListFooterComponent={
+            loadingMore ? (
+              <View style={styles.footerLoading}>
+                <ActivityIndicator size="small" color={colors.primary} />
+              </View>
+            ) : null
+          }
+        />
+      </ErrorBoundary>
     </ScreenContainer>
   );
 }

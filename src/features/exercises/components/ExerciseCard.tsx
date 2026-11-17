@@ -17,12 +17,11 @@
 import React from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import { useAppTheme } from '../../theme';
-import { Card, Text, Icon } from '../../../components/ui';
+import { Card, Text, Icon, SyncStatusChip } from '../../../components/ui';
 import { Exercise } from '../types';
 import { ExerciseThumbnail } from './ExerciseThumbnail';
 import { spacing, radii } from '../../../constants/theme';
 import { useEntitySyncStatus } from '../../../services/sync';
-import { SyncStatusChip } from '../../../components/ui';
 
 function CustomExerciseSyncStatus({ exerciseId }: { exerciseId: string }) {
   const status = useEntitySyncStatus('custom_exercise', exerciseId);
@@ -51,7 +50,7 @@ function getCardStyles(colors: any) {
 }
 
 function areExerciseCardPropsEqual(prev: ExerciseCardProps, next: ExerciseCardProps): boolean {
-  if (prev.exercise.id !== next.exercise.id) return false;
+  if (prev.exercise?.id !== next.exercise?.id) return false;
   if (prev.mode !== next.mode) return false;
   if (prev.isSelected !== next.isSelected) return false;
   if (prev.isAlreadyAdded !== next.isAlreadyAdded) return false;
@@ -59,9 +58,9 @@ function areExerciseCardPropsEqual(prev: ExerciseCardProps, next: ExerciseCardPr
   if (prev.onPress !== next.onPress) return false;
   if (prev.testID !== next.testID) return false;
   if (prev.thumbnailTestID !== next.thumbnailTestID) return false;
-  if (prev.exercise.name !== next.exercise.name) return false;
-  if (prev.exercise.photoPath !== next.exercise.photoPath) return false;
-  if (prev.exercise.images?.[0]?.url !== next.exercise.images?.[0]?.url) return false;
+  if (prev.exercise?.name !== next.exercise?.name) return false;
+  if (prev.exercise?.photoPath !== next.exercise?.photoPath) return false;
+  if (prev.exercise?.images?.[0]?.url !== next.exercise?.images?.[0]?.url) return false;
   return true;
 }
 
@@ -79,22 +78,32 @@ export const ExerciseCard = React.memo(function ExerciseCard({
   const styles = getCardStyles(colors);
 
   const equipmentText =
-    exercise.equipment && exercise.equipment.length > 0
-      ? exercise.equipment.map((e) => e.name).join(', ')
+    Array.isArray(exercise?.equipment) && exercise.equipment.length > 0
+      ? exercise.equipment
+          .map((e) => (typeof e === 'string' ? e : e?.name || ''))
+          .filter(Boolean)
+          .join(', ') || 'Bodyweight'
       : 'Bodyweight';
 
   const muscleText =
-    exercise.primaryMuscles && exercise.primaryMuscles.length > 0
-      ? exercise.primaryMuscles.map((m) => m.name).join(', ')
+    Array.isArray(exercise?.primaryMuscles) && exercise.primaryMuscles.length > 0
+      ? exercise.primaryMuscles
+          .map((m) => (typeof m === 'string' ? m : m?.name || ''))
+          .filter(Boolean)
+          .join(', ') || 'Full Body'
       : 'Full Body';
 
-  const itemTestId = testID || (mode === 'browse' ? `exercise-item-${exercise.id}` : `picker-exercise-${exercise.id}`);
+  const exerciseId = exercise?.id || 'unknown';
+  const exerciseName = exercise?.name || 'Unnamed Movement';
+  const categoryName = exercise?.categoryName || 'General';
+
+  const itemTestId = testID || (mode === 'browse' ? `exercise-item-${exerciseId}` : `picker-exercise-${exerciseId}`);
 
   return (
     <Pressable
       testID={itemTestId}
       disabled={isAlreadyAdded}
-      onPress={() => onPress(exercise)}
+      onPress={() => exercise && onPress(exercise)}
       style={[styles.cardPressable, isAlreadyAdded && styles.cardDisabled]}
     >
       <Card
@@ -118,9 +127,9 @@ export const ExerciseCard = React.memo(function ExerciseCard({
                 numberOfLines={1}
                 style={styles.cardTitle}
               >
-                {exercise.name}
+                {exerciseName}
               </Text>
-              {exercise.isCustom && (
+              {exercise?.isCustom && (
                 <View style={styles.customBadge} testID="custom-badge">
                   <Text variant="caption" color="accent" style={styles.customBadgeText}>
                     CUSTOM
@@ -130,25 +139,25 @@ export const ExerciseCard = React.memo(function ExerciseCard({
             </View>
 
             <Text variant="caption" color="secondary" numberOfLines={1}>
-              {exercise.categoryName} • {equipmentText}
+              {categoryName} • {equipmentText}
             </Text>
           </View>
 
           {/* Right Action Area */}
           {mode === 'browse' ? (
             <View style={styles.browseActionRow}>
-              {exercise.isCustom && <CustomExerciseSyncStatus exerciseId={exercise.id} />}
+              {exercise?.isCustom && <CustomExerciseSyncStatus exerciseId={exerciseId} />}
               <Icon name="chevronRight" size={18} strokeWidth={2.2} color={colors.textMuted} />
             </View>
           ) : isAlreadyAdded ? (
-            <View style={styles.addedBadge} testID={`picker-added-badge-${exercise.id}`}>
+            <View style={styles.addedBadge} testID={`picker-added-badge-${exerciseId}`}>
               <Text variant="caption" color="muted" style={styles.badgeText}>
                 ADDED
               </Text>
             </View>
           ) : isMultiSelect ? (
             <View
-              testID={`picker-checkbox-${exercise.id}`}
+              testID={`picker-checkbox-${exerciseId}`}
               style={[
                 styles.checkboxContainer,
                 isSelected ? styles.checkboxSelected : styles.checkboxUnselected,

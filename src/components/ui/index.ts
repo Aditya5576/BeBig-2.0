@@ -9,3 +9,4 @@ export * from './WebAlertModal';
 export * from './ReleaseNotesModal';
 export * from './SyncStatusChip';
 export * from './BrandLogoBadge';
+export * from './ErrorBoundary';

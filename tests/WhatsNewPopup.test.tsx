@@ -106,7 +106,7 @@ describe('BeBig 2.0 — Production What\'s New Popup (v2.2.0 ReleaseNotesModal)'
     const shouldShow = await releaseNotesService.shouldShowReleaseNotes();
     expect(shouldShow).toBe(true);
 
-    const { findByTestId, findByText } = await render(<ReleaseNotesModal />);
+    const { findByTestId, findByText } = await render(<ReleaseNotesModal forcedVersion="2.2.0" />);
 
     expect(await findByTestId('release-notes-modal')).toBeTruthy();
     expect(await findByText('v2.2.0')).toBeTruthy();

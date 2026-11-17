@@ -874,7 +874,12 @@ export default function ActiveWorkoutScreen() {
             <Button
               testID="add-exercise-to-workout-button"
               title="+ Add Exercise"
-              onPress={() => setIsPickerVisible(true)}
+              onPress={() => {
+                if (sessionRef.current) {
+                  void workoutRepository.updateActiveWorkout(sessionRef.current).catch(() => {});
+                }
+                setIsPickerVisible(true);
+              }}
               variant="secondary"
               size="lg"
               style={styles.addExerciseButton}

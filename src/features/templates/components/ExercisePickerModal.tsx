@@ -12,14 +12,11 @@ import {
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ScreenContainer, Text, Button, Card } from '../../../components/ui';
+import { ScreenContainer, Text, Button, ErrorBoundary } from '../../../components/ui';
 import {
   exerciseRepository,
   Exercise,
-  ExerciseCategory,
   STANDARD_CATEGORIES,
-  STANDARD_EQUIPMENT,
-  ExerciseThumbnail,
   ExerciseCard,
   CustomExerciseForm,
 } from '../../exercises';
@@ -341,6 +338,7 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
   const selectedCount = selectionOrder.length;
 
   const renderExerciseCard = useCallback((item: Exercise, testIdPrefix: string = 'picker') => {
+    if (!item || !item.id) return null;
     const isAlreadyAdded = selectedExerciseIds.includes(item.id);
     const isSelected = selectedExercisesMap.has(item.id);
 
@@ -367,6 +365,9 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
   const renderListHeader = () => {
     if (visibleRecentExercises.length === 0) return null;
 
+    // Cap recently used items to 6 max to bound unvirtualized list header memory
+    const cappedRecent = visibleRecentExercises.slice(0, 6);
+
     return (
       <View style={styles.recentSection} testID="picker-recent-section">
         <View style={styles.recentHeaderRow}>
@@ -379,7 +380,7 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
         </View>
 
         <View style={styles.recentItemsContainer}>
-          {visibleRecentExercises.map((item) => renderExerciseCard(item, 'picker-recent'))}
+          {cappedRecent.map((item) => renderExerciseCard(item, 'picker-recent'))}
         </View>
 
         <View style={styles.recentDivider} />
@@ -392,218 +393,305 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
     );
   };
 
-  return (
-    <Modal visible={visible} animationType="slide" onRequestClose={handleCancelAndClose}>
-      <ScreenContainer style={[styles.container, { paddingTop: Math.max(insets.top, spacing.xs) }]}>
-        {isCreatingCustom ? (
-          <CustomExerciseForm
-            isModal={true}
-            submitButtonTitle="Create & Add to Workout"
-            cancelButtonTitle="Cancel"
-            onSuccess={(created) => {
-              setIsCreatingCustom(false);
-              if (onSelectExercises) {
-                onSelectExercises([created]);
-              } else if (onSelectExercise) {
-                onSelectExercise(created);
-              }
-              onClose();
-            }}
-            onCancel={() => setIsCreatingCustom(false)}
-          />
-        ) : (
-          /* Exercise Picker List View */
-          <>
-            {/* Header */}
-            <View style={styles.header}>
-              <View style={styles.headerTitleRow}>
-                <Text variant="titleMedium" color="primary" style={styles.modalTitle} numberOfLines={1}>
-                  Select Exercise
-                </Text>
-                <Button
-                  testID="picker-create-custom-button"
-                  title="+ New"
-                  onPress={() => setIsCreatingCustom(true)}
-                  variant="outline"
-                  size="sm"
-                  style={styles.createTriggerButton}
-                />
-                <Button
-                  testID="picker-close-button"
-                  title="Cancel"
-                  onPress={handleCancelAndClose}
-                  variant="ghost"
-                  size="sm"
-                  style={styles.closeButton}
-                />
-              </View>
+  // Web-only: Cleanly lock body scroll when picker is open to prevent scroll fighting & visual jumps
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined' || !document?.body) {
+      return;
+    }
 
-              {/* Search Input */}
-              <TextInput
-                testID="picker-search-input"
-                style={styles.searchInput}
-                placeholder="Search exercise library..."
-                placeholderTextColor={colors.textMuted}
-                value={searchQuery}
-                onChangeText={handleSearchChange}
-                autoCapitalize="none"
-                autoCorrect={false}
-                clearButtonMode="while-editing"
-                returnKeyType="search"
-                blurOnSubmit={false}
+    if (visible) {
+      const originalOverflow = document.body.style.overflow || '';
+      document.body.style.overflow = 'hidden';
+
+      const handlePopState = () => {
+        if (typeof document !== 'undefined' && document?.body?.style) {
+          document.body.style.overflow = originalOverflow;
+        }
+      };
+
+      if (typeof window !== 'undefined' && window.addEventListener) {
+        window.addEventListener('popstate', handlePopState);
+      }
+
+      return () => {
+        if (typeof window !== 'undefined' && window.removeEventListener) {
+          window.removeEventListener('popstate', handlePopState);
+        }
+        if (typeof document !== 'undefined' && document?.body?.style) {
+          document.body.style.overflow = originalOverflow;
+        }
+      };
+    }
+  }, [visible]);
+
+  // Web-only: Support ESC key to cancel/close modal cleanly
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined' || !window.addEventListener) {
+      return;
+    }
+
+    if (!visible) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        handleCancelAndClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [visible, handleCancelAndClose]);
+
+  const modalBody = (
+    <ScreenContainer style={[styles.container, { paddingTop: Math.max(insets.top, spacing.xs) }]}>
+      <ErrorBoundary
+        testID="picker-error-boundary"
+        fallbackTitle="Could not load exercise picker"
+        fallbackMessage="An unexpected render issue occurred. Tap below to reload."
+      >
+      {isCreatingCustom ? (
+        <CustomExerciseForm
+          isModal={true}
+          submitButtonTitle="Create & Add to Workout"
+          cancelButtonTitle="Cancel"
+          onSuccess={(created) => {
+            setIsCreatingCustom(false);
+            if (onSelectExercises) {
+              onSelectExercises([created]);
+            } else if (onSelectExercise) {
+              onSelectExercise(created);
+            }
+            onClose();
+          }}
+          onCancel={() => setIsCreatingCustom(false)}
+        />
+      ) : (
+        /* Exercise Picker List View */
+        <>
+          {/* Header */}
+          <View style={styles.header}>
+            <View style={styles.headerTitleRow}>
+              <Text variant="titleMedium" color="primary" style={styles.modalTitle} numberOfLines={1}>
+                Select Exercise
+              </Text>
+              <Button
+                testID="picker-create-custom-button"
+                title="+ New"
+                onPress={() => setIsCreatingCustom(true)}
+                variant="outline"
+                size="sm"
+                style={styles.createTriggerButton}
               />
-
-              {/* Source Filter Chips */}
-              <View style={styles.sourceRow} testID="picker-source-filter-row">
-                {(['all', 'custom', 'external'] as const).map((src) => {
-                  const isActive = selectedSource === src;
-                  const label = src === 'all' ? 'All' : src === 'custom' ? 'Custom' : 'External';
-                  return (
-                    <Pressable
-                      key={src}
-                      testID={`picker-source-filter-${src}`}
-                      onPress={() => handleSourceSelect(src)}
-                      style={[styles.sourceChip, isActive && styles.sourceChipActive]}
-                    >
-                      <Text
-                        variant="caption"
-                        color={isActive ? 'accent' : 'secondary'}
-                        style={styles.chipText}
-                      >
-                        {label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              {/* Category Chips */}
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.categoryScroll}
-              >
-                <Pressable
-                  testID="picker-category-filter-all"
-                  onPress={() => handleCategorySelect('all')}
-                  style={[styles.categoryChip, selectedCategory === 'all' && styles.categoryChipActive]}
-                >
-                  <Text
-                    variant="caption"
-                    color={selectedCategory === 'all' ? 'accent' : 'secondary'}
-                    style={styles.chipText}
-                  >
-                    All
-                  </Text>
-                </Pressable>
-
-                {STANDARD_CATEGORIES.map((cat) => {
-                  const isActive = selectedCategory === cat.id;
-                  return (
-                    <Pressable
-                      key={cat.id}
-                      testID={`picker-category-filter-${cat.id}`}
-                      onPress={() => handleCategorySelect(cat.id)}
-                      style={[styles.categoryChip, isActive && styles.categoryChipActive]}
-                    >
-                      <Text
-                        variant="caption"
-                        color={isActive ? 'accent' : 'secondary'}
-                        style={styles.chipText}
-                      >
-                        {cat.name}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
+              <Button
+                testID="picker-close-button"
+                title="Cancel"
+                onPress={handleCancelAndClose}
+                variant="ghost"
+                size="sm"
+                style={styles.closeButton}
+              />
             </View>
 
-            {/* Content — Permanently mounted to preserve virtual keyboard and search focus */}
-            <FlatList
-              testID="picker-exercise-list"
-              data={exercises}
-              extraData={`${selectedCount}_${visibleRecentExercises.length}`}
-              keyExtractor={(item) => item.id}
-              renderItem={renderItem}
-              ListHeaderComponent={renderListHeader}
-              ListEmptyComponent={
-                loading ? (
-                  <View style={styles.centerContainer}>
-                    <ActivityIndicator size="large" color={colors.primary} />
-                  </View>
-                ) : (
-                  <View style={styles.centerContainer}>
-                    <Text variant="body" color="muted" style={{ marginBottom: spacing.md }}>
-                      No exercises found.
-                    </Text>
-                    <Button
-                      testID="picker-create-custom-empty-button"
-                      title="+ Create Custom Exercise"
-                      onPress={() => setIsCreatingCustom(true)}
-                      variant="primary"
-                      size="md"
-                    />
-                  </View>
-                )
-              }
-              contentContainerStyle={[
-                styles.listContent,
-                isMultiSelect ? { paddingBottom: 110 } : null,
-                exercises.length === 0 && visibleRecentExercises.length === 0 && { flexGrow: 1, justifyContent: 'center' },
-              ]}
-              keyboardDismissMode="on-drag"
-              keyboardShouldPersistTaps="handled"
-              initialNumToRender={Platform.OS === 'web' ? 8 : 12}
-              maxToRenderPerBatch={Platform.OS === 'web' ? 6 : 10}
-              windowSize={Platform.OS === 'web' ? 5 : 7}
-              updateCellsBatchingPeriod={50}
-              removeClippedSubviews={Platform.OS !== 'web'}
-              onEndReached={handleLoadMore}
-              onEndReachedThreshold={0.5}
-              ListFooterComponent={
-                loadingMore ? (
-                  <View style={styles.loadingMoreContainer}>
-                    <ActivityIndicator size="small" color={colors.primary} />
-                  </View>
-                ) : null
-              }
+            {/* Search Input */}
+            <TextInput
+              testID="picker-search-input"
+              style={styles.searchInput}
+              placeholder="Search exercise library..."
+              placeholderTextColor={colors.textMuted}
+              value={searchQuery}
+              onChangeText={handleSearchChange}
+              autoCapitalize="none"
+              autoCorrect={false}
+              clearButtonMode="while-editing"
+              returnKeyType="search"
+              blurOnSubmit={false}
             />
 
-            {/* Sticky Bottom Action Bar for Multi-select */}
-            {isMultiSelect && (
-              <View
-                style={[
-                  styles.bottomActionBar,
-                  { paddingBottom: Math.max(insets.bottom, spacing.md) },
-                ]}
+            {/* Source Filter Chips */}
+            <View style={styles.sourceRow} testID="picker-source-filter-row">
+              {(['all', 'custom', 'external'] as const).map((src) => {
+                const isActive = selectedSource === src;
+                const label = src === 'all' ? 'All' : src === 'custom' ? 'Custom' : 'External';
+                return (
+                  <Pressable
+                    key={src}
+                    testID={`picker-source-filter-${src}`}
+                    onPress={() => handleSourceSelect(src)}
+                    style={[styles.sourceChip, isActive && styles.sourceChipActive]}
+                  >
+                    <Text
+                      variant="caption"
+                      color={isActive ? 'accent' : 'secondary'}
+                      style={styles.chipText}
+                    >
+                      {label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {/* Category Chips */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoryScroll}
+            >
+              <Pressable
+                testID="picker-category-filter-all"
+                onPress={() => handleCategorySelect('all')}
+                style={[styles.categoryChip, selectedCategory === 'all' && styles.categoryChipActive]}
               >
-                <Button
-                  testID="picker-add-exercises-button"
-                  title={
-                    selectedCount === 0
-                      ? 'SELECT EXERCISES'
-                      : selectedCount === 1
-                      ? 'ADD 1 EXERCISE'
-                      : `ADD ${selectedCount} EXERCISES`
-                  }
-                  disabled={selectedCount === 0}
-                  onPress={handleSubmitSelection}
-                  variant="primary"
-                  size="lg"
-                  style={styles.addExercisesButton}
-                />
-              </View>
-            )}
-          </>
-        )}
-      </ScreenContainer>
+                <Text
+                  variant="caption"
+                  color={selectedCategory === 'all' ? 'accent' : 'secondary'}
+                  style={styles.chipText}
+                >
+                  All
+                </Text>
+              </Pressable>
+
+              {STANDARD_CATEGORIES.map((cat) => {
+                const isActive = selectedCategory === cat.id;
+                return (
+                  <Pressable
+                    key={cat.id}
+                    testID={`picker-category-filter-${cat.id}`}
+                    onPress={() => handleCategorySelect(cat.id)}
+                    style={[styles.categoryChip, isActive && styles.categoryChipActive]}
+                  >
+                    <Text
+                      variant="caption"
+                      color={isActive ? 'accent' : 'secondary'}
+                      style={styles.chipText}
+                    >
+                      {cat.name}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+
+          {/* Content — Permanently mounted to preserve virtual keyboard and search focus */}
+          <FlatList
+            testID="picker-exercise-list"
+            data={exercises}
+            extraData={`${selectedCount}_${visibleRecentExercises.length}`}
+            keyExtractor={(item) => item.id}
+            renderItem={renderItem}
+            ListHeaderComponent={renderListHeader}
+            ListEmptyComponent={
+              loading ? (
+                <View style={styles.centerContainer}>
+                  <ActivityIndicator size="large" color={colors.primary} />
+                </View>
+              ) : (
+                <View style={styles.centerContainer}>
+                  <Text variant="body" color="muted" style={{ marginBottom: spacing.md }}>
+                    No exercises found.
+                  </Text>
+                  <Button
+                    testID="picker-create-custom-empty-button"
+                    title="+ Create Custom Exercise"
+                    onPress={() => setIsCreatingCustom(true)}
+                    variant="primary"
+                    size="md"
+                  />
+                </View>
+              )
+            }
+            contentContainerStyle={[
+              styles.listContent,
+              isMultiSelect ? { paddingBottom: 110 } : null,
+              exercises.length === 0 && visibleRecentExercises.length === 0 && { flexGrow: 1, justifyContent: 'center' },
+            ]}
+            keyboardDismissMode="on-drag"
+            keyboardShouldPersistTaps="handled"
+            initialNumToRender={Platform.OS === 'web' ? 8 : 12}
+            maxToRenderPerBatch={Platform.OS === 'web' ? 6 : 10}
+            windowSize={Platform.OS === 'web' ? 5 : 7}
+            updateCellsBatchingPeriod={50}
+            removeClippedSubviews={Platform.OS !== 'web'}
+            onEndReached={handleLoadMore}
+            onEndReachedThreshold={0.5}
+            ListFooterComponent={
+              loadingMore ? (
+                <View style={styles.loadingMoreContainer}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                </View>
+              ) : null
+            }
+          />
+
+          {/* Sticky Bottom Action Bar for Multi-select */}
+          {isMultiSelect && (
+            <View
+              style={[
+                styles.bottomActionBar,
+                { paddingBottom: Math.max(insets.bottom, spacing.md) },
+              ]}
+            >
+              <Button
+                testID="picker-add-exercises-button"
+                title={
+                  selectedCount === 0
+                    ? 'SELECT EXERCISES'
+                    : selectedCount === 1
+                    ? 'ADD 1 EXERCISE'
+                    : `ADD ${selectedCount} EXERCISES`
+                }
+                disabled={selectedCount === 0}
+                onPress={handleSubmitSelection}
+                variant="primary"
+                size="lg"
+                style={styles.addExercisesButton}
+              />
+            </View>
+          )}
+        </>
+      )}
+      </ErrorBoundary>
+    </ScreenContainer>
+  );
+
+  if (Platform.OS === 'web') {
+    if (!visible) {
+      return null;
+    }
+
+    return (
+      <View testID="picker-web-overlay" style={styles.webOverlay}>
+        {modalBody}
+      </View>
+    );
+  }
+
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={handleCancelAndClose}>
+      {modalBody}
     </Modal>
   );
 });
 
 const createStyles = (colors: any) =>
   StyleSheet.create({
+    webOverlay: {
+      position: (Platform.OS === 'web' ? 'fixed' : 'absolute') as any,
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 9999,
+      width: '100%' as any,
+      height: (Platform.OS === 'web' ? '100dvh' : '100%') as any,
+      maxHeight: (Platform.OS === 'web' ? '100dvh' : '100%') as any,
+      overflow: 'hidden',
+      backgroundColor: colors.background,
+      flex: 1,
+    },
     container: {
       paddingTop: spacing.xs,
     },
