@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, waitFor } from '@testing-library/react-native';
+import { render, waitFor, fireEvent, act } from '@testing-library/react-native';
 import { workoutRepository, WorkoutSession } from '../src/features/workout';
 import { workoutStorage } from '../src/features/workout/storage/workoutStorage';
 import ActiveWorkoutScreen from '../app/workout/active';
@@ -145,9 +145,14 @@ describe('BeBig 2.0 — Last Time Performance in Active Workout', () => {
     const { getByTestId, getByText } = await render(<ActiveWorkoutScreen />);
 
     await waitFor(() => {
-      expect(getByTestId('last-time-performance-squat')).toBeTruthy();
+      expect(getByTestId('toggle-last-session-squat')).toBeTruthy();
     });
 
+    await act(async () => {
+      fireEvent.press(getByTestId('toggle-last-session-squat'));
+    });
+
+    expect(getByTestId('last-time-performance-squat')).toBeTruthy();
     expect(getByText(/100kg × 5 @ RIR 2/i)).toBeTruthy();
     expect(getByText(/105kg × 5 @ RIR 1/i)).toBeTruthy();
 
@@ -214,9 +219,14 @@ describe('BeBig 2.0 — Last Time Performance in Active Workout', () => {
     const { getByTestId, getAllByText } = await render(<ActiveWorkoutScreen />);
 
     await waitFor(() => {
-      expect(getByTestId('last-time-performance-seed-bench-press')).toBeTruthy();
+      expect(getByTestId('toggle-last-session-seed-bench-press')).toBeTruthy();
     });
 
+    await act(async () => {
+      fireEvent.press(getByTestId('toggle-last-session-seed-bench-press'));
+    });
+
+    expect(getByTestId('last-time-performance-seed-bench-press')).toBeTruthy();
     expect(getAllByText(/80kg × 8 @ RIR 2/i).length).toBeGreaterThan(0);
   });
 });

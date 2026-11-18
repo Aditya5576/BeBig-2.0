@@ -7,6 +7,17 @@
  * - Athletic color system with dark (default gym mode) and light palettes
  */
 
+import {
+  FONT_FAMILIES,
+  NUMERIC_TABULAR_STYLE,
+  fontFamilies,
+  typography,
+  TypographyKey,
+} from '../theme/typography';
+
+export { FONT_FAMILIES, NUMERIC_TABULAR_STYLE, fontFamilies, typography };
+export type { TypographyKey };
+
 export const spacing = {
   none: 0,
   xs: 4,
@@ -25,166 +36,6 @@ export const radii = {
   lg: 16,
   xl: 24,
   full: 9999,
-} as const;
-
-import { Platform, TextStyle } from 'react-native';
-
-export const fontFamilies = {
-  // Plus Jakarta Sans — Modern Athletic Typography
-  sans: Platform.select({
-    web: "'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Segoe UI', Roboto, sans-serif",
-    ios: 'PlusJakartaSans-Regular',
-    android: 'PlusJakartaSans_400Regular',
-    default: 'PlusJakartaSans_400Regular',
-  }),
-  sansMedium: Platform.select({
-    web: "'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Segoe UI', Roboto, sans-serif",
-    ios: 'PlusJakartaSans-Medium',
-    android: 'PlusJakartaSans_500Medium',
-    default: 'PlusJakartaSans_500Medium',
-  }),
-  sansSemiBold: Platform.select({
-    web: "'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Segoe UI', Roboto, sans-serif",
-    ios: 'PlusJakartaSans-SemiBold',
-    android: 'PlusJakartaSans_600SemiBold',
-    default: 'PlusJakartaSans_600SemiBold',
-  }),
-  sansBold: Platform.select({
-    web: "'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Segoe UI', Roboto, sans-serif",
-    ios: 'PlusJakartaSans-Bold',
-    android: 'PlusJakartaSans_700Bold',
-    default: 'PlusJakartaSans_700Bold',
-  }),
-  sansExtraBold: Platform.select({
-    web: "'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Segoe UI', Roboto, sans-serif",
-    ios: 'PlusJakartaSans-ExtraBold',
-    android: 'PlusJakartaSans_800ExtraBold',
-    default: 'PlusJakartaSans_800ExtraBold',
-  }),
-
-  // JetBrains Mono — High-Precision Tabular Numeric & Metrics
-  numeric: Platform.select({
-    web: "'JetBrains Mono', 'SF Pro Text', Menlo, Monaco, Consolas, monospace",
-    ios: 'JetBrainsMono-SemiBold',
-    android: 'JetBrainsMono_600SemiBold',
-    default: 'JetBrainsMono_600SemiBold',
-  }),
-  numericBold: Platform.select({
-    web: "'JetBrains Mono', 'SF Pro Text', Menlo, Monaco, Consolas, monospace",
-    ios: 'JetBrainsMono-Bold',
-    android: 'JetBrainsMono_700Bold',
-    default: 'JetBrainsMono_700Bold',
-  }),
-};
-
-export const typography = {
-  display: {
-    fontSize: 34,
-    lineHeight: 40,
-    fontWeight: '800' as const,
-    fontFamily: fontFamilies.sansExtraBold,
-    letterSpacing: -0.6,
-  },
-  headingLarge: {
-    fontSize: 26,
-    lineHeight: 32,
-    fontWeight: '700' as const,
-    fontFamily: fontFamilies.sansBold,
-    letterSpacing: -0.4,
-  },
-  headingMedium: {
-    fontSize: 20,
-    lineHeight: 26,
-    fontWeight: '700' as const,
-    fontFamily: fontFamilies.sansBold,
-    letterSpacing: -0.2,
-  },
-  headingSmall: {
-    fontSize: 17,
-    lineHeight: 22,
-    fontWeight: '600' as const,
-    fontFamily: fontFamilies.sansSemiBold,
-    letterSpacing: -0.1,
-  },
-  titleLarge: {
-    fontSize: 26,
-    lineHeight: 32,
-    fontWeight: '700' as const,
-    fontFamily: fontFamilies.sansBold,
-    letterSpacing: -0.4,
-  },
-  titleMedium: {
-    fontSize: 20,
-    lineHeight: 26,
-    fontWeight: '600' as const,
-    fontFamily: fontFamilies.sansSemiBold,
-    letterSpacing: -0.2,
-  },
-  body: {
-    fontSize: 15,
-    lineHeight: 22,
-    fontWeight: '400' as const,
-    fontFamily: fontFamilies.sans,
-    letterSpacing: 0,
-  },
-  bodyBold: {
-    fontSize: 15,
-    lineHeight: 22,
-    fontWeight: '600' as const,
-    fontFamily: fontFamilies.sansSemiBold,
-    letterSpacing: 0,
-  },
-  bodySmall: {
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: '400' as const,
-    fontFamily: fontFamilies.sans,
-    letterSpacing: 0,
-  },
-  label: {
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '700' as const,
-    fontFamily: fontFamilies.sansBold,
-    letterSpacing: 0.8,
-  },
-  caption: {
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '400' as const,
-    fontFamily: fontFamilies.sans,
-    letterSpacing: 0.1,
-  },
-  button: {
-    fontSize: 15,
-    lineHeight: 20,
-    fontWeight: '600' as const,
-    fontFamily: fontFamilies.sansSemiBold,
-    letterSpacing: 0,
-  },
-  buttonSmall: {
-    fontSize: 13,
-    lineHeight: 16,
-    fontWeight: '600' as const,
-    fontFamily: fontFamilies.sansSemiBold,
-    letterSpacing: 0,
-  },
-  numeric: {
-    fontSize: 22,
-    lineHeight: 28,
-    fontWeight: '700' as const,
-    fontFamily: fontFamilies.numeric,
-    letterSpacing: -0.2,
-    fontVariant: ['tabular-nums'] as TextStyle['fontVariant'],
-  },
-  numericHero: {
-    fontSize: 36,
-    lineHeight: 42,
-    fontWeight: '800' as const,
-    fontFamily: fontFamilies.numericBold,
-    letterSpacing: -0.6,
-    fontVariant: ['tabular-nums'] as TextStyle['fontVariant'],
-  },
 } as const;
 
 export const colors = {
@@ -238,4 +89,3 @@ export const lightColors = colors.light;
 export type ThemeColors = typeof colors.dark;
 export type SpacingKey = keyof typeof spacing;
 export type RadiiKey = keyof typeof radii;
-export type TypographyKey = keyof typeof typography;

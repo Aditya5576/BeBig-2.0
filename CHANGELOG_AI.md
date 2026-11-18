@@ -343,3 +343,78 @@
 - `npx jest tests/Phase3ResilienceAndHygiene.test.ts --detectOpenHandles` (without `--forceExit`): **1/1 suite**, **12/12 tests passed** in 5.695s with natural teardown.
 - `npx jest tests/Phase3ResilienceAndHygiene.test.ts tests/IOSWebKitExerciseCrashGuard.test.tsx tests/AccountDeletionAndPrivacy.test.tsx tests/Phase2BSecurityHardening.test.ts --maxWorkers=2 --testTimeout=15000`: **4/4 suites**, **60/60 tests passed** in 11.964s.
 - `npm run build:web` (`node scripts/build-web.js`): Passed with **0 errors**, exporting **45 static routes** to `dist/`.
+
+
+## [UI Milestone 1] — 2026-11-18 — WebKit-Safe Floating Collapsible Rest-Timer Pill & Inline Progressive-Overload Nudges
+
+### Result
+- **Floating Collapsible Rest-Timer Pill (`RestTimerOverlay.tsx`)**: Upgraded the active workout rest timer into a non-blocking, safe-area-anchored floating pill (`pointerEvents="box-none"`, `zIndex: 100`) featuring a lightweight `react-native-svg` circular countdown ring (`CountdownRing`, `0 KB` bitmap memory, `testID="rest-timer-progress-ring"`), `MM:SS` readout, `-15s`/`+15s`/`PAUSE`/`SKIP` controls, and an expand/collapse toggle (`testID="rest-timer-collapse-toggle"`) collapsing to a compact floating pill (`testID="rest-timer-collapsed-pill"`) with ring, countdown, and quick `SKIP` while preserving all existing timer `testID`s and `onLayout` height reporting.
+- **Inline Progressive-Overload Nudges (`previousPerformanceService.ts`, `app/workout/active.tsx`, `ActiveExerciseCard.tsx`)**: Added pure `computeBestLastSetNudge()` and `buildProgressiveOverloadMap()` (`exerciseId -> { weight, reps, date, label }`), refactored `/workout/active` to fetch user-scoped completed workouts once on mount / user scope change (memoized, zero per-keystroke queries), and rendered a compact inline badge (`Last: 80 kg × 8`, `testID="overload-nudge-badge-<exerciseId>"`) on active exercise cards when historical performance exists (hidden when no history exists).
+- **Zero Package Bloat**: Reused already-installed `react-native-svg@15.15.4` and `react-native-safe-area-context@~5.7.0` with zero new dependencies added.
+
+### Verification
+- `npm run typecheck` (`tsc --noEmit`): Passed with **0 errors**.
+- `npm run lint` (`expo lint`): Passed with **0 errors**, **45 warnings** (down from 46; 0 warnings in modified files).
+- `npx jest tests/UIEnhancementsM1.test.tsx tests/IOSWebKitExerciseCrashGuard.test.tsx tests/Phase3ResilienceAndHygiene.test.ts --maxWorkers=2 --testTimeout=15000`: **3/3 suites**, **34/34 tests passed** in 26.762s.
+- `npx jest tests/ActiveWorkoutRestTimerLayout.test.tsx tests/ReleaseNotesModalAndRestTimerPolish.test.tsx tests/LastTimePerformance.test.tsx tests/PreviousPerformanceSuggestions.test.tsx --maxWorkers=2 --testTimeout=15000`: **4/4 suites**, **29/29 tests passed** in 8.69s.
+- `npm run build:web` (`node scripts/build-web.js`): Passed with **0 errors**, exporting **45 static routes** to `dist/` (`entry-*.js` unchanged at `4.1MB`, `index-*.js` at `549KB`).
+
+
+## [UI Milestone 2] — 2026-11-18 — In-Workout Exercise Detail Modal Over `/workout/active`
+
+### Result
+- **In-Workout Exercise Detail Modal (`ExerciseDetailModal.tsx`)**: Added a WebKit-safe scrollable modal/sheet (`fixed` `100dvh` overlay on Web; native `<Modal transparent animationType="slide">` on iOS/Android) that loads full catalog or custom `Exercise` details via `exerciseRepository` (0ms cached sync lookup + async fallback) and renders Exercise Name, Category & Custom badges, Equipment chips & row, Primary & Secondary Muscles, single safe image preview (`decoding="async"` + `onError` fallback, matching `app/exercises/[id].tsx` media priority), step-by-step Form Instructions, graceful offline/deleted fallback state, backdrop dismiss, and `close-exercise-detail-modal` control.
+- **Tappable Exercise Title Trigger (`ActiveExerciseCard.tsx`)**: Wrapped the exercise title in a tappable `<Pressable testID="exercise-detail-trigger-<exerciseId>">` with a subtle `chevronRight` affordance invoking `onPressExerciseDetail(exerciseId, exerciseName)` without interfering with existing reorder/superset/remove buttons or the `Last: 80 kg × 8` progressive-overload nudge badge.
+- **Zero-State-Loss Integration (`app/workout/active.tsx`)**: Wired lightweight `selectedDetailExercise` state and `<ExerciseDetailModal>` directly over `/workout/active`, preserving active workout sets, rest timer state, and browser history stack with zero route navigation.
+
+### Verification
+- `npm run typecheck` (`tsc --noEmit`): Passed with **0 errors**.
+- `npm run lint` (`expo lint`): Passed with **0 errors**, **45 warnings** (0 warnings in new/modified files).
+- `npx jest tests/UIEnhancementsM2.test.tsx tests/UIEnhancementsM1.test.tsx tests/IOSWebKitExerciseCrashGuard.test.tsx --maxWorkers=2 --testTimeout=15000`: **3/3 suites**, **26/26 tests passed** in 20.533s.
+- `npm run build:web` (`node scripts/build-web.js`): Passed with **0 errors**, exporting **45 static routes** to `dist/` (`entry-*.js` unchanged at `4.1MB`, `index-*.js` at `549KB`).
+
+
+## [UI Layout Polish] — 2026-11-18 — Mobile Card Wrapping, `PREV` Column Width & Floating Rest-Pill Contrast on `/workout/active`
+
+### Result
+- **Dedicated Exercise Title Row & Unified Metadata Row (`ActiveExerciseCard.tsx`)**: Isolated the tappable exercise title + `>` chevron onto its own full-width row so short and long exercise names align consistently without competing for horizontal width, and moved `overload-nudge-badge-<exerciseId>` (`Last: 80 kg × 8`) into a wrapping `metaBadgeRow` (`gap: 8`) directly below the title alongside `Target: ...`.
+- **Unclipped `PREV` Column on Mobile (`ActiveExerciseCard.tsx`, `ActiveSetRow.tsx`)**: Rebalanced the 8-column tabular layout under a unified `windowWidth < 400` compact breakpoint (`SET: 26/30`, `PREV: 56/62`, `CHECK: 30/34`, `NOTE: 24/26`, `DEL: 22/24`, flex `KG`/`REPS`/`RIR` + tight tabular `letterSpacing: -0.2`) so `PREV` values like `W 10 × 15` and `BW × 12` display cleanly without premature ellipsis clipping.
+- **Opaque Floating Rest-Pill Contrast & Scroll Clearance (`RestTimerOverlay.tsx`, `app/workout/active.tsx`)**: Upgraded expanded, collapsed, and finished rest-timer surfaces to opaque elevated `#131A26` (dark) / `colors.surface` (light) with `1.5px` high-contrast border and deep shadow (`elevation: 8`) so scrolled text underneath never bleeds through, and raised the pre-measurement rest-overlay fallback height to `112px` (`+ Math.max(insets.bottom, 12) + 24`) so bottom action buttons scroll cleanly above the floating pill.
+
+### Verification
+- `npm run typecheck` (`tsc --noEmit`): Passed with **0 errors**.
+- `npm run lint` (`expo lint`): Passed with **0 errors**, **45 warnings** (0 warnings in modified files).
+- `npx jest tests/UIEnhancementsM1.test.tsx tests/UIEnhancementsM2.test.tsx tests/ActiveWorkoutRestTimerLayout.test.tsx tests/ReleaseNotesModalAndRestTimerPolish.test.tsx --maxWorkers=2 --testTimeout=15000`: **4/4 suites**, **23/23 tests passed** in 14.707s.
+- `npm run build:web` (`node scripts/build-web.js`): Passed with **0 errors**, exporting **45 static routes** to `dist/`.
+
+
+## [UI Milestone 3] — 2026-11-18 — Professional Athletic Typography System (`Plus Jakarta Sans` + `Inter` + Tabular Numerals)
+
+### Result
+- **Lightweight Static Font Stack**: Installed `@expo-google-fonts/inter` alongside `@expo-google-fonts/plus-jakarta-sans` and loaded strictly 7 static `.ttf` weights (`PlusJakartaSans_600SemiBold`, `PlusJakartaSans_700Bold`, `PlusJakartaSans_800ExtraBold`, `Inter_400Regular`, `Inter_500Medium`, `Inter_600SemiBold`, `Inter_700Bold` — zero variable fonts).
+- **Non-Blocking Offline Boot (`app/_layout.tsx`)**: Upgraded `useFonts(...)` to capture `fontError` plus a `1500ms` safety fallback (`FONT_LOAD_TIMEOUT_MS = 1500`) so `fontsReady = fontsLoaded || Boolean(fontError) || fontLoadTimedOut` guarantees offline iOS PWAs and failed font loads never block app rendering.
+- **Centralized Typography Tokens (`src/theme/typography.ts` -> `src/constants/theme.ts`)**: Created `FONT_FAMILIES`, `NUMERIC_TABULAR_STYLE` (`fontVariant: ['tabular-nums']`), `fontFamilies`, and `typography` presets (`display`, `h1`/`h2`/`h3`, `heading*`, `title*`, `body*`, `label`, `caption`, `button*`, `numeric`, `numericHero`) mapping display/headings to `Plus Jakarta Sans` and body/controls to `Inter` with web CSS fallback stacks.
+- **Tabular Numerals on Timers & Set Inputs**: Applied `FONT_FAMILIES` and `NUMERIC_TABULAR_STYLE` across `RestTimerOverlay.tsx` (expanded & collapsed countdowns), `ActiveWorkoutTimer.tsx`, `ActiveSetRow.tsx` (set inputs & `PREV` cells), and `ActiveExerciseCard.tsx` (exercise title & overload nudge pill) to eliminate horizontal digit jitter.
+
+### Verification
+- `npm run typecheck` (`tsc --noEmit`): Passed with **0 errors**.
+- `npm run lint` (`expo lint`): Passed with **0 errors**, **44 warnings** (down from 45; fixed `import/first` in `src/constants/theme.ts`).
+- `npx jest tests/UIEnhancementsM3Typography.test.tsx tests/UIEnhancementsM2.test.tsx tests/UIEnhancementsM1.test.tsx tests/IOSWebKitExerciseCrashGuard.test.tsx --maxWorkers=2 --testTimeout=15000`: **4/4 suites**, **30/30 tests passed** in 17.995s.
+- `npx jest tests/TypographySystem.test.tsx --maxWorkers=2 --testTimeout=15000`: **1/1 suite**, **3/3 tests passed** in 2.815s.
+- `npm run build:web` (`node scripts/build-web.js`): Passed with **0 errors**, exporting **45 static routes** to `dist/` with strictly 7 static `.ttf` font assets (`entry-*.js` unchanged at `4.1MB`, `index-*.js` at `549KB`).
+
+
+## [Previous Workout UX Polish] — 2026-11-18 — De-Cluttered `Best Last:` Badge, Collapsible `History` Breakdown, One-Tap `PREV` Quick-Fill & `NOTE` / `DEL` Spacing
+
+### Result
+- **Clear Top Nudge Pill (`previousPerformanceService.ts`, `ActiveExerciseCard.tsx`)**: Updated `ProgressiveOverloadNudge.label` from `Last: ...` to `Best Last: 80 kg × 8` / `Best Last: BW × 12` with a trophy icon so athletes distinguish their top target set from per-row `PREV` history at a glance.
+- **Default-Collapsed `LAST TIME` Breakdown (`ActiveExerciseCard.tsx`)**: Replaced the always-open `LAST TIME` summary box with a compact metadata pill (`History (Date) ▾`, `testID="toggle-last-session-<exerciseId>"`) collapsed by default (~65px cleaner per card) that expands cleanly on tap to reveal the full set-by-set breakdown and set notes.
+- **One-Tap `PREV` Quick-Fill (`ActiveSetRow.tsx`)**: Made non-empty `PREV` cells tappable (`testID="prev-quick-fill-<setIndex>"`, subtle pill + underline affordance) to auto-fill empty `weight` and `reps` inputs for that row without ever overwriting values already typed by the user.
+- **Distinct `NOTE` and `DEL` Headers (`ActiveExerciseCard.tsx`, `ActiveSetRow.tsx`)**: Tightened compact mobile header typography (`9px`, `letterSpacing: 0.2`), widened `colNote` (`28/30px`) + `colDelete` (`24/26px`), and added explicit `marginLeft: 4` between `NOTE` and `DEL` to eliminate `NOTEDEL` collision on 360px–393px screens.
+
+### Verification
+- `npm run typecheck` (`tsc --noEmit`): Passed with **0 errors**.
+- `npm run lint` (`expo lint`): Passed with **0 errors**, **44 warnings** (0 warnings in modified files).
+- `npx jest tests/UIEnhancementsM1.test.tsx tests/UIEnhancementsM2.test.tsx tests/UIEnhancementsM3Typography.test.tsx tests/LastTimePerformance.test.tsx tests/PreviousPerformanceSuggestions.test.tsx --maxWorkers=2 --testTimeout=15000`: **5/5 suites**, **28/28 tests passed** in 21.299s.
+- `npx jest tests/CompletedWorkoutNotesVisibility.test.tsx --maxWorkers=2 --testTimeout=15000`: **1/1 suite**, **5/5 tests passed** in 8.855s.
+- `npm run build:web` (`node scripts/build-web.js`): Passed with **0 errors**, exporting **45 static routes** to `dist/`.

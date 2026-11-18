@@ -6,6 +6,7 @@ export * from './utils/supersetUtils';
 export * from './components/ActiveExerciseCard';
 export * from './components/ActiveSetRow';
 export * from './components/ActiveWorkoutTimer';
+export * from './components/ExerciseDetailModal';
 export * from './services/recentExercisesService';
 export * from './services/nativeRestTimerService';
 export * from './services/workoutNotificationService';

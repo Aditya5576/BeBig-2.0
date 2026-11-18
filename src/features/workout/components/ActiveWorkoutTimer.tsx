@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, StyleProp, ViewStyle } from 'react-native';
 import { Text } from '../../../components/ui/Text';
+import { FONT_FAMILIES, NUMERIC_TABULAR_STYLE } from '../../../theme/typography';
 
 export interface ActiveWorkoutTimerProps {
   startedAt: string;
@@ -71,7 +72,7 @@ export function ActiveWorkoutTimer({
 
   return (
     <View style={[styles.timerBadge, style]} testID={testID}>
-      <Text variant="caption" color="accent" style={styles.timerText}>
+      <Text variant="caption" color="accent" tabularNums style={styles.timerText}>
         {`⏱ ${formatWorkoutDuration(elapsedSeconds)}`}
       </Text>
     </View>
@@ -86,6 +87,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   timerText: {
+    fontFamily: FONT_FAMILIES.bodySemiBold,
     fontWeight: '700',
+    ...NUMERIC_TABULAR_STYLE,
   },
 });

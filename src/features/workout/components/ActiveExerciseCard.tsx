@@ -1,12 +1,17 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, StyleSheet, Pressable, LayoutChangeEvent, useWindowDimensions } from 'react-native';
 import { useAppTheme } from '../../theme';
 import { Text, Card, Button, Icon } from '../../../components/ui';
 import { WorkoutExercise, WorkoutSet } from '../types';
 import { SupersetDisplayInfo } from '../utils/supersetUtils';
-import { findMatchingPreviousSet } from '../services/previousPerformanceService';
+import {
+  findMatchingPreviousSet,
+  computeBestLastSetNudge,
+  ProgressiveOverloadNudge,
+} from '../services/previousPerformanceService';
 import { ActiveSetRow } from './ActiveSetRow';
-import { spacing, radii } from '../../../constants/theme';
+import { radii } from '../../../constants/theme';
+import { FONT_FAMILIES, NUMERIC_TABULAR_STYLE } from '../../../theme/typography';
 
 export interface ActiveExerciseCardProps {
   exercise: WorkoutExercise;
@@ -14,6 +19,7 @@ export interface ActiveExerciseCardProps {
   totalExercisesCount: number;
   supersetInfo?: SupersetDisplayInfo;
   lastPerformance?: { workoutDate?: string; sets: WorkoutSet[] };
+  overloadNudge?: ProgressiveOverloadNudge | null;
   expandedNotesSetIds: Record<string, boolean>;
   onMoveUp: (index: number) => void;
   onMoveDown: (index: number) => void;
@@ -34,6 +40,7 @@ export interface ActiveExerciseCardProps {
     set: WorkoutSet,
     pendingUpdates?: Partial<WorkoutSet>,
   ) => void;
+  onPressExerciseDetail?: (exerciseId: string, exerciseName: string) => void;
   onLayout?: (e: LayoutChangeEvent) => void;
   style?: any;
 }
@@ -51,6 +58,7 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(function A
   totalExercisesCount,
   supersetInfo,
   lastPerformance,
+  overloadNudge,
   expandedNotesSetIds,
   onMoveUp,
   onMoveDown,
@@ -62,23 +70,35 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(function A
   onToggleNotes,
   onUpdateSetField,
   onToggleCompleteSet,
+  onPressExerciseDetail,
   onLayout,
   style,
 }) {
   const { colors } = useAppTheme();
   const styles = createStyles(colors);
   const { width: windowWidth } = useWindowDimensions();
+  const [isLastSessionExpanded, setIsLastSessionExpanded] = useState(false);
+  const resolvedOverloadNudge =
+    overloadNudge !== undefined ? overloadNudge : computeBestLastSetNudge(lastPerformance);
 
-  const isNarrow = windowWidth < 380;
-  const colGap = isNarrow ? 3 : 4;
-  const colSetWidth = isNarrow ? 28 : 32;
-  const colPrevWidth = isNarrow ? 40 : 46;
-  const colCheckWidth = isNarrow ? 32 : 36;
-  const colNoteWidth = isNarrow ? 26 : 28;
-  const colDeleteWidth = isNarrow ? 24 : 26;
-  const minKg = isNarrow ? 34 : 40;
-  const minReps = isNarrow ? 30 : 36;
-  const minRir = isNarrow ? 28 : 32;
+  const isCompact = windowWidth < 400;
+  const colGap = isCompact ? 3 : 4;
+  const colSetWidth = isCompact ? 26 : 30;
+  const colPrevWidth = isCompact ? 54 : 62;
+  const colCheckWidth = isCompact ? 30 : 34;
+  const colNoteWidth = isCompact ? 28 : 30;
+  const colDeleteWidth = isCompact ? 24 : 26;
+  const minKg = isCompact ? 34 : 38;
+  const minReps = isCompact ? 30 : 36;
+  const minRir = isCompact ? 26 : 30;
+
+  const hasPlannedTargets = Boolean(
+    exercise.plannedSets ||
+      exercise.plannedTargetReps ||
+      exercise.plannedRestTime ||
+      exercise.plannedTargetWeight,
+  );
+  const lastSessionDateText = formatShortDate(lastPerformance?.workoutDate);
 
   return (
     <Card
@@ -233,69 +253,134 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(function A
 
         {/* Tier 2: Dedicated Full-Width Exercise Name Row */}
         <View style={styles.exerciseNameRow}>
-          <Text style={styles.exerciseName} numberOfLines={2}>
-            {exercise.exerciseName}
-          </Text>
+          {onPressExerciseDetail ? (
+            <Pressable
+              testID={`exercise-detail-trigger-${exercise.exerciseId}`}
+              onPress={() => onPressExerciseDetail(exercise.exerciseId, exercise.exerciseName)}
+              style={({ pressed }) => [
+                styles.exerciseNameTrigger,
+                pressed && styles.exerciseNameTriggerPressed,
+              ]}
+              hitSlop={{ top: 8, bottom: 8, left: 4, right: 8 }}
+              accessibilityRole="button"
+              accessibilityLabel={`View details and instructions for ${exercise.exerciseName}`}
+            >
+              <Text style={styles.exerciseName} numberOfLines={2}>
+                {exercise.exerciseName}
+              </Text>
+              <Icon name="chevronRight" size={16} strokeWidth={2.3} color={colors.textMuted} />
+            </Pressable>
+          ) : (
+            <Text style={styles.exerciseName} numberOfLines={2}>
+              {exercise.exerciseName}
+            </Text>
+          )}
         </View>
       </View>
 
-      {/* Planned Targets Header */}
-      {exercise.plannedSets ||
-      exercise.plannedTargetReps ||
-      exercise.plannedRestTime ||
-      exercise.plannedTargetWeight ? (
-        <View style={styles.targetsBadge}>
-          <Text variant="caption" color="accent" style={styles.targetsText}>
-            Target: {exercise.plannedSets ? `${exercise.plannedSets} sets` : ''}
-            {exercise.plannedTargetReps ? ` × ${exercise.plannedTargetReps} reps` : ''}
-            {exercise.plannedTargetWeight ? ` @ ${exercise.plannedTargetWeight}kg` : ''}
-            {exercise.plannedRestTime ? ` • Rest ${exercise.plannedRestTime}s` : ''}
-          </Text>
+      {/* Consistent Metadata Row: Best Last Badge + Collapsible History Trigger + Planned Targets */}
+      {resolvedOverloadNudge || lastPerformance || hasPlannedTargets ? (
+        <View style={styles.metaBadgeRow}>
+          {resolvedOverloadNudge ? (
+            <View
+              style={styles.overloadNudgePill}
+              testID={`overload-nudge-badge-${exercise.exerciseId}`}
+            >
+              <Icon name="trophy" size={11} strokeWidth={2.3} color={colors.primary} />
+              <Text
+                variant="caption"
+                tabularNums
+                style={styles.overloadNudgeText}
+                numberOfLines={1}
+              >
+                {resolvedOverloadNudge.label}
+              </Text>
+            </View>
+          ) : null}
+
+          {lastPerformance ? (
+            <Pressable
+              testID={`toggle-last-session-${exercise.exerciseId}`}
+              onPress={() => setIsLastSessionExpanded((prev) => !prev)}
+              style={({ pressed }) => [
+                styles.historyTogglePill,
+                isLastSessionExpanded && styles.historyTogglePillActive,
+                pressed && styles.exerciseNameTriggerPressed,
+              ]}
+              hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+              accessibilityRole="button"
+              accessibilityLabel={
+                isLastSessionExpanded
+                  ? `Hide last session breakdown for ${exercise.exerciseName}`
+                  : `Show last session breakdown for ${exercise.exerciseName}`
+              }
+            >
+              <Text variant="caption" style={styles.historyToggleText} numberOfLines={1}>
+                {lastSessionDateText ? `History (${lastSessionDateText})` : 'History'}
+              </Text>
+              <Icon
+                name={isLastSessionExpanded ? 'chevronUp' : 'chevronDown'}
+                size={12}
+                strokeWidth={2.4}
+                color={isLastSessionExpanded ? colors.primary : colors.textSecondary}
+              />
+            </Pressable>
+          ) : null}
+
+          {hasPlannedTargets ? (
+            <View style={styles.targetsBadge}>
+              <Text variant="caption" color="accent" style={styles.targetsText}>
+                Target: {exercise.plannedSets ? `${exercise.plannedSets} sets` : ''}
+                {exercise.plannedTargetReps ? ` × ${exercise.plannedTargetReps} reps` : ''}
+                {exercise.plannedTargetWeight ? ` @ ${exercise.plannedTargetWeight}kg` : ''}
+                {exercise.plannedRestTime ? ` • Rest ${exercise.plannedRestTime}s` : ''}
+              </Text>
+            </View>
+          ) : null}
         </View>
       ) : null}
 
-      {/* Last Time Performance */}
+      {/* Last Time Performance (Expanded on Demand; Empty State Preserved When No History) */}
       {lastPerformance ? (
-        <View
-          style={styles.lastTimeContainer}
-          testID={`last-time-performance-${exercise.exerciseId}`}
-        >
-          <View style={styles.lastTimeHeaderRow}>
-            <Text variant="caption" style={styles.lastTimeTitle}>
-              LAST TIME{' '}
-              {formatShortDate(lastPerformance.workoutDate)
-                ? `(${formatShortDate(lastPerformance.workoutDate)})`
-                : ''}
-            </Text>
+        isLastSessionExpanded ? (
+          <View
+            style={styles.lastTimeContainer}
+            testID={`last-time-performance-${exercise.exerciseId}`}
+          >
+            <View style={styles.lastTimeHeaderRow}>
+              <Text variant="caption" style={styles.lastTimeTitle}>
+                LAST TIME {lastSessionDateText ? `(${lastSessionDateText})` : ''}
+              </Text>
+            </View>
+            <View style={styles.lastTimeSetsRow}>
+              {lastPerformance.sets.map((s, idx, arr) => {
+                const tag =
+                  s.setType === 'drop'
+                    ? 'D '
+                    : s.setType === 'warmup'
+                    ? 'W '
+                    : s.setType === 'failure'
+                    ? 'F '
+                    : '';
+                const weightText = s.weight > 0 ? `${s.weight}kg` : 'BW';
+                const rirText = s.rir !== undefined && s.rir !== null ? ` @ RIR ${s.rir}` : '';
+                const noteText = s.notes && s.notes.trim().length > 0 ? ' 📝' : '';
+                const separator = idx < arr.length - 1 ? '  •  ' : '';
+                return (
+                  <Text
+                    key={s.id || idx}
+                    variant="caption"
+                    color="secondary"
+                    style={styles.lastTimeSetChip}
+                    testID={`last-time-set-chip-${exercise.exerciseId}-${s.setNumber || idx + 1}`}
+                  >
+                    {`${tag}${weightText} × ${s.reps}${rirText}${noteText}${separator}`}
+                  </Text>
+                );
+              })}
+            </View>
           </View>
-          <View style={styles.lastTimeSetsRow}>
-            {lastPerformance.sets.map((s, idx, arr) => {
-              const tag =
-                s.setType === 'drop'
-                  ? 'D '
-                  : s.setType === 'warmup'
-                  ? 'W '
-                  : s.setType === 'failure'
-                  ? 'F '
-                  : '';
-              const weightText = s.weight > 0 ? `${s.weight}kg` : 'BW';
-              const rirText = s.rir !== undefined && s.rir !== null ? ` @ RIR ${s.rir}` : '';
-              const noteText = s.notes && s.notes.trim().length > 0 ? ' 📝' : '';
-              const separator = idx < arr.length - 1 ? '  •  ' : '';
-              return (
-                <Text
-                  key={s.id || idx}
-                  variant="caption"
-                  color="secondary"
-                  style={styles.lastTimeSetChip}
-                  testID={`last-time-set-chip-${exercise.exerciseId}-${s.setNumber || idx + 1}`}
-                >
-                  {`${tag}${weightText} × ${s.reps}${rirText}${noteText}${separator}`}
-                </Text>
-              );
-            })}
-          </View>
-        </View>
+        ) : null
       ) : (
         <View
           style={styles.noLastTimeContainer}
@@ -310,27 +395,27 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(function A
       {/* Sets Table Header */}
       <View style={[styles.tableHeaderRow, { gap: colGap }]}>
         <View style={[styles.headerColSet, { width: colSetWidth }]}>
-          <Text variant="caption" color="muted" style={styles.headerLabel}>
+          <Text variant="caption" color="muted" style={[styles.headerLabel, isCompact && styles.headerLabelCompact]}>
             SET
           </Text>
         </View>
         <View style={[styles.headerColPrev, { width: colPrevWidth }]}>
-          <Text variant="caption" color="muted" style={styles.headerLabel}>
+          <Text variant="caption" color="muted" style={[styles.headerLabel, isCompact && styles.headerLabelCompact]}>
             PREV
           </Text>
         </View>
         <View style={[styles.headerColKg, { minWidth: minKg }]}>
-          <Text variant="caption" color="muted" style={styles.headerLabel}>
+          <Text variant="caption" color="muted" style={[styles.headerLabel, isCompact && styles.headerLabelCompact]}>
             KG
           </Text>
         </View>
         <View style={[styles.headerColReps, { minWidth: minReps }]}>
-          <Text variant="caption" color="muted" style={styles.headerLabel}>
+          <Text variant="caption" color="muted" style={[styles.headerLabel, isCompact && styles.headerLabelCompact]}>
             REPS
           </Text>
         </View>
         <View style={[styles.headerColRir, { minWidth: minRir }]}>
-          <Text variant="caption" color="muted" style={styles.headerLabel}>
+          <Text variant="caption" color="muted" style={[styles.headerLabel, isCompact && styles.headerLabelCompact]}>
             RIR
           </Text>
         </View>
@@ -339,12 +424,12 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(function A
           <Text style={styles.hiddenTestText}>✓</Text>
         </View>
         <View style={[styles.headerColNote, { width: colNoteWidth }]}>
-          <Text variant="caption" color="muted" style={styles.headerLabel}>
+          <Text variant="caption" color="muted" style={[styles.headerLabel, isCompact && styles.headerLabelCompact]}>
             NOTE
           </Text>
         </View>
-        <View style={[styles.headerColDelete, { width: colDeleteWidth }]}>
-          <Text variant="caption" color="muted" style={styles.headerLabel}>
+        <View style={[styles.headerColDelete, { width: colDeleteWidth, marginLeft: 4 }]}>
+          <Text variant="caption" color="muted" style={[styles.headerLabel, isCompact && styles.headerLabelCompact]}>
             DEL
           </Text>
         </View>
@@ -352,11 +437,12 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(function A
 
       {/* Sets List */}
       <View style={styles.setsContainer}>
-        {exercise.actualSets.map((set) => (
+        {exercise.actualSets.map((set, setIndex) => (
           <ActiveSetRow
             key={set.id}
             exercise={exercise}
             set={set}
+            setIndex={setIndex}
             previousSet={findMatchingPreviousSet(lastPerformance?.sets, set)}
             canDelete={exercise.actualSets.length > 1 && !set.completed}
             isNotesExpanded={expandedNotesSetIds[set.id]}
@@ -422,10 +508,69 @@ const createStyles = (colors: any) =>
       marginTop: 4,
     },
     exerciseName: {
+      fontFamily: FONT_FAMILIES.display,
       fontWeight: '700',
       fontSize: 18,
       lineHeight: 24,
       color: '#F8FAFC',
+      flexShrink: 1,
+    },
+    exerciseNameTrigger: {
+      width: '100%',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 6,
+    },
+    exerciseNameTriggerPressed: {
+      opacity: 0.72,
+    },
+    metaBadgeRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      alignItems: 'center',
+      gap: 8,
+    },
+    overloadNudgePill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      backgroundColor: 'rgba(56, 189, 248, 0.12)',
+      borderColor: 'rgba(56, 189, 248, 0.30)',
+      borderWidth: 1,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 999,
+      flexShrink: 0,
+    },
+    overloadNudgeText: {
+      fontFamily: FONT_FAMILIES.bodySemiBold,
+      fontSize: 11,
+      fontWeight: '700',
+      color: colors.primary,
+      ...NUMERIC_TABULAR_STYLE,
+    },
+    historyTogglePill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      backgroundColor: 'rgba(148, 163, 184, 0.10)',
+      borderColor: 'rgba(148, 163, 184, 0.22)',
+      borderWidth: 1,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 999,
+      flexShrink: 0,
+    },
+    historyTogglePillActive: {
+      backgroundColor: 'rgba(56, 189, 248, 0.10)',
+      borderColor: 'rgba(56, 189, 248, 0.32)',
+    },
+    historyToggleText: {
+      fontFamily: FONT_FAMILIES.bodyMedium,
+      fontSize: 11,
+      fontWeight: '600',
+      color: '#94A3B8',
     },
     exerciseHeaderActions: {
       flexDirection: 'row',
@@ -574,6 +719,10 @@ const createStyles = (colors: any) =>
       letterSpacing: 0.6,
       textAlign: 'center',
       color: '#64748B',
+    },
+    headerLabelCompact: {
+      fontSize: 9,
+      letterSpacing: 0.2,
     },
     headerColSet: {
       width: 32,

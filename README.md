@@ -7,7 +7,7 @@
 <p align="center">A local-first workout tracker for lifters who want fast logging, useful history, and reliable synchronization across web and mobile.</p>
 
 <p align="center">
-  <a href="https://be-big-2-0.vercel.app"><img src="https://img.shields.io/badge/Production-v2.4.3-16a34a?style=flat-square&logo=vercel" alt="Production v2.4.3" /></a>
+  <a href="https://be-big-2-0.vercel.app"><img src="https://img.shields.io/badge/Production-v2.4.4-16a34a?style=flat-square&logo=vercel" alt="Production v2.4.4" /></a>
   <img src="https://img.shields.io/badge/Expo-SDK%2057-000020?style=flat-square&logo=expo" alt="Expo SDK 57" />
   <img src="https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript" alt="Strict TypeScript" />
   <img src="https://img.shields.io/badge/license-proprietary-lightgrey?style=flat-square" alt="Proprietary license" />
@@ -17,7 +17,7 @@
 
 BeBig is a cross-platform training log built with Expo, React Native, React Native Web, TypeScript, Zustand, and Supabase.
 
-The current production release is **v2.4.3**.
+The current production release is **v2.4.4**.
 
 Typical workflow:
 
@@ -31,8 +31,8 @@ Typical workflow:
 ## Production
 
 - Web/PWA: https://be-big-2-0.vercel.app
-- Release tag: v2.4.3
-- Release commit: 2f88fd2
+- Release tag: v2.4.4
+- Service Worker cache: `bebig-pwa-v2.4.4` (Network-First JS bundles + shell-only caching)
 - Current static export: 45 routes
 
 ## Core capabilities
@@ -43,8 +43,9 @@ Typical workflow:
 - Add, duplicate, delete, reorder, and edit exercises and sets during a session.
 - Debounced local writes with immediate flushes at critical lifecycle boundaries.
 - Recovery of active, abandoned, and discarded sessions.
-- Rest timer with pause, resume, skip, and +30s/-30s controls.
-- Superset and giant-set utilities, exercise detail modals, and previous-performance suggestions.
+- Floating collapsible rest timer pill with SVG countdown ring, pause, resume, skip, and -15s/+15s controls.
+- Superset and giant-set utilities, in-workout exercise detail modal, `Best Last` progressive-overload badges, collapsible previous-session history, and one-tap `PREV` quick-fill.
+- Dual-family athletic typography (`Plus Jakarta Sans` + `Inter` static weights with tabular numerals and non-blocking offline boot).
 
 ### Exercises and templates
 

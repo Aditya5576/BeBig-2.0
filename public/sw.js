@@ -1,6 +1,6 @@
 /**
  * BeBig 2.0 PWA Service Worker
- * Version: bebig-pwa-v2.4.3 (AUD-013 shell-only caching + Network-First JS bundles)
+ * Version: bebig-pwa-v2.4.4 (AUD-013 shell-only caching + Network-First JS bundles)
  *
  * Conservative static app shell cache.
  * STRICT SECURITY INVARIANTS (AUD-013):
@@ -13,7 +13,7 @@
  * - NEVER force-reloads client pages (active workouts are never disrupted)
  */
 
-const CACHE_NAME = 'bebig-pwa-v2.4.3'; // CACHE_NAME = 'bebig-pwa-v1'
+const CACHE_NAME = 'bebig-pwa-v2.4.4'; // CACHE_NAME = 'bebig-pwa-v1'
 
 // Minimal core static app-shell assets precached on install
 const PRECACHE_ASSETS = [

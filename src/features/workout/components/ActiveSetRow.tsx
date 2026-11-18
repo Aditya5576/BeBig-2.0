@@ -4,11 +4,13 @@ import { useAppTheme } from '../../theme';
 import { Text, Icon } from '../../../components/ui';
 import { WorkoutExercise, WorkoutSet, SetType } from '../types';
 import { spacing } from '../../../constants/theme';
+import { FONT_FAMILIES, NUMERIC_TABULAR_STYLE } from '../../../theme/typography';
 import { DOMAIN_LIMITS, clampText } from '../../../constants/domainLimits';
 
 export interface ActiveSetRowProps {
   exercise: WorkoutExercise;
   set: WorkoutSet;
+  setIndex?: number;
   previousSet?: WorkoutSet;
   canDelete: boolean;
   isNotesExpanded?: boolean;
@@ -30,6 +32,7 @@ export interface ActiveSetRowProps {
 export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow({
   exercise,
   set,
+  setIndex,
   previousSet,
   canDelete,
   isNotesExpanded,
@@ -40,8 +43,8 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
 }) {
   const { colors } = useAppTheme();
   const { width: windowWidth } = useWindowDimensions();
-  const isNarrow = windowWidth < 380;
-  const styles = useMemo(() => createStyles(colors, isNarrow), [colors, isNarrow]);
+  const isCompact = windowWidth < 400;
+  const styles = useMemo(() => createStyles(colors, isCompact), [colors, isCompact]);
 
   // Initialize input state:
   // Completed sets always display their confirmed logged values.
@@ -171,6 +174,35 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
   };
 
   const previousText = formatPrevious(previousSet);
+  const resolvedSetIndex = setIndex !== undefined ? setIndex : Math.max(0, set.setNumber - 1);
+  const canQuickFillPrev = Boolean(
+    previousSet &&
+      previousText !== '—' &&
+      ((previousSet.weight ?? 0) > 0 || (previousSet.reps ?? 0) > 0),
+  );
+
+  const handleQuickFillPrevious = useCallback(() => {
+    if (!previousSet) return;
+    if (
+      localWeight.trim() === '' &&
+      previousSet.weight !== undefined &&
+      previousSet.weight !== null
+    ) {
+      const nextWeight = String(previousSet.weight);
+      setLocalWeight(nextWeight);
+      onUpdateSetField(exercise.exerciseId, set.id, 'weight', nextWeight);
+    }
+    if (
+      localReps.trim() === '' &&
+      previousSet.reps !== undefined &&
+      previousSet.reps !== null &&
+      previousSet.reps > 0
+    ) {
+      const nextReps = String(previousSet.reps);
+      setLocalReps(nextReps);
+      onUpdateSetField(exercise.exerciseId, set.id, 'reps', nextReps);
+    }
+  }, [exercise.exerciseId, localReps, localWeight, onUpdateSetField, previousSet, set.id]);
 
   const hasExistingNote = Boolean(localNotes && localNotes.trim().length > 0);
   const isExpanded = isNotesExpanded !== undefined ? isNotesExpanded : hasExistingNote;
@@ -245,19 +277,42 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
           </View>
         </Pressable>
 
-        {/* Previous Performance */}
+        {/* Previous Performance (One-Tap Quick-Fill When Non-Empty) */}
         <View style={styles.colPrev}>
-          <Text
-            variant="caption"
-            numberOfLines={1}
-            ellipsizeMode="tail"
-            style={[
-              styles.prevText,
-              !previousSet ? styles.prevTextEmpty : null,
-            ]}
-          >
-            {previousText}
-          </Text>
+          {canQuickFillPrev ? (
+            <Pressable
+              testID={`prev-quick-fill-${resolvedSetIndex}`}
+              onPress={handleQuickFillPrevious}
+              hitSlop={{ top: 6, bottom: 6, left: 3, right: 3 }}
+              style={({ pressed }) => [
+                styles.prevQuickFillPill,
+                pressed && styles.prevQuickFillPillPressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={`Quick fill set ${set.setNumber} from previous ${previousText}`}
+            >
+              <Text
+                variant="caption"
+                numberOfLines={1}
+                ellipsizeMode="tail"
+                style={[styles.prevText, styles.prevTextInteractive]}
+              >
+                {previousText}
+              </Text>
+            </Pressable>
+          ) : (
+            <Text
+              variant="caption"
+              numberOfLines={1}
+              ellipsizeMode="tail"
+              style={[
+                styles.prevText,
+                !previousSet ? styles.prevTextEmpty : null,
+              ]}
+            >
+              {previousText}
+            </Text>
+          )}
         </View>
 
         {/* Weight (kg) */}
@@ -623,14 +678,14 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
   );
 });
 
-const createStyles = (colors: any, isNarrow: boolean = false) =>
+const createStyles = (colors: any, isCompact: boolean = false) =>
   StyleSheet.create({
     rowWrapper: {
       backgroundColor: 'transparent',
       borderRadius: 8,
       paddingVertical: 5,
       paddingHorizontal: 2,
-      gap: isNarrow ? 2 : 4,
+      gap: isCompact ? 2 : 4,
     },
     rowWrapperCompleted: {
       backgroundColor: 'rgba(34, 197, 94, 0.08)',
@@ -638,21 +693,21 @@ const createStyles = (colors: any, isNarrow: boolean = false) =>
     mainRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: isNarrow ? 3 : 4,
+      gap: isCompact ? 3 : 4,
     },
     colSet: {
-      width: isNarrow ? 28 : 32,
+      width: isCompact ? 26 : 30,
       alignItems: 'center',
       justifyContent: 'center',
     },
     colSetTouch: {
-      width: isNarrow ? 28 : 32,
+      width: isCompact ? 26 : 30,
       minHeight: 40,
       alignItems: 'center',
       justifyContent: 'center',
     },
     setNumberBadge: {
-      width: isNarrow ? 26 : 28,
+      width: isCompact ? 24 : 28,
       height: 30,
       borderRadius: 6,
       borderWidth: 0,
@@ -664,23 +719,41 @@ const createStyles = (colors: any, isNarrow: boolean = false) =>
     setNumberBadgeCompleted: {},
     setNumberText: {
       fontWeight: '700',
-      fontSize: isNarrow ? 11 : 12,
+      fontSize: isCompact ? 11 : 12,
       color: colors.textSecondary,
     },
     setNumberTextCompleted: {
       color: '#22C55E',
     },
     colPrev: {
-      width: isNarrow ? 40 : 46,
+      width: isCompact ? 54 : 62,
       alignItems: 'center',
       justifyContent: 'center',
     },
+    prevQuickFillPill: {
+      paddingHorizontal: 3,
+      paddingVertical: 3,
+      borderRadius: 6,
+      backgroundColor: 'rgba(56, 189, 248, 0.08)',
+      maxWidth: '100%',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    prevQuickFillPillPressed: {
+      opacity: 0.7,
+    },
     prevText: {
+      fontFamily: FONT_FAMILIES.bodyMedium,
       fontWeight: '500',
-      fontSize: isNarrow ? 9.5 : 10.5,
+      fontSize: isCompact ? 9.5 : 10.5,
+      letterSpacing: -0.2,
       color: '#64748B',
       textAlign: 'center',
-      fontVariant: ['tabular-nums'],
+      ...NUMERIC_TABULAR_STYLE,
+    },
+    prevTextInteractive: {
+      color: '#94A3B8',
+      textDecorationLine: 'underline',
     },
     prevTextEmpty: {
       color: '#64748B',
@@ -689,29 +762,30 @@ const createStyles = (colors: any, isNarrow: boolean = false) =>
     },
     colKg: {
       flex: 1.15,
-      minWidth: isNarrow ? 34 : 38,
+      minWidth: isCompact ? 34 : 38,
     },
     colReps: {
       flex: 1.0,
-      minWidth: isNarrow ? 30 : 36,
+      minWidth: isCompact ? 30 : 36,
     },
     colRir: {
       flex: 0.85,
-      minWidth: isNarrow ? 28 : 32,
+      minWidth: isCompact ? 26 : 30,
     },
     metricInput: {
       backgroundColor: '#0D121D',
       borderWidth: 1,
       borderColor: 'rgba(148, 163, 184, 0.16)',
       borderRadius: 8,
-      paddingHorizontal: isNarrow ? 1 : 2,
+      paddingHorizontal: isCompact ? 1 : 2,
       paddingVertical: 0,
       color: '#F8FAFC',
+      fontFamily: FONT_FAMILIES.bodySemiBold,
       fontSize: 15,
       fontWeight: '600',
       textAlign: 'center',
       height: 36,
-      fontVariant: ['tabular-nums'],
+      ...NUMERIC_TABULAR_STYLE,
     },
     metricInputCompleted: {
       backgroundColor: 'rgba(34, 197, 94, 0.06)',
@@ -719,18 +793,18 @@ const createStyles = (colors: any, isNarrow: boolean = false) =>
       color: '#F8FAFC',
     },
     metricInputRir: {
-      fontSize: isNarrow ? 13 : 14,
+      fontSize: isCompact ? 13 : 14,
       fontWeight: '600',
       color: colors.textSecondary,
     },
     colCheck: {
-      width: isNarrow ? 32 : 36,
+      width: isCompact ? 30 : 34,
       alignItems: 'center',
       justifyContent: 'center',
     },
     checkButton: {
-      width: 32,
-      height: 32,
+      width: isCompact ? 30 : 32,
+      height: isCompact ? 30 : 32,
       borderRadius: 8,
       justifyContent: 'center',
       alignItems: 'center',
@@ -756,12 +830,12 @@ const createStyles = (colors: any, isNarrow: boolean = false) =>
       color: colors.background,
     },
     colNote: {
-      width: isNarrow ? 26 : 28,
+      width: isCompact ? 28 : 30,
       alignItems: 'center',
       justifyContent: 'center',
     },
     noteButton: {
-      width: isNarrow ? 26 : 28,
+      width: isCompact ? 28 : 30,
       height: 36,
       borderRadius: 8,
       backgroundColor: 'transparent',
@@ -881,12 +955,13 @@ const createStyles = (colors: any, isNarrow: boolean = false) =>
       fontWeight: '700',
     },
     colDelete: {
-      width: isNarrow ? 24 : 26,
+      width: isCompact ? 24 : 26,
+      marginLeft: 4,
       alignItems: 'center',
       justifyContent: 'center',
     },
     deleteButton: {
-      width: isNarrow ? 24 : 26,
+      width: isCompact ? 24 : 26,
       height: 36,
       borderRadius: 8,
       backgroundColor: 'transparent',

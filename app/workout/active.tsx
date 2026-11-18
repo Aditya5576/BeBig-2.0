@@ -23,11 +23,16 @@ import {
   SetType,
   ActiveExerciseCard,
   ActiveWorkoutTimer,
+  ExerciseDetailModal,
   workoutNotificationService,
   getSupersetDisplayInfo,
 } from '../../src/features/workout';
 import { ExercisePickerModal } from '../../src/features/templates/components/ExercisePickerModal';
-import { buildLastPerformanceMap } from '../../src/features/workout/services/previousPerformanceService';
+import {
+  buildLastPerformanceMap,
+  buildProgressiveOverloadMap,
+} from '../../src/features/workout/services/previousPerformanceService';
+import { useAuthStore } from '../../src/features/auth';
 import { Exercise } from '../../src/features/exercises';
 import { spacing, radii } from '../../src/constants/theme';
 import { RestTimerOverlay } from '../../src/features/workout/components/RestTimerOverlay';
@@ -182,13 +187,31 @@ export default function ActiveWorkoutScreen() {
   const [loading, setLoading] = useState(true);
   const [isPickerVisible, setIsPickerVisible] = useState(false);
   const [finishing, setFinishing] = useState(false);
-  const [lastPerformanceMap, setLastPerformanceMap] = useState<
-    Record<string, { workoutDate?: string; sets: WorkoutSet[] }>
-  >({});
+  const [completedWorkoutsHistory, setCompletedWorkoutsHistory] = useState<WorkoutSession[]>([]);
   const [expandedNotesSetIds, setExpandedNotesSetIds] = useState<Record<string, boolean>>({});
   const [isMenuVisible, setIsMenuVisible] = useState(false);
   const [isRenameModalVisible, setIsRenameModalVisible] = useState(false);
   const [renameInputText, setRenameInputText] = useState('');
+  const [selectedDetailExercise, setSelectedDetailExercise] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+
+  const handleOpenExerciseDetail = useCallback((exerciseId: string, exerciseName: string) => {
+    setSelectedDetailExercise({ id: exerciseId, name: exerciseName });
+  }, []);
+
+  const handleCloseExerciseDetail = useCallback(() => {
+    setSelectedDetailExercise(null);
+  }, []);
+
+  const activeUserScopeKey = useAuthStore((state) =>
+    state.user?.id
+      ? `auth:${state.user.id}`
+      : state.isGuest && state.guestSession?.id
+      ? `guest:${state.guestSession.id}`
+      : 'guest'
+  );
 
   const toggleNotesForSet = (setId: string) => {
     setExpandedNotesSetIds((prev) => {
@@ -204,42 +227,41 @@ export default function ActiveWorkoutScreen() {
     });
   };
 
-  const sessionExerciseSignature = useMemo(
-    () =>
-      session?.exercises
-        ?.map((e) => `${e.exerciseId}_${e.order}_${e.exerciseName}`)
-        .join(',') ?? '',
-    [session?.exercises]
-  );
-
-  // Fetch last performance per exercise from local completed history
+  // Load user-scoped completed workout history ONCE on mount / user scope change (zero per-keystroke queries)
   useEffect(() => {
-    const currentSession = sessionRef.current;
-    if (!currentSession || !currentSession.exercises || currentSession.exercises.length === 0) return;
-
     let isMounted = true;
+    setCompletedWorkoutsHistory([]);
 
-    async function loadLastPerformances() {
+    async function loadCompletedHistoryOnce() {
       try {
-        const latest = sessionRef.current;
-        if (!latest || !latest.exercises) return;
         const completed = await workoutRepository.getCompletedWorkouts();
-        const map = buildLastPerformanceMap(latest.exercises, completed, latest.id);
-
         if (isMounted) {
-          setLastPerformanceMap(map);
+          setCompletedWorkoutsHistory(completed);
         }
       } catch {
         // Fallback gracefully
       }
     }
 
-    void loadLastPerformances();
+    void loadCompletedHistoryOnce();
 
     return () => {
       isMounted = false;
     };
-  }, [session?.id, sessionExerciseSignature]);
+  }, [activeUserScopeKey]);
+
+  const lastPerformanceMap = useMemo(
+    () =>
+      session?.exercises && session.exercises.length > 0
+        ? buildLastPerformanceMap(session.exercises, completedWorkoutsHistory, session.id)
+        : {},
+    [session?.exercises, session?.id, completedWorkoutsHistory]
+  );
+
+  const progressiveOverloadMap = useMemo(
+    () => buildProgressiveOverloadMap(completedWorkoutsHistory, session?.id),
+    [completedWorkoutsHistory, session?.id]
+  );
 
   // Load active workout draft
   useEffect(() => {
@@ -729,8 +751,9 @@ export default function ActiveWorkoutScreen() {
   const completedSetsCount = workoutRepository.countCompletedSets(session);
 
   const baseBottomPadding = 80 + Math.max(insets.bottom, 12);
+  const measuredRestHeight = restOverlayHeight > 0 ? restOverlayHeight : 112;
   const dynamicBottomPadding = !!session?.activeRestTimer
-    ? Math.max(baseBottomPadding, (restOverlayHeight > 0 ? restOverlayHeight : 84) + Math.max(insets.bottom, 12) + 24)
+    ? Math.max(baseBottomPadding, measuredRestHeight + Math.max(insets.bottom, 12) + 24)
     : baseBottomPadding;
 
   return (
@@ -841,6 +864,7 @@ export default function ActiveWorkoutScreen() {
                     totalExercisesCount={session.exercises.length}
                     supersetInfo={getSupersetDisplayInfo(session.exercises, ex.exerciseId)}
                     lastPerformance={lastPerformanceMap[`${ex.exerciseId}_${ex.order}`] ?? lastPerformanceMap[ex.exerciseId]}
+                    overloadNudge={progressiveOverloadMap[ex.exerciseId] ?? null}
                     expandedNotesSetIds={expandedNotesSetIds}
                     onMoveUp={handleMoveUpExercise}
                     onMoveDown={handleMoveDownExercise}
@@ -852,6 +876,7 @@ export default function ActiveWorkoutScreen() {
                     onToggleNotes={toggleNotesForSet}
                     onUpdateSetField={handleUpdateSetField}
                     onToggleCompleteSet={handleToggleCompleteSet}
+                    onPressExerciseDetail={handleOpenExerciseDetail}
                     style={{
                       marginBottom: isLinkedWithNext
                         ? 8
@@ -927,6 +952,14 @@ export default function ActiveWorkoutScreen() {
         onSelectExercises={handleSelectExercises}
         selectedExerciseIds={activeExerciseIds}
         multiSelect={true}
+      />
+
+      {/* In-Workout Exercise Detail Modal */}
+      <ExerciseDetailModal
+        visible={Boolean(selectedDetailExercise)}
+        exerciseId={selectedDetailExercise?.id ?? null}
+        fallbackExerciseName={selectedDetailExercise?.name}
+        onClose={handleCloseExerciseDetail}
       />
 
       {/* Workout Options Menu Modal */}

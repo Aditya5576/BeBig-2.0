@@ -10,18 +10,16 @@ import { BottomNavBar } from '../src/components/navigation';
 import { initErrorMonitoring, wrapRootLayout, setUserContext } from '../src/services/monitoring/errorMonitoring';
 import { useThemeStore, useWebThemeSync, useAppTheme } from '../src/features/theme';
 import { useFonts } from 'expo-font';
-import {
-  PlusJakartaSans_400Regular,
-  PlusJakartaSans_500Medium,
-  PlusJakartaSans_600SemiBold,
-  PlusJakartaSans_700Bold,
-  PlusJakartaSans_800ExtraBold,
-} from '@expo-google-fonts/plus-jakarta-sans';
-import {
-  JetBrainsMono_600SemiBold,
-  JetBrainsMono_700Bold,
-} from '@expo-google-fonts/jetbrains-mono';
+import { PlusJakartaSans_600SemiBold } from '@expo-google-fonts/plus-jakarta-sans/600SemiBold';
+import { PlusJakartaSans_700Bold } from '@expo-google-fonts/plus-jakarta-sans/700Bold';
+import { PlusJakartaSans_800ExtraBold } from '@expo-google-fonts/plus-jakarta-sans/800ExtraBold';
+import { Inter_400Regular } from '@expo-google-fonts/inter/400Regular';
+import { Inter_500Medium } from '@expo-google-fonts/inter/500Medium';
+import { Inter_600SemiBold } from '@expo-google-fonts/inter/600SemiBold';
+import { Inter_700Bold } from '@expo-google-fonts/inter/700Bold';
 import '../src/features/workout/services/workoutNotificationService';
+
+export const FONT_LOAD_TIMEOUT_MS = 1500;
 
 // Initialize monitoring eagerly if configured
 initErrorMonitoring();
@@ -141,23 +139,29 @@ export default wrapRootLayout(function RootLayout() {
     };
   }, []);
 
-  // Modern athletic typography: Plus Jakarta Sans & JetBrains Mono
-  const [fontsLoaded] = useFonts({
-    PlusJakartaSans_400Regular,
-    PlusJakartaSans_500Medium,
+  // Professional athletic typography: 7 lightweight static TTF weights (Plus Jakarta Sans + Inter)
+  const [fontsLoaded, fontError] = useFonts({
     PlusJakartaSans_600SemiBold,
     PlusJakartaSans_700Bold,
     PlusJakartaSans_800ExtraBold,
-    JetBrainsMono_600SemiBold,
-    JetBrainsMono_700Bold,
-    'PlusJakartaSans-Regular': PlusJakartaSans_400Regular,
-    'PlusJakartaSans-Medium': PlusJakartaSans_500Medium,
-    'PlusJakartaSans-SemiBold': PlusJakartaSans_600SemiBold,
-    'PlusJakartaSans-Bold': PlusJakartaSans_700Bold,
-    'PlusJakartaSans-ExtraBold': PlusJakartaSans_800ExtraBold,
-    'JetBrainsMono-SemiBold': JetBrainsMono_600SemiBold,
-    'JetBrainsMono-Bold': JetBrainsMono_700Bold,
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Inter_700Bold,
   });
+
+  // Non-blocking 1.5s safety fallback: offline/failed font loads must never stall app startup
+  const [fontLoadTimedOut, setFontLoadTimedOut] = useState(false);
+
+  useEffect(() => {
+    if (fontsLoaded || fontError) return;
+    const timeoutId = setTimeout(() => {
+      setFontLoadTimedOut(true);
+    }, FONT_LOAD_TIMEOUT_MS);
+    return () => clearTimeout(timeoutId);
+  }, [fontsLoaded, fontError]);
+
+  const fontsReady = fontsLoaded || Boolean(fontError) || fontLoadTimedOut;
 
   // Intentional cinematic cold launch showcase gate (3.5 seconds / 3500ms)
   const [showColdBootSplash, setShowColdBootSplash] = useState(() => {
@@ -177,7 +181,7 @@ export default wrapRootLayout(function RootLayout() {
     return () => clearTimeout(splashTimer);
   }, [showColdBootSplash]);
 
-  if (!isHydrated || (!fontsLoaded && process.env.NODE_ENV !== 'test')) {
+  if (!isHydrated || !fontsReady) {
     return (
       <View style={{ flex: 1, backgroundColor: '#090D16' }}>
         <StatusBar style="light" />

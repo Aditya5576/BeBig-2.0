@@ -207,6 +207,9 @@ describe('BeBig 2.0 — Completed Workout Notes Visibility Suite', () => {
       />
     );
 
+    // Expand collapsible History breakdown to inspect set note chips
+    await fireEvent.press(screen.getByTestId('toggle-last-session-ex_press'));
+
     // Set 1 had notes -> includes 📝
     const chip1 = screen.getByTestId('last-time-set-chip-ex_press-1');
     expect(chip1).toBeTruthy();

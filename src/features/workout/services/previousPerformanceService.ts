@@ -12,6 +12,13 @@ export interface LastPerformanceRecord {
   sets: WorkoutSet[];
 }
 
+export interface ProgressiveOverloadNudge {
+  weight: number;
+  reps: number;
+  date?: string;
+  label: string;
+}
+
 /**
  * Validates whether an exercise identifier is non-empty and well-formed.
  */
@@ -141,6 +148,91 @@ export function buildLastPerformanceMap(
           }
           break; // Found the most recent performance for this exercise instance
         }
+      }
+    }
+  }
+
+  return map;
+}
+
+/**
+ * Selects the representative top working set from an exercise's most recent
+ * historical session and formats a compact progressive-overload nudge badge
+ * (e.g. "Last: 80 kg × 8" or "Last: BW × 12"). Returns null when no valid set exists.
+ */
+export function computeBestLastSetNudge(
+  lastPerformance?: LastPerformanceRecord | null
+): ProgressiveOverloadNudge | null {
+  if (!lastPerformance || !Array.isArray(lastPerformance.sets) || lastPerformance.sets.length === 0) {
+    return null;
+  }
+
+  const validSets = lastPerformance.sets.filter(
+    (s) => (s.weight ?? 0) > 0 || (s.reps ?? 0) > 0
+  );
+  if (validSets.length === 0) return null;
+
+  const workingSets = validSets.filter((s) => s.setType !== 'warmup');
+  const candidates = workingSets.length > 0 ? workingSets : validSets;
+
+  let best = candidates[0];
+  for (let i = 1; i < candidates.length; i++) {
+    const cur = candidates[i];
+    const curWeight = cur.weight ?? 0;
+    const bestWeight = best.weight ?? 0;
+    const curReps = cur.reps ?? 0;
+    const bestReps = best.reps ?? 0;
+
+    if (curWeight > bestWeight || (curWeight === bestWeight && curReps > bestReps)) {
+      best = cur;
+    }
+  }
+
+  const weight = best.weight ?? 0;
+  const reps = best.reps ?? 0;
+  if (weight <= 0 && reps <= 0) return null;
+
+  const label = weight > 0 ? `Best Last: ${weight} kg × ${reps}` : `Best Last: BW × ${reps}`;
+  return {
+    weight,
+    reps,
+    date: lastPerformance.workoutDate,
+    label,
+  };
+}
+
+/**
+ * Builds a lightweight exerciseId -> ProgressiveOverloadNudge lookup map in one pass
+ * over the user's completed workout history (newest completed workout wins per exerciseId).
+ */
+export function buildProgressiveOverloadMap(
+  completedWorkouts: WorkoutSession[],
+  currentSessionId?: string
+): Record<string, ProgressiveOverloadNudge> {
+  const map: Record<string, ProgressiveOverloadNudge> = {};
+  if (!Array.isArray(completedWorkouts) || completedWorkouts.length === 0) return map;
+
+  const sortedCompleted = [...completedWorkouts]
+    .filter((w) => w.id !== currentSessionId && (w.status === 'completed' || Boolean(w.finishedAt)))
+    .sort((a, b) => getWorkoutTimestampMs(b) - getWorkoutTimestampMs(a));
+
+  for (const workout of sortedCompleted) {
+    if (!Array.isArray(workout.exercises) || workout.exercises.length === 0) continue;
+    const workoutDate = workout.finishedAt || workout.startedAt;
+
+    for (const ex of workout.exercises) {
+      if (!hasValidExerciseId(ex.exerciseId)) continue;
+      const exKey = ex.exerciseId.trim();
+      if (map[exKey]) continue;
+
+      const loggedSets = (ex.actualSets || []).filter(
+        (s) => s.completed || (s.weight ?? 0) > 0 || (s.reps ?? 0) > 0
+      );
+      if (loggedSets.length === 0) continue;
+
+      const nudge = computeBestLastSetNudge({ workoutDate, sets: loggedSets });
+      if (nudge) {
+        map[exKey] = nudge;
       }
     }
   }
