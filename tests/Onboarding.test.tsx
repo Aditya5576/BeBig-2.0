@@ -6,6 +6,7 @@ import ExperienceScreen from '../app/onboarding/experience';
 import PreferencesScreen from '../app/onboarding/preferences';
 import AuthScreen from '../app/onboarding/auth';
 import HomeScreen from '../app/home';
+import SettingsScreen from '../app/settings';
 import RootIndex from '../app/index';
 import { useOnboardingStore } from '../src/features/onboarding';
 import { useAuthStore } from '../src/features/auth';
@@ -197,8 +198,8 @@ describe('Milestone 2 & 3 — Onboarding Flow Verification', () => {
     expect(useOnboardingStore.getState().hasCompletedOnboarding).toBe(false);
   });
 
-  // 11: Home screen renders configured profile and does not provide reset onboarding to completed user
-  it('11: renders configured profile on Home screen and does not provide reset onboarding action', async () => {
+  // 11: Home screen does not provide reset onboarding to completed user, and Settings renders configured profile
+  it('11: renders configured profile on Settings screen and does not provide reset onboarding action', async () => {
     // Populate store
     useOnboardingStore.getState().setGoal('build_muscle');
     useOnboardingStore.getState().setExperienceLevel('intermediate');
@@ -208,18 +209,20 @@ describe('Milestone 2 & 3 — Onboarding Flow Verification', () => {
     useOnboardingStore.getState().setWorkoutStyle('push_pull_legs');
     useOnboardingStore.getState().completeOnboarding();
 
-    const { getByTestId, getByText, queryByTestId } = await render(<HomeScreen />);
+    const home = await render(<HomeScreen />);
 
-    expect(getByTestId('home-title')).toBeTruthy();
-    expect(getByText(/Build Muscle/i)).toBeTruthy();
-    expect(getByText(/Intermediate/i)).toBeTruthy();
-    expect(getByText(/5 days \/ week/i)).toBeTruthy();
-    expect(getByText(/Push Pull Legs/i)).toBeTruthy();
+    expect(home.getByTestId('home-title')).toBeTruthy();
 
     // Invariant: Completed user has no reset or retake onboarding action
-    expect(queryByTestId('reset-onboarding-button')).toBeNull();
-    expect(queryByTestId('retake-onboarding-button')).toBeNull();
+    expect(home.queryByTestId('reset-onboarding-button')).toBeNull();
+    expect(home.queryByTestId('retake-onboarding-button')).toBeNull();
     expect(useOnboardingStore.getState().hasCompletedOnboarding).toBe(true);
+
+    const settings = await render(<SettingsScreen />);
+    expect(settings.getByText(/Build Muscle/i)).toBeTruthy();
+    expect(settings.getByText(/Intermediate/i)).toBeTruthy();
+    expect(settings.getByText(/5 days \/ week/i)).toBeTruthy();
+    expect(settings.getByText(/Push \/ Pull \/ Legs/i)).toBeTruthy();
   });
 
   // 12a: Root Gatekeeper redirects un-onboarded user to welcome

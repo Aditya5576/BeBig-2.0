@@ -190,6 +190,8 @@ export default wrapRootLayout(function RootLayout() {
           <Stack.Screen name="workout/progress/prs" />
           <Stack.Screen name="workout/progress/weekly" />
           <Stack.Screen name="workout/progress/exercise/[id]" />
+          <Stack.Screen name="legal/privacy" />
+          <Stack.Screen name="legal/terms" />
           <Stack.Screen name="+not-found" options={{ title: 'Not Found' }} />
         </Stack>
         <BottomNavBar />

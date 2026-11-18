@@ -10,6 +10,7 @@ import {
   exercisePhotoCloudService,
   pickExercisePhoto,
   base64ToUint8Array,
+  downscaleWebImageToMaxEdge,
   PhotoSyncStatusInfo,
   Exercise,
   resolveExerciseDemonstration,
@@ -523,18 +524,29 @@ export default function ExerciseDetailScreen() {
                 accept="image/jpeg,image/png,image/webp"
                 style={{ display: 'none' }}
                 ref={fileInputRef}
-                onChange={(e: any) => {
+                onChange={async (e: any) => {
                   const file = e.target?.files?.[0];
+                  e.target.value = '';
                   if (file) {
                     const validation = exercisePhotoStorage.validatePhotoFile(file);
                     if (!validation.valid) {
                       Alert.alert('Invalid Photo', validation.error || 'Please select a valid image file.');
                       return;
                     }
-                    const previewUrl = typeof URL !== 'undefined' && URL.createObjectURL ? URL.createObjectURL(file) : '';
-                    void handleApplyPhoto({ uri: previewUrl, file, mimeType: file.type || 'image/jpeg' });
+                    const downscaled = await downscaleWebImageToMaxEdge(file);
+                    if (downscaled) {
+                      void handleApplyPhoto({
+                        uri: downscaled.dataUrl,
+                        base64: downscaled.base64,
+                        file: downscaled.blob,
+                        mimeType: downscaled.mimeType,
+                      });
+                    } else {
+                      const previewUrl =
+                        typeof URL !== 'undefined' && URL.createObjectURL ? URL.createObjectURL(file) : '';
+                      void handleApplyPhoto({ uri: previewUrl, file, mimeType: file.type || 'image/jpeg' });
+                    }
                   }
-                  e.target.value = '';
                 }}
               />
             )}

@@ -84,7 +84,7 @@ export default function WorkoutHistoryDetailScreen() {
     if (!workout) return;
     const focus = deriveWorkoutFocus(workout.exercises || []);
     const seq = getSuggestedTemplateSessionNumber(allTemplates, focus);
-    const defaultName = `${focus} — Session ${seq}`;
+    const defaultName = workout.name && workout.name.trim() ? workout.name.trim() : `${focus} — Session ${seq}`;
     
     setActiveFocus(focus);
     setSequenceNumber(seq);
@@ -129,11 +129,6 @@ export default function WorkoutHistoryDetailScreen() {
     try {
       const input = convertWorkoutToTemplateInput(workout, trimmedName, activeFocus, sequenceNumber);
       const created = await templateRepository.createTemplate(input);
-
-      if (workout.id) {
-        const updated = await workoutRepository.updateCompletedWorkoutName(workout.id, trimmedName);
-        setWorkout(updated);
-      }
 
       if (created) {
         setAllTemplates((prev) => [...prev, created]);
@@ -684,7 +679,7 @@ export default function WorkoutHistoryDetailScreen() {
             />
 
             {saveError ? (
-              <Text variant="caption" style={[styles.errorText, { color: '#EF4444' }]}>
+              <Text testID="save-template-error" variant="caption" style={[styles.errorText, { color: '#EF4444' }]}>
                 {saveError}
               </Text>
             ) : null}

@@ -1,5 +1,6 @@
 export * from './types';
 export * from './services/authService';
+export * from './services/accountDeletionService';
 export * from './store/useAuthStore';
 export * from './utils/resolveAuthRoute';
 export * from './utils/errorMapper';

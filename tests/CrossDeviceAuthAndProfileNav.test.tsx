@@ -349,16 +349,16 @@ describe('BeBig 2.0 — Cross-Device Auth, Profile Revamp & Bottom Nav Tests', (
       await waitFor(() => expect(getByTestId('bottom-nav-bar')).toBeTruthy());
 
       await fireEvent.press(getByTestId('tab-history'));
-      expect(mockPush).toHaveBeenCalledWith('/workout/history');
+      expect(mockReplace).toHaveBeenCalledWith('/workout/history');
 
       await fireEvent.press(getByTestId('tab-workout'));
-      expect(mockPush).toHaveBeenCalledWith('/workout/start');
+      expect(mockReplace).toHaveBeenCalledWith('/workout/start');
 
       await fireEvent.press(getByTestId('tab-exercises'));
-      expect(mockPush).toHaveBeenCalledWith('/exercises');
+      expect(mockReplace).toHaveBeenCalledWith('/exercises');
 
       await fireEvent.press(getByTestId('tab-profile'));
-      expect(mockPush).toHaveBeenCalledWith('/settings');
+      expect(mockReplace).toHaveBeenCalledWith('/settings');
     });
 
     it('is hidden when on active workout screen', async () => {

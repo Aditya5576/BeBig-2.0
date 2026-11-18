@@ -281,7 +281,12 @@ export default function ExerciseListScreen() {
 
   const renderItem = useCallback(
     ({ item }: { item: Exercise }) => (
-      <ExerciseCard exercise={item} onPress={handleItemPress} mode="browse" />
+      <ExerciseCard
+        exercise={item}
+        onPress={handleItemPress}
+        mode="browse"
+        hideThumbnail={true}
+      />
     ),
     [handleItemPress]
   );

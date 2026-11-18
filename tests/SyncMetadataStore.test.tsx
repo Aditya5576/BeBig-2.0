@@ -7,6 +7,7 @@ import { UserScope } from '../src/features/auth/types';
 import { WorkoutSession } from '../src/features/workout/types';
 import { WorkoutTemplate } from '../src/features/templates/types';
 import { Exercise } from '../src/features/exercises/types';
+import { platformStorage } from '../src/lib/storage';
 
 describe('Milestone 10 — Checkpoint 3.1: SyncMetadataStore & Crash Recovery Unit Tests', () => {
   const userA: UserScope = { ownerId: 'usr_alpha', ownerType: 'authenticated' };
@@ -14,6 +15,7 @@ describe('Milestone 10 — Checkpoint 3.1: SyncMetadataStore & Crash Recovery Un
   const guestUser: UserScope = { ownerId: 'guest_123', ownerType: 'guest' };
 
   beforeEach(async () => {
+    platformStorage.clearMemoryCache();
     syncMetadataStore.clearMemoryCache();
     workoutStorage.clearMemoryCache();
     templateStorage.clearMemoryCache();

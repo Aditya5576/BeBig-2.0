@@ -214,7 +214,7 @@ describe('BeBig 2.0 — Permanent Product Invariant: Onboarding is One-Time Only
 
     await fireEvent.press(getByTestId('tab-profile'));
 
-    expect(mockPush).toHaveBeenCalledWith('/settings');
+    expect(mockReplace).toHaveBeenCalledWith('/settings');
     expect(mockPush).not.toHaveBeenCalledWith(expect.stringContaining('/onboarding'));
     expect(mockReplace).not.toHaveBeenCalledWith(expect.stringContaining('/onboarding'));
   });

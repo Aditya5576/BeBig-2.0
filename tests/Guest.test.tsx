@@ -5,6 +5,7 @@ import { useOnboardingStore } from '../src/features/onboarding';
 import { guestStorage } from '../src/lib/storage';
 import RootIndex from '../app/index';
 import HomeScreen from '../app/home';
+import SettingsScreen from '../app/settings';
 import AuthScreen from '../app/onboarding/auth';
 
 const mockPush = jest.fn();
@@ -276,8 +277,8 @@ describe('BeBig 2.0 — Guest Mode', () => {
     });
   });
 
-  // HomeScreen UI Adaptations
-  describe('HomeScreen in Guest Mode', () => {
+  // Settings / Profile UI Adaptations
+  describe('SettingsScreen in Guest Mode', () => {
     it('renders guest mode badges and Exit Guest Mode action', async () => {
       useAuthStore.setState({
         status: 'guest',
@@ -290,18 +291,14 @@ describe('BeBig 2.0 — Guest Mode', () => {
       useOnboardingStore.getState().setGoal('build_muscle');
       useOnboardingStore.getState().completeOnboarding();
 
-      const { getByTestId, getByText } = await render(<HomeScreen />);
+      const { getByTestId, getByText } = await render(<SettingsScreen />);
 
-      // Verify guest badge and subtitle
-      expect(getByText(/Guest Mode — Local Device/i)).toBeTruthy();
-      expect(getByText(/Guest Mode — Data stored on this device/i)).toBeTruthy();
-
-      // Verify guest account card
-      expect(getByTestId('guest-account-card')).toBeTruthy();
+      // Verify guest badge and text
+      expect(getByTestId('settings-guest-badge')).toBeTruthy();
       expect(getByText(/Local Device Athlete/i)).toBeTruthy();
 
       // Verify Exit Guest Mode button
-      const exitButton = getByTestId('exit-guest-button');
+      const exitButton = getByTestId('settings-logout-button');
       expect(exitButton).toBeTruthy();
       expect(getByText('Exit Guest Mode')).toBeTruthy();
 

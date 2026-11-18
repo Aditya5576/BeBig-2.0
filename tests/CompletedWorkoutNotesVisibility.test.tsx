@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, fireEvent, waitFor, cleanup } from '@testing-library/react-native';
+import { render, fireEvent, waitFor, cleanup, within } from '@testing-library/react-native';
 import WorkoutSummaryScreen from '../app/workout/summary';
 import WorkoutHistoryDetailScreen from '../app/workout/history/[id]';
 import WorkoutHistoryScreen from '../app/workout/history';
@@ -358,11 +358,11 @@ describe('BeBig 2.0 — Completed Workout Notes Visibility Suite', () => {
 
     const screen = await render(<WorkoutHistoryScreen />);
 
-    // Workout with notes should display badge with "📝 2 notes"
+    // Workout with notes should display badge with 2 notes
     await waitFor(() => {
       const noteBadge = screen.getByTestId(`history-card-notes-indicator-${completedWithNotes.id}`);
       expect(noteBadge).toBeTruthy();
-      expect(screen.getByText('📝 2 notes')).toBeTruthy();
+      expect(within(noteBadge).getByText(/2\s*notes/)).toBeTruthy();
       expect(screen.queryByTestId(`history-card-notes-indicator-${completedNoNotes.id}`)).toBeNull();
     });
   });

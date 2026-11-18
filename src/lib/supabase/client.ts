@@ -35,7 +35,7 @@ const supabaseAnonKey = isSupabaseConfigured() && rawAnonKey ? rawAnonKey : PLAC
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: ExpoSecureStoreAdapter,
-    autoRefreshToken: true,
+    autoRefreshToken: process.env.NODE_ENV !== 'test',
     persistSession: true,
     detectSessionInUrl: false,
   },

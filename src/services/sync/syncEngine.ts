@@ -362,7 +362,7 @@ export class SyncEngine {
           reconciled += outcome.reconciled;
         } catch (err: any) {
           const cloudErr = err instanceof CloudError ? err : classifySupabaseError(err);
-          if (cloudErr.kind === 'validation' || cloudErr.kind === 'permission') {
+          if (cloudErr.kind === 'validation') {
             const qResult = await this.fallbackIndividualTemplates(payloads, validMeta, scope);
             synced += qResult.synced;
             reconciled += qResult.reconciled;

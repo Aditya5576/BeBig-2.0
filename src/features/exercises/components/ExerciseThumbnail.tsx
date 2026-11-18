@@ -75,22 +75,17 @@ export const ExerciseThumbnail = React.memo(function ExerciseThumbnail({
         if (customUri) return customUri;
       }
 
-      // In compact thumbnail / picker / list view (!isDetailView):
-      // For catalog exercises (!exercise.isCustom), suppress external HTTP image requests
-      // to eliminate network thread saturation, memory pressure, and typing lag across FlatLists.
-      // Crisp, instant vector icon fallback renders at 0ms with zero network stalls.
-      if (!isDetailView) {
-        return null;
-      }
-
-      // 2. Check approved curated demonstration catalog (Detail View only)
+      // 2. Check approved curated demonstration catalog
       const resolution = resolveExerciseDemonstration(exercise, catalog);
       if (resolution.status === 'approved' && resolution.demonstration?.thumbnailUri) {
         const thumb = resolution.demonstration.thumbnailUri;
-        return thumb;
+        // Suppress animated GIFs in compact views; allow static webp/jpeg/png thumbnails
+        if (!isGifUri(thumb) || isDetailView) {
+          return thumb;
+        }
       }
 
-      // 3. Provider image fallback for standard library exercises (Detail View only)
+      // 3. Provider image fallback for standard library exercises
       if (!exercise.isCustom && exercise.images && exercise.images.length > 0) {
         const staticImgs = exercise.images.filter(
           (img) => !isGifUri(img.thumbnailUrl) && !isGifUri(img.url)
@@ -100,8 +95,10 @@ export const ExerciseThumbnail = React.memo(function ExerciseThumbnail({
           return mainStatic.thumbnailUrl || mainStatic.url;
         }
         // If only GIF is available and detail view requested, allow it
-        const anyMain = exercise.images.find((img) => img.isMain) || exercise.images[0];
-        return anyMain?.thumbnailUrl || anyMain?.url || null;
+        if (isDetailView) {
+          const anyMain = exercise.images.find((img) => img.isMain) || exercise.images[0];
+          return anyMain?.thumbnailUrl || anyMain?.url || null;
+        }
       }
 
       return null;

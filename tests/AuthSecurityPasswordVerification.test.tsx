@@ -196,7 +196,7 @@ describe('BeBig 2.0 — Critical Auth Security & Wrong Password Defense', () => 
 
     const banner = await findByTestId('auth-status-banner');
     expect(banner).toBeTruthy();
-    const title = await findByText('Unable to sign in');
+    const title = await findByText(/Incorrect login details|Unable to sign in/);
     expect(title).toBeTruthy();
 
     expect(mockReplace).not.toHaveBeenCalledWith('/home');

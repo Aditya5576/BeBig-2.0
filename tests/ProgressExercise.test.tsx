@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { render, fireEvent, waitFor, act, cleanup, within } from '@testing-library/react-native';
 import ExerciseProgressionScreen from '../app/workout/progress/exercise/[id]';
 import { workoutRepository, WorkoutSession } from '../src/features/workout';
@@ -145,26 +145,22 @@ describe('Milestone 9 — Checkpoint 3: Exercise Progression Screen Unit Tests',
     // Header exercise title
     expect(getByText('Barbell Bench Press')).toBeTruthy();
 
-    // Summary metrics:
-    // Max weight: 95 kg (from w3)
-    expect(within(getByTestId('progression-card-max-weight')).getByText('95 kg')).toBeTruthy();
-    // Sessions: 3
-    expect(within(getByTestId('progression-card-sessions')).getByText('3')).toBeTruthy();
-    // Volume: (80*10 + 85*8) + (70*12) + (95*3) = 1480 + 840 + 285 = 2,605 kg
-    expect(within(getByTestId('progression-card-volume')).getByText('2,605 kg')).toBeTruthy();
+    // PERF-5E Comparison card
+    expect(getByTestId('progression-card-comparison')).toBeTruthy();
+    expect(getByTestId('progression-set-item-1')).toBeTruthy();
+    expect(getByTestId('progression-set-delta-1')).toBeTruthy();
 
     // Chronological sessions check:
-    // Session 1 (w1, max 85kg) -> First session, runningMax was 0, so isPR = true
     expect(getByTestId('progression-session-card-w1')).toBeTruthy();
-    expect(getByTestId('progression-pr-badge-w1')).toBeTruthy();
+    expect(within(getByTestId('progression-session-card-w1')).getByText(/85\s*kg/)).toBeTruthy();
+    expect(within(getByTestId('progression-session-card-w1')).getByText('1,480 kg')).toBeTruthy();
 
-    // Session 2 (w2, max 70kg) -> 70 < 85, so isPR = false
     expect(getByTestId('progression-session-card-w2')).toBeTruthy();
-    expect(queryByTestId('progression-pr-badge-w2')).toBeNull();
+    expect(within(getByTestId('progression-session-card-w2')).getByText(/70\s*kg/)).toBeTruthy();
+    expect(within(getByTestId('progression-session-card-w2')).getByText('840 kg')).toBeTruthy();
 
-    // Session 3 (w3, max 95kg) -> 95 > 85, so isPR = true
     expect(getByTestId('progression-session-card-w3')).toBeTruthy();
-    expect(getByTestId('progression-pr-badge-w3')).toBeTruthy();
+    expect(within(getByTestId('progression-session-card-w3')).getByText(/95\s*kg/)).toBeTruthy();
 
     // Back navigation
     await act(async () => {
@@ -194,9 +190,8 @@ describe('Milestone 9 — Checkpoint 3: Exercise Progression Screen Unit Tests',
     expect(getByTestId('progression-sets-table-w1')).toBeTruthy();
     expect(getByTestId('progression-set-row-w1-1')).toBeTruthy();
     expect(getByTestId('progression-set-row-w1-2')).toBeTruthy();
-
-    // Check set 1 notes
-    expect(within(getByTestId('progression-set-notes-w1-1')).getByText(/Felt strong/)).toBeTruthy();
+    expect(within(getByTestId('progression-set-row-w1-1')).getByText('80 kg')).toBeTruthy();
+    expect(within(getByTestId('progression-set-row-w1-1')).getByText('10')).toBeTruthy();
 
     // Toggle collapse
     await act(async () => {

@@ -274,7 +274,7 @@ describe('BeBig 2.0 — Post-Implementation Verification & Benchmark Audit', () 
       expect(filtered.some((e) => e.name === 'Barbell Bench Press')).toBe(true);
 
       const curatedIds = Object.keys(CURATED_EXERCISE_MEDIA_CATALOG);
-      expect(curatedIds.length).toBe(12);
+      expect(curatedIds.length).toBe(281);
       curatedIds.forEach((id) => {
         const demo = CURATED_EXERCISE_MEDIA_CATALOG[id];
         expect(demo).toBeDefined();

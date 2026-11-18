@@ -58,7 +58,7 @@ export function mapAuthError(
   if (
     lowerMsg.includes('enter a valid email') ||
     lowerMsg.includes('valid email address') ||
-    lowerMsg.includes('invalid email')
+    (lowerMsg.includes('invalid email') && !lowerMsg.includes('invalid email or password'))
   ) {
     return {
       title: 'Check your email',
@@ -203,6 +203,7 @@ export function mapAuthError(
       status === 404 ||
       lowerMsg.includes('invalid login credentials') ||
       lowerMsg.includes('invalid credentials') ||
+      lowerMsg.includes('invalid email or password') ||
       lowerMsg.includes('user not found') ||
       lowerMsg.includes('no user found') ||
       lowerMsg.includes('email not found') ||

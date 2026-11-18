@@ -17,7 +17,7 @@ export interface KeyValueStorage {
   setItem: (key: string, value: string) => Promise<void>;
   removeItem: (key: string) => Promise<void>;
   removeItemIfMatchingId?: (key: string, expectedId: string) => Promise<boolean>;
-  clearMemoryCache: () => void;
+  clearMemoryCache: (prefix?: string) => void;
 }
 
 const DB_NAME = 'bebig_db';
@@ -403,8 +403,16 @@ export const platformStorage: KeyValueStorage = {
     return false;
   },
 
-  clearMemoryCache: (): void => {
-    memoryStorage.clear();
+  clearMemoryCache: (prefix?: string): void => {
+    if (prefix) {
+      for (const key of Array.from(memoryStorage.keys())) {
+        if (key.startsWith(prefix)) {
+          memoryStorage.delete(key);
+        }
+      }
+    } else {
+      memoryStorage.clear();
+    }
   },
 };
 

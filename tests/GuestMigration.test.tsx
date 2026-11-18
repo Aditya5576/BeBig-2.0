@@ -86,10 +86,16 @@ describe('GuestMigrationService', () => {
 
   it('migrates active workout locally without setting pending_upload', async () => {
     const mockActive = { id: 'a1', status: 'in_progress' };
+    let savedAuthActive: any = null;
     
     (workoutStorage.getActiveWorkout as jest.Mock).mockImplementation(async (scope: UserScope) => {
       if (scope.ownerType === 'guest') return mockActive;
+      if (scope.ownerType === 'authenticated') return savedAuthActive;
       return null;
+    });
+
+    (workoutStorage.saveActiveWorkout as jest.Mock).mockImplementation(async (workout: any) => {
+      savedAuthActive = workout;
     });
 
     (workoutStorage.getCompletedWorkouts as jest.Mock).mockResolvedValue([]);
@@ -100,10 +106,116 @@ describe('GuestMigrationService', () => {
 
     expect(workoutStorage.saveActiveWorkout).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'a1' }),
-      authScope
+      authScope,
+      expect.any(Object)
     );
     // Ensure active workout does NOT get marked for sync
     expect(syncMetadataStore.markPendingUpload).not.toHaveBeenCalled();
+  });
+
+  describe('Adversarial Guest Migration & Active-Workout Data Loss Prevention', () => {
+    it('1. Active guest workout copied and readback-verified into authScope before guest copy is cleared', async () => {
+      const mockActive = { id: 'active_guest_999', status: 'in_progress', exercises: [{ exerciseId: 'bench', order: 0, actualSets: [] }] };
+      let savedAuthActive: any = null;
+
+      (workoutStorage.getActiveWorkout as jest.Mock).mockImplementation(async (scope: UserScope) => {
+        if (scope.ownerType === 'guest') return mockActive;
+        if (scope.ownerType === 'authenticated') return savedAuthActive;
+        return null;
+      });
+
+      (workoutStorage.saveActiveWorkout as jest.Mock).mockImplementation(async (workout: any) => {
+        savedAuthActive = workout;
+      });
+
+      (workoutStorage.getCompletedWorkouts as jest.Mock).mockResolvedValue([]);
+      (templateStorage.getTemplates as jest.Mock).mockResolvedValue([]);
+      (customExerciseStorage.getCustomExercises as jest.Mock).mockResolvedValue([]);
+
+      await guestMigrationService.migrateGuestDataToUser(guestScope, authScope);
+
+      // Verify saveActiveWorkout was called with matching session ID and auth scope
+      expect(workoutStorage.saveActiveWorkout).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'active_guest_999', ownerId: 'user_456', ownerType: 'authenticated' }),
+        authScope,
+        { allowDifferentSession: true }
+      );
+
+      // Verify guest data is cleared ONLY after successful verification
+      expect(workoutStorage.clearAllWorkouts).toHaveBeenCalledWith(guestScope);
+    });
+
+    it('2. Simulated write failure / interruption during active workout save preserves guest active workout without data loss', async () => {
+      const mockActive = { id: 'active_guest_fragile', status: 'in_progress' };
+
+      (workoutStorage.getActiveWorkout as jest.Mock).mockImplementation(async (scope: UserScope) => {
+        if (scope.ownerType === 'guest') return mockActive;
+        return null; // Simulates readback failure (write didn't persist)
+      });
+
+      (workoutStorage.saveActiveWorkout as jest.Mock).mockRejectedValue(new Error('QuotaExceededError'));
+      (workoutStorage.getCompletedWorkouts as jest.Mock).mockResolvedValue([]);
+      (templateStorage.getTemplates as jest.Mock).mockResolvedValue([]);
+      (customExerciseStorage.getCustomExercises as jest.Mock).mockResolvedValue([]);
+
+      const authUser = { id: 'user_456', email: 'test@test.com' };
+      (guestStorage.getGuestSession as jest.Mock).mockResolvedValue({ id: 'guest_123' });
+
+      await expect(guestMigrationService.runMigrationIfPending(authUser)).rejects.toThrow('QuotaExceededError');
+
+      // Crucial: Guest storage MUST NOT be cleared when active workout migration fails
+      expect(workoutStorage.clearAllWorkouts).not.toHaveBeenCalledWith(guestScope);
+      expect(guestStorage.clearGuestSession).not.toHaveBeenCalled();
+    });
+
+    it('3. Duplicate sign-in / auth callback firing twice executes idempotently without duplicate sessions', async () => {
+      const mockActive = { id: 'active_guest_duplicate', status: 'in_progress' };
+      let savedAuthActive: any = null;
+
+      (workoutStorage.getActiveWorkout as jest.Mock).mockImplementation(async (scope: UserScope) => {
+        if (scope.ownerType === 'guest') return savedAuthActive ? null : mockActive;
+        if (scope.ownerType === 'authenticated') return savedAuthActive;
+        return null;
+      });
+
+      (workoutStorage.saveActiveWorkout as jest.Mock).mockImplementation(async (workout: any) => {
+        savedAuthActive = workout;
+      });
+
+      (workoutStorage.getCompletedWorkouts as jest.Mock).mockResolvedValue([]);
+      (templateStorage.getTemplates as jest.Mock).mockResolvedValue([]);
+      (customExerciseStorage.getCustomExercises as jest.Mock).mockResolvedValue([]);
+
+      // First run succeeds
+      await guestMigrationService.migrateGuestDataToUser(guestScope, authScope);
+      expect(workoutStorage.saveActiveWorkout).toHaveBeenCalledTimes(1);
+
+      // Second immediate invocation (duplicate auth state event)
+      await guestMigrationService.migrateGuestDataToUser(guestScope, authScope);
+      // Does not attempt to re-save already migrated session
+      expect(workoutStorage.saveActiveWorkout).toHaveBeenCalledTimes(1);
+    });
+
+    it('4. Cross-user isolation: User A signout followed by User B signin strictly isolates data', async () => {
+      const userAScope: UserScope = { ownerType: 'authenticated', ownerId: 'user_A' };
+      const userBScope: UserScope = { ownerType: 'authenticated', ownerId: 'user_B' };
+
+      const userAWorkout = { id: 'w_user_a', ownerId: 'user_A', ownerType: 'authenticated' };
+      (workoutStorage.getCompletedWorkouts as jest.Mock).mockImplementation(async (scope: UserScope) => {
+        if (scope.ownerId === 'user_A') return [userAWorkout];
+        return [];
+      });
+
+      // User B migration should NOT touch User A's data
+      (guestStorage.getGuestSession as jest.Mock).mockResolvedValue(null);
+      const migrated = await guestMigrationService.runMigrationIfPending({ id: 'user_B', email: 'b@test.com' });
+      expect(migrated).toBe(false);
+
+      expect(workoutStorage.saveCompletedWorkout).not.toHaveBeenCalledWith(
+        expect.anything(),
+        userBScope
+      );
+    });
   });
 
   it('is idempotent and does not overwrite or duplicate existing authenticated data', async () => {

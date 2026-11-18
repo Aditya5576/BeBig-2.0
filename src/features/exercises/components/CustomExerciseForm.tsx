@@ -39,6 +39,7 @@ import {
   exercisePhotoStorage,
   pickExercisePhoto,
   base64ToUint8Array,
+  downscaleWebImageToMaxEdge,
 } from '../storage/exercisePhotoStorage';
 import {
   exercisePhotoCloudService,
@@ -383,8 +384,9 @@ export function CustomExerciseForm({
               accept="image/jpeg,image/png,image/webp"
               style={{ display: 'none' }}
               ref={fileInputRef}
-              onChange={(e: any) => {
+              onChange={async (e: any) => {
                 const file = e.target?.files?.[0];
+                e.target.value = '';
                 if (!file) return;
                 const validation = exercisePhotoStorage.validatePhotoFile(file);
                 if (!validation.valid) {
@@ -392,11 +394,28 @@ export function CustomExerciseForm({
                   return;
                 }
                 setError(null);
+
+                // Downscale raw web/iPhone camera images via offscreen canvas (max 800px, JPEG 0.82)
+                const downscaled = await downscaleWebImageToMaxEdge(file);
+                if (!isMountedRef.current) return;
+                if (downscaled) {
+                  setPhotoUri(downscaled.dataUrl);
+                  setPhotoData({
+                    uri: downscaled.dataUrl,
+                    base64: downscaled.base64,
+                    mimeType: downscaled.mimeType,
+                    file: downscaled.blob,
+                  });
+                  return;
+                }
+
+                // Graceful fallback if canvas downscaling is unavailable
                 const mimeType = file.type || 'image/jpeg';
                 const previewUrl =
                   typeof URL !== 'undefined' && URL.createObjectURL ? URL.createObjectURL(file) : '';
                 const reader = new FileReader();
                 reader.onloadend = () => {
+                  if (!isMountedRef.current) return;
                   const base64Url = reader.result as string;
                   const commaIdx = base64Url.indexOf(',');
                   const base64 = commaIdx !== -1 ? base64Url.slice(commaIdx + 1) : '';
@@ -409,7 +428,6 @@ export function CustomExerciseForm({
                   });
                 };
                 reader.readAsDataURL(file);
-                e.target.value = '';
               }}
             />
           )}

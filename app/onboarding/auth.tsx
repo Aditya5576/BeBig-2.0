@@ -240,19 +240,25 @@ export default function AuthScreen({
       } else {
         setLoading(false);
         const mapped = mapAuthError(result.message, 'sign_in');
+        const showCreateAccount =
+          result.isNonExistentUser ||
+          result.isInvalidCredentials ||
+          mapped.title === 'Incorrect login details';
         setStatusMessage({
           title: mapped.title,
           text: mapped.message,
           type: mapped.type,
-          action: {
-            label: 'Create Account',
-            onPress: () => {
-              setEmailMode('sign_up');
-              setPassword('');
-              setConfirmPassword('');
-              setStatusMessage(null);
-            },
-          },
+          action: showCreateAccount
+            ? {
+                label: 'Create Account',
+                onPress: () => {
+                  setEmailMode('sign_up');
+                  setPassword('');
+                  setConfirmPassword('');
+                  setStatusMessage(null);
+                },
+              }
+            : undefined,
         });
       }
     }
@@ -664,6 +670,33 @@ export default function AuthScreen({
               Full training features. Data stored locally on this device.
             </Text>
           </View>
+
+          {/* Legal Transparency Links */}
+          <View style={styles.legalSection} testID="auth-legal-section">
+            <Text variant="caption" color="muted" style={styles.legalCaption}>
+              By continuing, you agree to our{' '}
+              <Text
+                variant="caption"
+                color="accent"
+                onPress={() => router.push('/legal/terms')}
+                style={styles.legalLink}
+                testID="auth-terms-of-service-link"
+              >
+                Terms of Service
+              </Text>
+              {' '}and{' '}
+              <Text
+                variant="caption"
+                color="accent"
+                onPress={() => router.push('/legal/privacy')}
+                style={styles.legalLink}
+                testID="auth-privacy-policy-link"
+              >
+                Privacy Policy
+              </Text>
+              .
+            </Text>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </ScreenContainer>
@@ -889,5 +922,19 @@ const createStyles = (colors: any) => StyleSheet.create({
   guestCaption: {
     textAlign: 'center',
     fontSize: 11,
+  },
+  legalSection: {
+    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  legalCaption: {
+    textAlign: 'center',
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  legalLink: {
+    textDecorationLine: 'underline',
   },
 });

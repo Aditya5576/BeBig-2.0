@@ -33,20 +33,31 @@ export function getWorkoutTimestampMs(w: WorkoutSession): number {
  * Evaluates whether two exercise definitions represent the exact same exercise.
  *
  * Rules:
- * 1. If both records have valid exercise IDs, match STRICTLY by exercise ID.
- *    Never match different valid IDs even if their names are identical.
- * 2. If at least one record lacks a valid exercise ID (legacy data), match by
- *    normalized (trimmed, lowercased) exercise name.
+ * 1. If both records have valid exercise IDs that match, return true.
+ * 2. If either record is a custom exercise (ID starting with 'custom_'),
+ *    strictly isolate by ID — never match different custom IDs across names.
+ * 3. For non-custom catalog/template exercises with different IDs, or when at
+ *    least one record lacks a valid ID (legacy data), safely fall back to
+ *    normalized (trimmed, lowercased) exercise name matching.
  */
 export function isExerciseMatch(target: WorkoutExercise, candidate: WorkoutExercise): boolean {
   const targetHasId = hasValidExerciseId(target.exerciseId);
   const candidateHasId = hasValidExerciseId(candidate.exerciseId);
 
   if (targetHasId && candidateHasId) {
-    return target.exerciseId.trim() === candidate.exerciseId.trim();
+    if (target.exerciseId.trim() === candidate.exerciseId.trim()) {
+      return true;
+    }
+
+    // Preserve strict isolation for user custom exercises:
+    const isTargetCustom = target.exerciseId.startsWith('custom_');
+    const isCandidateCustom = candidate.exerciseId.startsWith('custom_');
+    if (isTargetCustom || isCandidateCustom) {
+      return false;
+    }
   }
 
-  // Fallback: only when at least one record lacks a valid ID
+  // Fallback to normalized exercise name for non-custom catalog/template or legacy entries
   const normTarget = target.exerciseName?.trim().toLowerCase() || '';
   const normCandidate = candidate.exerciseName?.trim().toLowerCase() || '';
   return Boolean(normTarget && normCandidate && normTarget === normCandidate);

@@ -4,7 +4,7 @@ import { workoutRepository, workoutStorage } from '../src/features/workout';
 import { templateRepository, templateStorage } from '../src/features/templates';
 import { exerciseRepository, customExerciseStorage } from '../src/features/exercises';
 import { useAuthStore } from '../src/features/auth';
-import { guestStorage } from '../src/lib/storage';
+import { guestStorage, platformStorage } from '../src/lib/storage';
 import HomeScreen from '../app/home';
 
 const mockPush = jest.fn();
@@ -115,6 +115,7 @@ describe('BeBig 2.0 — Cross-User Data Isolation & Storage Scoping', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     mockSecureStore.clear();
+    platformStorage.clearMemoryCache();
     workoutStorage.clearMemoryCache();
     templateStorage.clearMemoryCache();
     customExerciseStorage.clearMemoryCache();

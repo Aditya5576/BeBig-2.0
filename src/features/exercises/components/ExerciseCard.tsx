@@ -18,10 +18,30 @@ import React from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import { useAppTheme } from '../../theme';
 import { Card, Text, Icon, SyncStatusChip } from '../../../components/ui';
+import type { IconName } from '../../../components/ui';
 import { Exercise } from '../types';
 import { ExerciseThumbnail } from './ExerciseThumbnail';
 import { spacing, radii } from '../../../constants/theme';
 import { useEntitySyncStatus } from '../../../services/sync';
+
+function getCategoryBadgeIcon(category?: string, isCustom?: boolean): IconName {
+  if (isCustom) return 'dumbbell';
+  switch ((category || '').toLowerCase()) {
+    case 'cardio':
+      return 'flame';
+    case 'core':
+    case 'abs':
+      return 'bolt';
+    case 'legs':
+    case 'back':
+    case 'chest':
+    case 'shoulders':
+    case 'arms':
+      return 'dumbbell';
+    default:
+      return 'workout';
+  }
+}
 
 function CustomExerciseSyncStatus({ exerciseId }: { exerciseId: string }) {
   const status = useEntitySyncStatus('custom_exercise', exerciseId);
@@ -35,6 +55,7 @@ export interface ExerciseCardProps {
   isSelected?: boolean;
   isAlreadyAdded?: boolean;
   isMultiSelect?: boolean;
+  hideThumbnail?: boolean;
   testID?: string;
   thumbnailTestID?: string;
 }
@@ -55,6 +76,7 @@ function areExerciseCardPropsEqual(prev: ExerciseCardProps, next: ExerciseCardPr
   if (prev.isSelected !== next.isSelected) return false;
   if (prev.isAlreadyAdded !== next.isAlreadyAdded) return false;
   if (prev.isMultiSelect !== next.isMultiSelect) return false;
+  if (prev.hideThumbnail !== next.hideThumbnail) return false;
   if (prev.onPress !== next.onPress) return false;
   if (prev.testID !== next.testID) return false;
   if (prev.thumbnailTestID !== next.thumbnailTestID) return false;
@@ -71,6 +93,7 @@ export const ExerciseCard = React.memo(function ExerciseCard({
   isSelected = false,
   isAlreadyAdded = false,
   isMultiSelect = false,
+  hideThumbnail = false,
   testID,
   thumbnailTestID,
 }: ExerciseCardProps) {
@@ -98,6 +121,12 @@ export const ExerciseCard = React.memo(function ExerciseCard({
   const categoryName = exercise?.categoryName || 'General';
 
   const itemTestId = testID || (mode === 'browse' ? `exercise-item-${exerciseId}` : `picker-exercise-${exerciseId}`);
+  const addedBadgeTestId = testID
+    ? testID.replace('-exercise-', '-added-badge-')
+    : `picker-added-badge-${exerciseId}`;
+  const checkboxTestId = testID
+    ? testID.replace('-exercise-', '-checkbox-')
+    : `picker-checkbox-${exerciseId}`;
 
   return (
     <Pressable
@@ -113,11 +142,28 @@ export const ExerciseCard = React.memo(function ExerciseCard({
         ]}
       >
         <View style={styles.cardHeader}>
-          <ExerciseThumbnail
-            exercise={exercise}
-            size={42}
-            testID={thumbnailTestID || `${itemTestId}-thumbnail`}
-          />
+          {hideThumbnail ? (
+            <View
+              testID={thumbnailTestID || `${itemTestId}-badge`}
+              style={[
+                styles.vectorBadge,
+                exercise?.isCustom ? styles.vectorBadgeCustom : null,
+              ]}
+            >
+              <Icon
+                name={getCategoryBadgeIcon(exercise?.category, exercise?.isCustom)}
+                size={18}
+                strokeWidth={2}
+                color={exercise?.isCustom ? colors.primary : colors.textSecondary}
+              />
+            </View>
+          ) : (
+            <ExerciseThumbnail
+              exercise={exercise}
+              size={42}
+              testID={thumbnailTestID || `${itemTestId}-thumbnail`}
+            />
+          )}
 
           <View style={styles.titleContainer}>
             <View style={styles.titleWithBadge}>
@@ -150,14 +196,14 @@ export const ExerciseCard = React.memo(function ExerciseCard({
               <Icon name="chevronRight" size={18} strokeWidth={2.2} color={colors.textMuted} />
             </View>
           ) : isAlreadyAdded ? (
-            <View style={styles.addedBadge} testID={`picker-added-badge-${exerciseId}`}>
+            <View style={styles.addedBadge} testID={addedBadgeTestId}>
               <Text variant="caption" color="muted" style={styles.badgeText}>
                 ADDED
               </Text>
             </View>
           ) : isMultiSelect ? (
             <View
-              testID={`picker-checkbox-${exerciseId}`}
+              testID={checkboxTestId}
               style={[
                 styles.checkboxContainer,
                 isSelected ? styles.checkboxSelected : styles.checkboxUnselected,
@@ -217,6 +263,21 @@ const createStyles = (colors: any) =>
       flexDirection: 'row',
       alignItems: 'center',
       gap: spacing.sm,
+    },
+    vectorBadge: {
+      width: 42,
+      height: 42,
+      borderRadius: radii.md,
+      backgroundColor: colors.surfaceSubtle,
+      borderColor: colors.borderLight,
+      borderWidth: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0,
+    },
+    vectorBadgeCustom: {
+      backgroundColor: 'rgba(0, 229, 153, 0.08)',
+      borderColor: 'rgba(0, 229, 153, 0.35)',
     },
     titleContainer: {
       flex: 1,

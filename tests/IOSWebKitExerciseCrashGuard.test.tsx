@@ -25,6 +25,11 @@ import { ExerciseCard } from '../src/features/exercises/components/ExerciseCard'
 import { ErrorBoundary } from '../src/components/ui/ErrorBoundary';
 import { exerciseRepository } from '../src/features/exercises/services/exerciseRepository';
 import { customExerciseStorage } from '../src/features/exercises/storage/customExerciseStorage';
+import {
+  computeDownscaledDimensions,
+  downscaleWebImageToMaxEdge,
+  MAX_WEB_IMAGE_EDGE_PX,
+} from '../src/features/exercises/storage/exercisePhotoStorage';
 import { Exercise } from '../src/features/exercises/types';
 import CreateCustomExerciseScreen from '../app/exercises/new';
 
@@ -529,6 +534,218 @@ describe('iOS WebKit Exercise Crash Guard & SPA Stability', () => {
       expect(regex.test('/workout/history')).toBe(true);
       expect(regex.test('/settings')).toBe(true);
       expect(regex.test('/unknown-deep-route-404')).toBe(true);
+    });
+  });
+
+  describe('9. iOS WebKit Jetsam Zero-Bitmap & Picker Search Resilience (v2.4.2)', () => {
+    it('renders 0 <Image> elements in ExercisePickerModal even when custom exercises have high-res photo URIs', async () => {
+      const customWithPhotos: Exercise[] = [
+        {
+          id: 'custom_photo_1',
+          name: 'Custom Cable Fly 12MP',
+          description: 'Custom exercise with full-res iPhone photo',
+          category: 'chest',
+          categoryName: 'Chest',
+          primaryMuscles: [{ id: 'm1', name: 'Pectoralis Major' }],
+          secondaryMuscles: [],
+          equipment: [{ id: 'eq1', name: 'Cable' }],
+          sourceProvider: 'custom',
+          isCustom: true,
+          photoPath: 'user_1/custom_photo_1/photo.jpg',
+          images: [
+            {
+              id: 'img_1',
+              url: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/',
+              thumbnailUrl: 'https://cdn.example.com/custom-4032x3024.jpg',
+              isMain: true,
+            },
+          ],
+        },
+        {
+          id: 'custom_photo_2',
+          name: 'Custom Pendulum Squat 12MP',
+          description: 'Another custom photo exercise',
+          category: 'legs',
+          categoryName: 'Legs',
+          primaryMuscles: [{ id: 'm2', name: 'Quadriceps' }],
+          secondaryMuscles: [],
+          equipment: [{ id: 'eq2', name: 'Machine' }],
+          sourceProvider: 'custom',
+          isCustom: true,
+          photoPath: 'user_1/custom_photo_2/photo.jpg',
+          images: [
+            {
+              id: 'img_2',
+              url: 'https://storage.supabase.co/exercise-photos/4032x3024.jpg',
+              isMain: true,
+            },
+          ],
+        },
+      ];
+
+      const getCachedSpy = jest
+        .spyOn(exerciseRepository, 'getCachedExercises')
+        .mockReturnValue(customWithPhotos);
+      const getExercisesSpy = jest
+        .spyOn(exerciseRepository, 'getExercises')
+        .mockResolvedValue({
+          exercises: customWithPhotos,
+          totalCount: customWithPhotos.length,
+          hasMore: false,
+          nextOffset: undefined,
+        });
+
+      try {
+        const rendered = await render(
+          <ExercisePickerModal
+            visible={true}
+            onClose={jest.fn()}
+            onSelectExercises={jest.fn()}
+            selectedExerciseIds={[]}
+            multiSelect={true}
+            recentExercises={customWithPhotos}
+          />
+        );
+
+        await waitFor(() => {
+          expect(rendered.getByTestId('picker-exercise-custom_photo_1')).toBeTruthy();
+          expect(rendered.getByTestId('picker-recent-exercise-custom_photo_1')).toBeTruthy();
+        });
+
+        // CRITICAL JETSAM INVARIANT: 0 <Image> host elements decoded in picker rows & recent rows
+        const countImageNodes = (node: any): number => {
+          if (!node) return 0;
+          if (Array.isArray(node)) {
+            return node.reduce((sum, child) => sum + countImageNodes(child), 0);
+          }
+          const selfCount = node.type === 'Image' ? 1 : 0;
+          return selfCount + countImageNodes(node.children);
+        };
+        expect(countImageNodes(rendered.toJSON())).toBe(0);
+        expect(rendered.queryByTestId('picker-thumbnail-custom_photo_1-image')).toBeNull();
+        expect(rendered.queryByTestId('picker-recent-thumbnail-custom_photo_1-image')).toBeNull();
+      } finally {
+        getCachedSpy.mockRestore();
+        getExercisesSpy.mockRestore();
+      }
+    });
+
+    it('resets searchQuery cleanly to "" whenever ExercisePickerModal closes and reopens', async () => {
+      const onClose = jest.fn();
+      const onSelect = jest.fn();
+
+      const { getByTestId, rerender } = await render(
+        <ExercisePickerModal
+          visible={true}
+          onClose={onClose}
+          onSelectExercise={onSelect}
+          selectedExerciseIds={[]}
+        />
+      );
+
+      const searchInput = getByTestId('picker-search-input');
+      await fireEvent.changeText(searchInput, 'Incline Barbell Press');
+      expect(getByTestId('picker-search-input').props.value).toBe('Incline Barbell Press');
+
+      // Close modal
+      await rerender(
+        <ExercisePickerModal
+          visible={false}
+          onClose={onClose}
+          onSelectExercise={onSelect}
+          selectedExerciseIds={[]}
+        />
+      );
+
+      // Reopen modal — searchQuery MUST be cleanly reset to ""
+      await rerender(
+        <ExercisePickerModal
+          visible={true}
+          onClose={onClose}
+          onSelectExercise={onSelect}
+          selectedExerciseIds={[]}
+        />
+      );
+
+      await waitFor(() => {
+        expect(getByTestId('picker-search-input').props.value).toBe('');
+      });
+    });
+
+    it('filters smoothly for single-character and multi-word search queries without throwing', async () => {
+      const mock500 = generate500Exercises();
+      const getCachedSpy = jest
+        .spyOn(exerciseRepository, 'getCachedExercises')
+        .mockImplementation((opts) => {
+          if (!opts?.query) return mock500.slice(0, 30);
+          const q = opts.query.toLowerCase();
+          return mock500.filter((e) => e.name.toLowerCase().includes(q)).slice(0, 30);
+        });
+
+      try {
+        const { getByTestId } = await render(
+          <ExercisePickerModal
+            visible={true}
+            onClose={jest.fn()}
+            onSelectExercise={jest.fn()}
+            selectedExerciseIds={[]}
+          />
+        );
+
+        const searchInput = getByTestId('picker-search-input');
+
+        // Single-character rapid typing
+        await fireEvent.changeText(searchInput, 'b');
+        expect(getByTestId('picker-search-input').props.value).toBe('b');
+
+        // Multi-word query
+        await fireEvent.changeText(searchInput, 'barbell squat');
+        expect(getByTestId('picker-search-input').props.value).toBe('barbell squat');
+
+        await waitFor(() => {
+          const list = getByTestId('picker-exercise-list');
+          expect(list.props.data.length).toBeGreaterThan(0);
+          expect(
+            list.props.data.every((item: Exercise) =>
+              item.name.toLowerCase().includes('barbell squat')
+            )
+          ).toBe(true);
+        });
+
+        // Clear search
+        await fireEvent.changeText(searchInput, '');
+        expect(getByTestId('picker-search-input').props.value).toBe('');
+      } finally {
+        getCachedSpy.mockRestore();
+      }
+    });
+
+    it('downscales 12MP iPhone photos (4032x3024) to <= 800px longest edge and handles non-DOM gracefully', async () => {
+      // Landscape 12MP iPhone camera photo -> 800x600
+      expect(computeDownscaledDimensions(4032, 3024, MAX_WEB_IMAGE_EDGE_PX)).toEqual({
+        width: 800,
+        height: 600,
+      });
+      // Portrait 12MP iPhone camera photo -> 600x800
+      expect(computeDownscaledDimensions(3024, 4032, MAX_WEB_IMAGE_EDGE_PX)).toEqual({
+        width: 600,
+        height: 800,
+      });
+      // Small image is never upscaled
+      expect(computeDownscaledDimensions(640, 480, MAX_WEB_IMAGE_EDGE_PX)).toEqual({
+        width: 640,
+        height: 480,
+      });
+
+      // In Node/Jest without HTMLCanvasElement, returns null safely instead of crashing
+      const result = await downscaleWebImageToMaxEdge('data:image/jpeg;base64,abc');
+      expect(result).toBeNull();
+    });
+
+    it('bumps public/sw.js cache version to bebig-pwa-v2.4.2', () => {
+      const swPath = path.resolve(__dirname, '../public/sw.js');
+      const swContent = fs.readFileSync(swPath, 'utf8');
+      expect(swContent).toContain("const CACHE_NAME = 'bebig-pwa-v2.4.2';");
     });
   });
 });

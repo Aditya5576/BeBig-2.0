@@ -160,16 +160,16 @@ describe('BeBig 2.0 — Issue #4: Save Any Completed Workout from History as Tem
     const { getByTestId, findByTestId, findByText } = await render(<WorkoutHistoryDetailScreen />);
 
     // 2. Action button visible
-    const saveBtn = await findByTestId('history-save-template-button');
+    const saveBtn = await findByTestId('save-as-template-button');
     expect(saveBtn).toBeTruthy();
 
     // 3. Tap opens modal
     fireEvent.press(saveBtn);
-    const modal = await findByTestId('template-save-modal');
+    const modal = await findByTestId('save-template-modal');
     expect(modal).toBeTruthy();
 
     // 4. Edit name
-    const input = getByTestId('input-template-name');
+    const input = getByTestId('template-name-input');
     expect(input.props.value).toBe('Summer Heavy Pull');
     fireEvent.changeText(input, 'Saved Pull Template');
 
@@ -178,8 +178,8 @@ describe('BeBig 2.0 — Issue #4: Save Any Completed Workout from History as Tem
     fireEvent.press(confirmBtn);
 
     // 6. Success banner shown
-    expect(await findByTestId('save-template-success')).toBeTruthy();
-    expect(await findByText('✓ Saved to My Templates!')).toBeTruthy();
+    expect(await findByTestId('template-saved-badge')).toBeTruthy();
+    expect(await findByText('✓ Saved as Template')).toBeTruthy();
 
     // 7. Verify template created in templateRepository
     const templates = await templateRepository.getTemplates();
@@ -233,7 +233,7 @@ describe('BeBig 2.0 — Issue #4: Save Any Completed Workout from History as Tem
     mockParams = { id: 'guest_hist_1' };
 
     const { findByTestId } = await render(<WorkoutHistoryDetailScreen />);
-    const saveBtn = await findByTestId('history-save-template-button');
+    const saveBtn = await findByTestId('save-as-template-button');
     fireEvent.press(saveBtn);
 
     const confirmBtn = await findByTestId('confirm-save-template-button');
@@ -271,14 +271,14 @@ describe('BeBig 2.0 — Issue #4: Save Any Completed Workout from History as Tem
 
     const { findByTestId, findByText } = await render(<WorkoutHistoryDetailScreen />);
 
-    const saveBtn = await findByTestId('history-save-template-button');
+    const saveBtn = await findByTestId('save-as-template-button');
     fireEvent.press(saveBtn);
 
     const confirmBtn = await findByTestId('confirm-save-template-button');
     fireEvent.press(confirmBtn);
 
     expect(await findByTestId('save-template-error')).toBeTruthy();
-    expect(await findByText('⚠ Repository write error')).toBeTruthy();
+    expect(await findByText('Repository write error')).toBeTruthy();
 
     const stored = await workoutRepository.getCompletedWorkoutById('error_hist_workout');
     expect(stored).not.toBeNull();

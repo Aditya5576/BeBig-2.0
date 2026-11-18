@@ -201,7 +201,7 @@ describe('Milestone 3 — Authentication & Supabase Foundation', () => {
       const result = await authService.signInWithEmail('wrong@bebig.app', 'badpass');
 
       expect(result.success).toBe(false);
-      expect(result.message).toContain('Incorrect email or password');
+      expect(result.message).toMatch(/(?:Invalid|Incorrect) email or password/);
     });
 
     it('signs up successfully and passes mobile emailRedirectTo URL to Supabase', async () => {

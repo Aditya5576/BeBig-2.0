@@ -239,20 +239,20 @@ describe('Issue #6 — Active Rest Timer: +10 / +20 Seconds', () => {
 
       await waitFor(() => {
         expect(getByTestId('rest-timer-banner')).toBeTruthy();
-        expect(getByTestId('extend-rest-10-button')).toBeTruthy();
-        expect(getByTestId('extend-rest-20-button')).toBeTruthy();
+        expect(getByTestId('extend-rest-minus-15-button')).toBeTruthy();
+        expect(getByTestId('extend-rest-plus-15-button')).toBeTruthy();
       });
 
-      // Tap +10s
-      fireEvent.press(getByTestId('extend-rest-10-button'));
+      // Tap +15s
+      fireEvent.press(getByTestId('extend-rest-plus-15-button'));
 
       await waitFor(async () => {
         const saved = await workoutStorage.getActiveWorkout();
-        expect(saved?.activeRestTimer?.durationSeconds).toBe(70);
+        expect(saved?.activeRestTimer?.durationSeconds).toBe(75);
       });
 
-      // Tap +20s
-      fireEvent.press(getByTestId('extend-rest-20-button'));
+      // Tap +15s again
+      fireEvent.press(getByTestId('extend-rest-plus-15-button'));
 
       await waitFor(async () => {
         const saved = await workoutStorage.getActiveWorkout();

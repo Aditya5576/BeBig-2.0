@@ -15,6 +15,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { platformStorage } from '../../../lib/storage';
 
 export const MAX_PHOTO_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
+export const MAX_WEB_IMAGE_EDGE_PX = 800;
+export const WEB_IMAGE_JPEG_QUALITY = 0.82;
 export const ALLOWED_PHOTO_MIME_TYPES = [
   'image/jpeg',
   'image/png',
@@ -22,6 +24,142 @@ export const ALLOWED_PHOTO_MIME_TYPES = [
 ];
 
 export const PHOTO_STORAGE_PREFIX = 'bebig.exercise_photo.';
+
+export interface DownscaledWebImageResult {
+  dataUrl: string;
+  base64: string;
+  mimeType: 'image/jpeg';
+  width: number;
+  height: number;
+  fileSize: number;
+  blob?: Blob;
+}
+
+/**
+ * Computes target dimensions constrained to maxEdge on the longest side
+ * without upscaling images already within bounds.
+ */
+export function computeDownscaledDimensions(
+  naturalWidth: number,
+  naturalHeight: number,
+  maxEdge: number = MAX_WEB_IMAGE_EDGE_PX,
+): { width: number; height: number } {
+  const safeW = Math.max(1, Math.round(naturalWidth || 1));
+  const safeH = Math.max(1, Math.round(naturalHeight || 1));
+  const longest = Math.max(safeW, safeH);
+
+  if (longest <= maxEdge) {
+    return { width: safeW, height: safeH };
+  }
+
+  const scale = maxEdge / longest;
+  return {
+    width: Math.max(1, Math.round(safeW * scale)),
+    height: Math.max(1, Math.round(safeH * scale)),
+  };
+}
+
+/**
+ * Downscales an image on Web using an offscreen HTMLCanvasElement so raw 12MP
+ * iPhone camera photos (4032x3024 ≈ 48MB uncompressed GPU bitmap) never bloat
+ * IndexedDB, Supabase Storage, or iOS WebKit memory.
+ *
+ * Returns null gracefully in non-DOM / native / unsupported environments.
+ */
+export async function downscaleWebImageToMaxEdge(
+  source: Blob | string,
+  maxEdge: number = MAX_WEB_IMAGE_EDGE_PX,
+  quality: number = WEB_IMAGE_JPEG_QUALITY,
+): Promise<DownscaledWebImageResult | null> {
+  if (
+    typeof document === 'undefined' ||
+    typeof document.createElement !== 'function' ||
+    typeof Image === 'undefined'
+  ) {
+    return null;
+  }
+
+  let objectUrlToRevoke: string | null = null;
+  let imageSrc = '';
+
+  if (typeof source === 'string') {
+    imageSrc = source;
+  } else if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+    objectUrlToRevoke = URL.createObjectURL(source);
+    imageSrc = objectUrlToRevoke;
+  } else {
+    return null;
+  }
+
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.crossOrigin = 'anonymous';
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error('Failed to decode image for downscaling.'));
+      el.src = imageSrc;
+    });
+
+    const natW = img.naturalWidth || img.width;
+    const natH = img.naturalHeight || img.height;
+    if (!natW || !natH) {
+      return null;
+    }
+
+    const { width, height } = computeDownscaledDimensions(natW, natH, maxEdge);
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+
+    const ctx = canvas.getContext ? canvas.getContext('2d') : null;
+    if (!ctx) {
+      canvas.width = 0;
+      canvas.height = 0;
+      return null;
+    }
+
+    ctx.drawImage(img, 0, 0, width, height);
+    const dataUrl = canvas.toDataURL('image/jpeg', quality);
+    const commaIdx = dataUrl.indexOf(',');
+    const base64 = commaIdx !== -1 ? dataUrl.slice(commaIdx + 1) : '';
+    const fileSize = Math.round(base64.length * 0.75);
+
+    let blob: Blob | undefined;
+    if (typeof canvas.toBlob === 'function') {
+      blob = await new Promise<Blob | undefined>((resolve) => {
+        try {
+          canvas.toBlob((b) => resolve(b || undefined), 'image/jpeg', quality);
+        } catch {
+          resolve(undefined);
+        }
+      });
+    }
+
+    // Explicitly release WebKit GPU canvas backing store immediately
+    canvas.width = 0;
+    canvas.height = 0;
+
+    return {
+      dataUrl,
+      base64,
+      mimeType: 'image/jpeg',
+      width,
+      height,
+      fileSize,
+      blob,
+    };
+  } catch {
+    return null;
+  } finally {
+    if (objectUrlToRevoke && typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+      try {
+        URL.revokeObjectURL(objectUrlToRevoke);
+      } catch {
+        // Ignore cleanup errors
+      }
+    }
+  }
+}
 
 export interface PhotoValidationResult {
   valid: boolean;
@@ -117,8 +255,8 @@ export async function pickExercisePhoto(options?: {
     }
 
     const asset = result.assets[0];
-    const uri = asset.uri;
-    const base64 = asset.base64 || undefined;
+    let uri = asset.uri;
+    let base64 = asset.base64 || undefined;
 
     let mimeType = asset.mimeType || 'image/jpeg';
     const lowerUri = (asset.fileName || uri || '').toLowerCase();
@@ -134,6 +272,28 @@ export async function pickExercisePhoto(options?: {
     }
 
     let fileSize = asset.fileSize;
+
+    // On Web (including iOS Safari / PWA), downscale raw camera photos via offscreen canvas
+    // to max 800px longest edge (image/jpeg, quality 0.82) before storing or uploading.
+    if (Platform.OS === 'web') {
+      const sourceForDownscale = base64
+        ? `data:${mimeType};base64,${base64}`
+        : uri;
+      if (sourceForDownscale) {
+        const downscaled = await downscaleWebImageToMaxEdge(
+          sourceForDownscale,
+          MAX_WEB_IMAGE_EDGE_PX,
+          WEB_IMAGE_JPEG_QUALITY,
+        );
+        if (downscaled) {
+          uri = downscaled.dataUrl;
+          base64 = downscaled.base64;
+          mimeType = downscaled.mimeType;
+          fileSize = downscaled.fileSize;
+        }
+      }
+    }
+
     if (fileSize === undefined && base64) {
       fileSize = Math.round(base64.length * 0.75);
     }

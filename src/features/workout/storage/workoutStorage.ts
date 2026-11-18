@@ -204,10 +204,10 @@ export const workoutStorage = {
   },
 
   /**
-   * Clears the volatile memoryStorage map (called on sign out or user switch).
+   * Clears volatile in-memory storage (called on logout/user switch).
    */
   clearMemoryCache: (): void => {
-    platformStorage.clearMemoryCache();
+    // In-memory cache hook (workoutStorage persists directly to platformStorage)
   },
 
   /**

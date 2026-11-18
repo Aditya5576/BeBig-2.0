@@ -37,6 +37,22 @@ jest.mock('expo-router', () => ({
   },
 }));
 
+jest.mock('react-native-safe-area-context', () => {
+  const actual = jest.requireActual('react-native-safe-area-context');
+  return {
+    ...actual,
+    useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+  };
+});
+
+jest.mock('../src/lib/supabase', () => {
+  const actual = jest.requireActual('../src/lib/supabase');
+  return {
+    ...actual,
+    isSupabaseConfigured: () => true,
+  };
+});
+
 jest.mock('expo-secure-store', () => ({
   getItemAsync: jest.fn(async () => null),
   setItemAsync: jest.fn(async () => {}),
@@ -47,6 +63,7 @@ describe('BeBig 2.0 — Surgical Product UX, Profile & Low-Network Hardening Pas
   let currentProfile: any;
 
   beforeEach(async () => {
+    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
     jest.clearAllMocks();
     if (typeof localStorage !== 'undefined') {
       localStorage.clear();
@@ -131,6 +148,7 @@ describe('BeBig 2.0 — Surgical Product UX, Profile & Low-Network Hardening Pas
 
   afterEach(async () => {
     await cleanup();
+    await new Promise((resolve) => setTimeout(resolve, 50));
   });
 
   // 1. NAVIGATION & HOME CLEANUP
@@ -185,20 +203,20 @@ describe('BeBig 2.0 — Surgical Product UX, Profile & Low-Network Hardening Pas
         expect(getByTestId('edit-profile-button')).toBeTruthy();
       });
 
-      fireEvent.press(getByTestId('edit-profile-button'));
+      await fireEvent.press(getByTestId('edit-profile-button'));
 
       await waitFor(() => {
         expect(getByTestId('input-display-name')).toBeTruthy();
       });
 
-      fireEvent.changeText(getByTestId('input-display-name'), 'Aditya The Beast');
-
-      fireEvent.press(getByTestId('save-profile-button'));
+      await fireEvent.changeText(getByTestId('input-display-name'), 'Aditya The Beast');
+      await fireEvent.press(getByTestId('save-profile-button'));
 
       await waitFor(() => {
         expect(getByTestId('save-success-banner')).toBeTruthy();
-        expect(getByTestId('profile-header-name').props.children).toBe('Aditya The Beast');
       });
+
+      expect(getByTestId('profile-header-name').props.children).toBe('Aditya The Beast');
     });
 
     it('updates auth store user profile when updateUserProfile is called', () => {
@@ -348,7 +366,7 @@ describe('BeBig 2.0 — Surgical Product UX, Profile & Low-Network Hardening Pas
     it('falls back to cached candidate pool on slow network or timeout without endless spinner', async () => {
       // Mock provider to hang/timeout
       const mockHangingProvider = {
-        listExercises: jest.fn(() => new Promise((resolve) => setTimeout(resolve, 10000))),
+        listExercises: jest.fn(() => new Promise(() => {})),
         getExerciseById: jest.fn(() => Promise.resolve(null)),
       };
       exerciseRepository.setProvider(mockHangingProvider as any);

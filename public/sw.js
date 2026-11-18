@@ -11,7 +11,7 @@
  * - NEVER force-reloads client pages (active workouts are never disrupted)
  */
 
-const CACHE_NAME = 'bebig-pwa-v2.4.1'; // CACHE_NAME = 'bebig-pwa-v1'
+const CACHE_NAME = 'bebig-pwa-v2.4.2'; // CACHE_NAME = 'bebig-pwa-v1'
 
 // Minimal core assets precached on install
 const PRECACHE_ASSETS = [

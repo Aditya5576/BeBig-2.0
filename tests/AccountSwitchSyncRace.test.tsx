@@ -14,6 +14,7 @@ import { UserScope } from '../src/features/auth/types';
 import { WorkoutSession } from '../src/features/workout/types';
 import { WorkoutTemplate } from '../src/features/templates/types';
 import { Exercise } from '../src/features/exercises/types';
+import { platformStorage } from '../src/lib/storage';
 
 describe('Milestone 10 — Critical Account-Switch Sync Race Tests', () => {
   const userA: UserScope = { ownerId: 'usr_alpha_111', ownerType: 'authenticated' };
@@ -31,6 +32,7 @@ describe('Milestone 10 — Critical Account-Switch Sync Race Tests', () => {
   let engine: SyncEngine;
 
   beforeEach(async () => {
+    platformStorage.clearMemoryCache();
     syncMetadataStore.clearMemoryCache();
     workoutStorage.clearMemoryCache();
     templateStorage.clearMemoryCache();

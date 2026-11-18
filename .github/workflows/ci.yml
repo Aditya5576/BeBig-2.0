@@ -1,0 +1,54 @@
+name: CI Quality Gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality-gate:
+    name: CI Quality Gate (Tests, Build, Lint, Types, Secrets)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Secret & Backup Leak Guard
+        run: |
+          TRACKED_SECRETS=$(git ls-files supabase/.temp/ '.env*' ':(exclude).env.example')
+          if [ -n "$TRACKED_SECRETS" ]; then
+            echo "::error::Detected forbidden tracked secrets or temp files:"
+            echo "$TRACKED_SECRETS"
+            exit 1
+          fi
+          echo "Secret & backup containment verified: zero leaks detected."
+
+      - name: Install dependencies (clean install)
+        run: npm ci
+
+      - name: TypeScript typecheck
+        run: npm run typecheck
+
+      - name: ESLint check
+        run: npm run lint
+
+      - name: Full test suite (114 suites)
+        run: npx jest --maxWorkers=2 --testTimeout=15000 --forceExit
+
+      - name: Production web build
+        run: npm run build:web

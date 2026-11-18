@@ -1,5 +1,5 @@
 import { useAppTheme } from '../../theme';
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useDeferredValue } from 'react';
 import {
   Modal,
   View,
@@ -63,6 +63,7 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
   const [hasMore, setHasMore] = useState(false);
   const [nextOffset, setNextOffset] = useState<number | undefined>(undefined);
   const [searchQuery, setSearchQuery] = useState('');
+  const deferredSearchQuery = useDeferredValue(searchQuery);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedSource, setSelectedSource] = useState<'all' | 'custom' | 'external'>('all');
 
@@ -117,28 +118,30 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
     };
   }, [visible, propsRecentExercises, showRecentlyUsed]);
 
-  // Filter recently used exercises matching current search & category filters
+  // Filter recently used exercises matching current deferred search & category filters
   const visibleRecentExercises = useMemo(() => {
     if (recentExercisesList.length === 0) return [];
 
+    const trimmedQuery = deferredSearchQuery.trim();
     return recentExercisesList.filter((item) => {
       if (selectedSource === 'custom' && !item.isCustom) return false;
       if (selectedSource === 'external' && item.isCustom) return false;
       if (selectedCategory !== 'all' && item.category !== selectedCategory) return false;
 
-      if (searchQuery.trim().length > 0) {
-        const query = searchQuery.trim().toLowerCase();
-        const matchesName = item.name.toLowerCase().includes(query);
-        const matchesCat = item.categoryName.toLowerCase().includes(query);
+      if (trimmedQuery.length > 0) {
+        const query = trimmedQuery.toLowerCase();
+        const matchesName = (item.name || '').toLowerCase().includes(query);
+        const matchesCat = (item.categoryName || '').toLowerCase().includes(query);
         if (!matchesName && !matchesCat) return false;
       }
 
       return true;
     });
-  }, [recentExercisesList, selectedSource, selectedCategory, searchQuery]);
+  }, [recentExercisesList, selectedSource, selectedCategory, deferredSearchQuery]);
 
-  // Reset transient picker state when modal opens or closes
+  // Reset search query & transient state cleanly on every open/close visibility transition
   useEffect(() => {
+    setSearchQuery('');
     if (!visible) {
       setExercises([]);
       setLoading(false);
@@ -147,13 +150,19 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
       setIsCreatingCustom(false);
       setHasMore(false);
       setNextOffset(undefined);
+    }
+  }, [visible]);
+
+  // Load and filter exercises using deferredSearchQuery so WebKit keystrokes never block main thread
+  useEffect(() => {
+    if (!visible) {
       return;
     }
 
     let isMounted = true;
 
     // Instant local cache check first to avoid blocking user during weak network / offline
-    const trimmed = searchQuery.trim();
+    const trimmed = deferredSearchQuery.trim();
     const cachedInitial = exerciseRepository.getCachedExercises({
       query: trimmed || undefined,
       category: selectedCategory !== 'all' ? selectedCategory : undefined,
@@ -211,22 +220,11 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
       isMounted = false;
       clearTimeout(timeoutId);
     };
-  }, [visible, searchQuery, selectedCategory, selectedSource]);
+  }, [visible, deferredSearchQuery, selectedCategory, selectedSource]);
 
-  const handleSearchChange = (text: string) => {
+  const handleSearchChange = useCallback((text: string) => {
     setSearchQuery(text);
-    if (!visible) return;
-    const trimmed = text.trim();
-    const cached = exerciseRepository.getCachedExercises({
-      query: trimmed || undefined,
-      category: selectedCategory !== 'all' ? selectedCategory : undefined,
-      source: selectedSource,
-    });
-    setExercises(cached);
-    if (cached.length > 0) {
-      setLoading(false);
-    }
-  };
+  }, []);
 
   const handleCategorySelect = (cat: string) => {
     setSelectedCategory(cat);
@@ -284,6 +282,7 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
   };
 
   const handleCancelAndClose = useCallback(() => {
+    setSearchQuery('');
     setSelectedExercisesMap(new Map());
     setSelectionOrder([]);
     onClose();
@@ -293,6 +292,7 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
     if (selectedExerciseIds.includes(item.id)) return;
 
     if (!isMultiSelect) {
+      setSearchQuery('');
       onSelectExercise?.(item);
       onClose();
       return;
@@ -330,6 +330,7 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
       orderedExercises.forEach((ex) => onSelectExercise(ex));
     }
 
+    setSearchQuery('');
     setSelectedExercisesMap(new Map());
     setSelectionOrder([]);
     onClose();
@@ -349,6 +350,7 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
         thumbnailTestID={`${testIdPrefix}-thumbnail-${item.id}`}
         exercise={item}
         mode="select"
+        hideThumbnail={true}
         isSelected={isSelected}
         isAlreadyAdded={isAlreadyAdded}
         isMultiSelect={isMultiSelect}
@@ -576,6 +578,11 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
           </View>
 
           {/* Content — Permanently mounted to preserve virtual keyboard and search focus */}
+          <ErrorBoundary
+            testID="picker-list-error-boundary"
+            fallbackTitle="Unable to display exercises"
+            fallbackMessage="An error occurred while rendering the exercise list. Tap below to retry."
+          >
           <FlatList
             testID="picker-exercise-list"
             data={exercises}
@@ -625,6 +632,7 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
               ) : null
             }
           />
+          </ErrorBoundary>
 
           {/* Sticky Bottom Action Bar for Multi-select */}
           {isMultiSelect && (

@@ -1,9 +1,9 @@
 import { useAppTheme, useThemeStore } from '../src/features/theme';
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, TextInput, Image, Alert, Platform } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable, TextInput, Image, Alert, Platform, Modal } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ScreenContainer, ScreenScrollView, Text, Button, Card, Icon, BrandLogoBadge } from '../src/components/ui';
-import { useAuthStore } from '../src/features/auth';
+import { useAuthStore, eraseLocalDeviceData, deleteAccountAndCloudData } from '../src/features/auth';
 import {
   useOnboardingStore,
   Goal,
@@ -194,6 +194,7 @@ export default function SettingsScreen() {
   const isGuest = useAuthStore((state) => state.isGuest);
   const signOut = useAuthStore((state) => state.signOut);
   const exitGuestMode = useAuthStore((state) => state.exitGuestMode);
+  const guestSession = useAuthStore((state) => state.guestSession);
 
   // Personal information state
   const [displayName, setDisplayName] = useState<string>('');
@@ -205,6 +206,13 @@ export default function SettingsScreen() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const fileInputRef = useRef<any>(null);
   const pendingAvatarFileRef = useRef<{ file: any; mimeType: string } | null>(null);
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // Store training values
   const storeGoal = useOnboardingStore((state) => state.goal);
@@ -234,6 +242,14 @@ export default function SettingsScreen() {
   const [exportSuccess, setExportSuccess] = useState<string | null>(null);
   const [notificationPermission, setNotificationPermission] = useState<string>('undetermined');
   const [testingNotification, setTestingNotification] = useState(false);
+
+  // Local Data Erase & Account Deletion state (AUD-006, AUD-011)
+  const [erasingData, setErasingData] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteConfirmPhrase, setDeleteConfirmPhrase] = useState('');
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Editable draft state
   const [editDisplayName, setEditDisplayName] = useState('');
@@ -562,6 +578,7 @@ export default function SettingsScreen() {
         throw upsertError;
       }
 
+      if (!isMountedRef.current) return;
       setDisplayName(trimmedDisplayName);
       setAge(parsedAge);
       setHeight(parsedHeight);
@@ -574,21 +591,29 @@ export default function SettingsScreen() {
       }
       pendingAvatarFileRef.current = null;
 
-      if (updatedGoal) setStoreGoal(updatedGoal);
-      if (updatedExperience) setStoreExperience(updatedExperience);
-      if (updatedDaysPerWeek) setStoreDaysPerWeek(updatedDaysPerWeek);
-      if (updatedDuration) setStoreDuration(updatedDuration);
-      if (updatedEquipment) setStoreEquipment(updatedEquipment);
-      setStorePreferredDays(updatedDays);
-      if (updatedStyle) setStoreStyle(updatedStyle);
+      const onboardingUpdates: any = {};
+      if (updatedGoal && updatedGoal !== storeGoal) onboardingUpdates.goal = updatedGoal;
+      if (updatedExperience && updatedExperience !== storeExperience) onboardingUpdates.experienceLevel = updatedExperience;
+      if (updatedDaysPerWeek && updatedDaysPerWeek !== storeDaysPerWeek) onboardingUpdates.daysPerWeek = updatedDaysPerWeek;
+      if (updatedDuration && updatedDuration !== storeDuration) onboardingUpdates.workoutDuration = updatedDuration;
+      if (updatedEquipment && updatedEquipment !== storeEquipment) onboardingUpdates.equipment = updatedEquipment;
+      if (updatedDays && JSON.stringify(updatedDays) !== JSON.stringify(storeDays)) onboardingUpdates.preferredTrainingDays = updatedDays;
+      if (updatedStyle && updatedStyle !== storeStyle) onboardingUpdates.workoutStyle = updatedStyle;
+      if (Object.keys(onboardingUpdates).length > 0) {
+        useOnboardingStore.setState(onboardingUpdates);
+      }
 
       setSuccessMessage('Fitness profile updated successfully!');
       setIsEditing(false);
     } catch (err: any) {
-      setErrorMessage(err?.message || 'Failed to save profile. Please try again.');
+      if (isMountedRef.current) {
+        setErrorMessage(err?.message || 'Failed to save profile. Please try again.');
+      }
     } finally {
-      setSaving(false);
-      setUploadingAvatar(false);
+      if (isMountedRef.current) {
+        setSaving(false);
+        setUploadingAvatar(false);
+      }
     }
   };
 
@@ -601,6 +626,68 @@ export default function SettingsScreen() {
       await signOut();
       resetOnboarding();
       router.replace('/onboarding/welcome');
+    }
+  };
+
+  const handleEraseLocalData = () => {
+    Alert.alert(
+      isGuest ? 'Erase Local Device Data' : 'Erase Local Cache',
+      isGuest
+        ? 'This will permanently delete all your local workout sessions, routine templates, and preferences from this device. This cannot be undone.'
+        : 'This will purge all locally cached workouts, active drafts, and offline data from this physical device. Your cloud data remains in your Supabase account. You will be logged out and can log back in to re-sync.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: isGuest ? 'Erase Everything' : 'Erase Local Data',
+          style: 'destructive',
+          onPress: async () => {
+            setErasingData(true);
+            try {
+              if (isGuest) {
+                await eraseLocalDeviceData(guestSession ? { ownerId: guestSession.id, ownerType: 'guest' } : null);
+                await exitGuestMode();
+              } else {
+                await eraseLocalDeviceData(user?.id ? { ownerId: user.id, ownerType: 'authenticated' } : null);
+                await signOut();
+              }
+              resetOnboarding();
+              router.replace('/onboarding/welcome');
+            } catch {
+              setErrorMessage('Failed to erase local device data.');
+            } finally {
+              setErasingData(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleConfirmDeleteAccount = async () => {
+    if (deleteConfirmPhrase.trim().toUpperCase() !== 'DELETE') {
+      setDeleteError('Please type DELETE to confirm.');
+      return;
+    }
+    setDeletingAccount(true);
+    setDeleteError(null);
+    try {
+      const result = await deleteAccountAndCloudData({
+        confirmPhrase: deleteConfirmPhrase,
+        password: deletePassword ? deletePassword : undefined,
+      });
+
+      if (!result.success) {
+        setDeleteError(result.error || 'Account deletion failed.');
+        setDeletingAccount(false);
+        return;
+      }
+
+      setShowDeleteModal(false);
+      resetOnboarding();
+      router.replace('/onboarding/welcome');
+    } catch (err: any) {
+      setDeleteError(err.message || 'An unexpected error occurred during account deletion.');
+      setDeletingAccount(false);
     }
   };
 
@@ -1328,7 +1415,9 @@ export default function SettingsScreen() {
                 <Button
                   testID="save-profile-button"
                   title={saving ? 'Saving Changes...' : 'Save Changes'}
-                  onPress={handleSaveProfile}
+                  onPress={() => {
+                    void handleSaveProfile();
+                  }}
                   variant="primary"
                   size="md"
                   disabled={saving}
@@ -1418,14 +1507,35 @@ export default function SettingsScreen() {
             style={styles.logoutButton}
           />
 
-          {/* Account Deletion Notice */}
+          {/* Account Deletion (AUD-006) */}
           <View style={styles.deletionNoticeBox} testID="account-deletion-notice">
             <Text variant="caption" color="muted" style={styles.deletionTitle}>
               Account Deletion
             </Text>
-            <Text variant="caption" color="muted" style={styles.deletionText}>
-              Account deletion requires a secure backend flow and is handled via support.
-            </Text>
+            {isGuest ? (
+              <Text variant="caption" color="muted" style={styles.deletionText}>
+                Guest Athlete: Training data is stored locally on this physical device. Use &quot;Erase Local Device Data&quot; below to delete all local history.
+              </Text>
+            ) : (
+              <>
+                <Text variant="caption" color="muted" style={styles.deletionText}>
+                  Permanently purge your cloud account, workout logs, routine templates, and custom photos from Supabase.
+                </Text>
+                <Button
+                  testID="settings-delete-account-button"
+                  title="Delete Account & Cloud Data"
+                  onPress={() => {
+                    setDeleteError(null);
+                    setDeletePassword('');
+                    setDeleteConfirmPhrase('');
+                    setShowDeleteModal(true);
+                  }}
+                  variant="outline"
+                  size="sm"
+                  style={styles.deleteAccountButton}
+                />
+              </>
+            )}
           </View>
         </Card>
 
@@ -1547,6 +1657,56 @@ export default function SettingsScreen() {
           </View>
         </Card>
 
+        {/* Data Management & Local Erase (AUD-011) */}
+        <Card style={styles.sectionCard} testID="settings-data-management-card">
+          <Text variant="label" color="muted" style={styles.sectionHeading}>
+            DATA MANAGEMENT & LOCAL ERASE
+          </Text>
+          <Text variant="caption" color="secondary" style={styles.exportDescription}>
+            {isGuest
+              ? 'Permanently erase all local workout sessions, routine templates, and preferences stored on this physical device.'
+              : 'Wipe all locally cached workouts, active drafts, and offline sync caches from this physical device. Your cloud data remains safe in your account.'}
+          </Text>
+
+          <Button
+            testID="settings-erase-local-data-button"
+            title={erasingData ? 'Erasing...' : 'Erase Local Device Data'}
+            onPress={handleEraseLocalData}
+            variant="outline"
+            size="sm"
+            disabled={erasingData}
+            style={styles.eraseLocalButton}
+          />
+        </Card>
+
+        {/* Legal & Privacy Policy (AUD-007) */}
+        <Card style={styles.sectionCard} testID="settings-legal-card">
+          <Text variant="label" color="muted" style={styles.sectionHeading}>
+            LEGAL & PRIVACY
+          </Text>
+          <Text variant="caption" color="secondary" style={styles.exportDescription}>
+            Review our data transparency standards, local storage threat model, and athletic terms.
+          </Text>
+          <View style={styles.legalButtonsRow}>
+            <Button
+              testID="settings-privacy-policy-button"
+              title="Privacy Policy"
+              onPress={() => router.push('/legal/privacy')}
+              variant="outline"
+              size="sm"
+              style={styles.legalButton}
+            />
+            <Button
+              testID="settings-terms-of-service-button"
+              title="Terms of Service"
+              onPress={() => router.push('/legal/terms')}
+              variant="outline"
+              size="sm"
+              style={styles.legalButton}
+            />
+          </View>
+        </Card>
+
         {/* Workout Notifications */}
         <Card style={styles.sectionCard} testID="settings-notifications-card">
           <View style={styles.notificationHeaderRow}>
@@ -1652,6 +1812,91 @@ export default function SettingsScreen() {
           </View>
         </Card>
       </ScreenScrollView>
+
+      {/* Account Deletion Confirmation Modal (AUD-006) */}
+      <Modal
+        visible={showDeleteModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!deletingAccount) setShowDeleteModal(false);
+        }}
+        testID="delete-account-modal"
+      >
+        <View style={styles.modalOverlay}>
+          <Card style={styles.deleteModalCard} testID="delete-account-modal-card">
+            <Text variant="titleMedium" color="primary" style={styles.deleteModalTitle}>
+              Delete Account & Cloud Data
+            </Text>
+            <Text variant="caption" color="secondary" style={styles.deleteModalWarning}>
+              This action is <Text variant="caption" color="primary" style={{ fontWeight: '700' }}>PERMANENT and IRREVERSIBLE</Text>. All your workout history, routine templates, custom exercises, uploaded photos, and login credentials will be purged from Supabase.
+            </Text>
+
+            {deleteError && (
+              <View style={styles.deleteModalErrorBox} testID="delete-account-error-banner">
+                <Text variant="caption" style={styles.deleteModalErrorText}>
+                  ⚠ {deleteError}
+                </Text>
+              </View>
+            )}
+
+            {user?.app_metadata?.provider === 'email' || !user?.app_metadata?.provider ? (
+              <View style={styles.deleteInputGroup}>
+                <Text variant="caption" color="muted" style={styles.deleteInputLabel}>
+                  CURRENT PASSWORD
+                </Text>
+                <TextInput
+                  testID="delete-account-password-input"
+                  value={deletePassword}
+                  onChangeText={setDeletePassword}
+                  secureTextEntry
+                  placeholder="Enter your password"
+                  placeholderTextColor={colors.textMuted}
+                  style={styles.deleteTextInput}
+                  editable={!deletingAccount}
+                />
+              </View>
+            ) : null}
+
+            <View style={styles.deleteInputGroup}>
+              <Text variant="caption" color="muted" style={styles.deleteInputLabel}>
+                TYPE &quot;DELETE&quot; TO CONFIRM
+              </Text>
+              <TextInput
+                testID="delete-account-confirm-input"
+                value={deleteConfirmPhrase}
+                onChangeText={setDeleteConfirmPhrase}
+                placeholder="DELETE"
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="characters"
+                style={styles.deleteTextInput}
+                editable={!deletingAccount}
+              />
+            </View>
+
+            <View style={styles.deleteModalActionsRow}>
+              <Button
+                testID="delete-account-cancel-button"
+                title="Cancel"
+                onPress={() => setShowDeleteModal(false)}
+                variant="ghost"
+                size="md"
+                disabled={deletingAccount}
+                style={styles.deleteModalCancelBtn}
+              />
+              <Button
+                testID="delete-account-confirm-button"
+                title={deletingAccount ? 'Purging...' : 'Permanently Delete'}
+                onPress={handleConfirmDeleteAccount}
+                variant="primary"
+                size="md"
+                disabled={deletingAccount || deleteConfirmPhrase.trim().toUpperCase() !== 'DELETE'}
+                style={styles.deleteModalConfirmBtn}
+              />
+            </View>
+          </Card>
+        </View>
+      </Modal>
     </ScreenContainer>
   );
 }
@@ -2087,5 +2332,89 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   notificationActionBtn: {
     flex: 1,
+  },
+  deleteAccountButton: {
+    marginTop: spacing.xs,
+    borderColor: 'rgba(239, 68, 68, 0.5)',
+  },
+  eraseLocalButton: {
+    marginTop: spacing.xs,
+    borderColor: 'rgba(245, 158, 11, 0.5)',
+  },
+  legalButtonsRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  legalButton: {
+    flex: 1,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.md,
+  },
+  deleteModalCard: {
+    width: '100%',
+    maxWidth: 440,
+    backgroundColor: colors.surface,
+    borderColor: 'rgba(239, 68, 68, 0.4)',
+    borderWidth: 1,
+    padding: spacing.lg,
+    borderRadius: radii.lg,
+    gap: spacing.sm,
+  },
+  deleteModalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#EF4444',
+  },
+  deleteModalWarning: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  deleteModalErrorBox: {
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    borderColor: 'rgba(239, 68, 68, 0.4)',
+    borderWidth: 1,
+    padding: spacing.xs + 2,
+    borderRadius: radii.sm,
+  },
+  deleteModalErrorText: {
+    color: '#EF4444',
+    fontSize: 12,
+  },
+  deleteInputGroup: {
+    gap: 4,
+    marginTop: spacing.xs / 2,
+  },
+  deleteInputLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  deleteTextInput: {
+    height: 44,
+    backgroundColor: colors.surfaceElevated,
+    borderColor: colors.borderLight,
+    borderWidth: 1,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.sm,
+    color: colors.text,
+    fontSize: 14,
+  },
+  deleteModalActionsRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  deleteModalCancelBtn: {
+    flex: 1,
+  },
+  deleteModalConfirmBtn: {
+    flex: 1.5,
+    backgroundColor: '#EF4444',
   },
 });

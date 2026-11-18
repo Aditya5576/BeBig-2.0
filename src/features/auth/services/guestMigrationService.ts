@@ -106,7 +106,13 @@ export const guestMigrationService = {
           const authActiveWorkout = await workoutStorage.getActiveWorkout(authScope);
           const updatedActive = { ...guestActiveWorkout, ownerId: authScope.ownerId, ownerType: authScope.ownerType };
           if (!authActiveWorkout) {
-            await workoutStorage.createActiveWorkout(updatedActive, authScope);
+            await workoutStorage.saveActiveWorkout(updatedActive, authScope, { allowDifferentSession: true });
+            
+            // Transactional Readback Verification: Ensure the active workout was successfully written to authScope
+            const verifiedActive = await workoutStorage.getActiveWorkout(authScope);
+            if (!verifiedActive || verifiedActive.id !== updatedActive.id) {
+              throw new Error('[GuestMigrationService] Active workout readback verification failed; preserving guest data.');
+            }
           } else {
             // If authenticated profile already has an ongoing workout, archive guest session to abandoned stack
             await workoutStorage.archiveActiveWorkout(updatedActive, authScope);
