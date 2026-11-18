@@ -239,3 +239,19 @@
 - `npm run typecheck` (`tsc --noEmit`): Passed with **0 errors**.
 - `npm run lint` (`expo lint`): Passed with **0 errors** (69 pre-existing warnings; 0 new warnings).
 - `npm run build:web` (`node scripts/build-web.js`): Passed with **0 errors**, exporting **45 static routes** to `dist/`.
+
+
+## [Release v2.4.2] — 2026-11-18 — Production Deployment Verification
+
+### Deployment Summary
+- **Release Commit**: `0afb94bcfc2fcc67d2ac7e04c167c115153e4816` (`release(v2.4.2): fix iOS Safari WebKit Jetsam crash, add account deletion & privacy screens, and pass 114/114 audit test gate`)
+- **Annotated Git Tag**: `v2.4.2` pushed to `origin`
+- **Vercel Production Deployment**: `dpl_DBpWdWmqRb1BU1jQXtFoHfdxvKYE` (`https://be-big-2-0-c1szt40ig-aditya-works.vercel.app` -> `https://be-big-2-0.vercel.app`) — Status `Ready` (4m build)
+- **Supabase Edge Function**: `delete-account` deployed to project `BeBig 2.0` (`gkkvxfroxthvbiecramm`, `ap-northeast-1`) — Status `ACTIVE`, version `1`, `verify_jwt: true` (`coach-v2` untouched)
+
+### Live Verification
+- `https://be-big-2-0.vercel.app` -> HTTP `200`
+- `https://be-big-2-0.vercel.app/sw.js` -> HTTP `200`, `const CACHE_NAME = 'bebig-pwa-v2.4.2';`
+- `https://be-big-2-0.vercel.app/legal/privacy` -> HTTP `200`
+- `https://be-big-2-0.vercel.app/legal/terms` -> HTTP `200`
+- `https://be-big-2-0.vercel.app/workout/active` -> HTTP `200`
