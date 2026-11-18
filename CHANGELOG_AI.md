@@ -418,3 +418,17 @@
 - `npx jest tests/UIEnhancementsM1.test.tsx tests/UIEnhancementsM2.test.tsx tests/UIEnhancementsM3Typography.test.tsx tests/LastTimePerformance.test.tsx tests/PreviousPerformanceSuggestions.test.tsx --maxWorkers=2 --testTimeout=15000`: **5/5 suites**, **28/28 tests passed** in 21.299s.
 - `npx jest tests/CompletedWorkoutNotesVisibility.test.tsx --maxWorkers=2 --testTimeout=15000`: **1/1 suite**, **5/5 tests passed** in 8.855s.
 - `npm run build:web` (`node scripts/build-web.js`): Passed with **0 errors**, exporting **45 static routes** to `dist/`.
+
+
+## [Release v2.4.4] — 2026-11-18 — Production Deployment Verification
+
+### Deployment Summary
+- **Release Commit**: `7d268ee98985b0eaa49bbffb8ec1d4421b5000e9` (`feat(ui): ship v2.4.4 active workout UI polish, one-tap prev fill, exercise details modal, and athletic typography`)
+- **Annotated Git Tag**: `v2.4.4` pushed to `origin`
+- **Vercel Production Deployment**: `dpl_DPW2Aitx2KAyEV3pjXQ2gSXumDJ4` (`https://be-big-2-0-409eluq83-aditya-works.vercel.app` -> `https://be-big-2-0.vercel.app`) — Status `Ready` (`3m 7s` build)
+- **Supabase Backend**: Unchanged (no migrations or Edge Functions modified in `v2.4.4`)
+
+### Live Verification
+- `https://be-big-2-0.vercel.app/` -> HTTP `200`
+- `https://be-big-2-0.vercel.app/sw.js` -> HTTP `200`, `Cache-Control: no-cache, no-store, must-revalidate`, serving `bebig-pwa-v2.4.4` with `if (isJsBundle)` Network-First JS handler
+- `https://be-big-2-0.vercel.app/workout/active` -> HTTP `200`
