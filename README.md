@@ -7,7 +7,7 @@
 A production-grade, local-first gym workout tracking Progressive Web Application (PWA) and mobile platform engineered for serious lifters, strength athletes, and fitness enthusiasts. Built with Expo, React Native, TypeScript, Supabase, and resilient offline-first storage.
 
 [![Production App](https://img.shields.io/badge/Production-Live-success?style=for-the-badge&logo=vercel)](https://be-big-2-0.vercel.app)
-[![Version](https://img.shields.io/badge/Version-v2.4.1-blue?style=for-the-badge)](https://github.com/Aditya5576/BeBig-2.0)
+[![Version](https://img.shields.io/badge/Version-v2.4.3-blue?style=for-the-badge)](https://github.com/Aditya5576/BeBig-2.0)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Strict-3178C6?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org/)
 [![Expo](https://img.shields.io/badge/Expo-SDK_57-000020?style=for-the-badge&logo=expo)](https://expo.dev/)
 
@@ -16,13 +16,28 @@ A production-grade, local-first gym workout tracking Progressive Web Application
 ## 🌐 Production Deployment
 
 - **Live Production URL**: [https://be-big-2-0.vercel.app](https://be-big-2-0.vercel.app)
-- **Deployment Platform**: Vercel (Edge-cached Progressive Web App)
+- **Deployment Platform**: Vercel (Edge-cached Progressive Web App, 45 static routes)
 
 > **Important**: Always use `https://be-big-2-0.vercel.app`. Do not use `https://bebig.vercel.app` (an unassociated legacy domain).
 
 ---
 
-## 🚀 Latest Release — v2.4.1
+## 🚀 Latest Release — v2.4.3
+
+### What's New in v2.4.3 & v2.4.2
+- **Two-Layer iOS Safari / Home Screen PWA WebKit Stability**:
+  - **Zero-Bitmap Exercise Lists & Picker Stripping**: `ExercisePickerModal` and `/exercises` render pure-SVG category badges (`hideThumbnail={true}`) and strip inline base64 photo payloads from list items to prevent iOS WebKit `Jetsam` memory kills, paired with client-side `<= 800px` JPEG EXIF-stripping downscaling and sequential background compaction of legacy oversized custom photos on web.
+  - **Network-First JS Caching & Self-Healing Service Worker**: `public/sw.js` (`bebig-pwa-v2.4.3`) uses shell-only navigation caching, Network-First delivery for `/_expo/static/js/` bundles, and session-guarded `controllerchange` auto-reload on web mount so installed iPhone PWAs always pick up new releases cleanly.
+- **Security Hardening & Privacy Controls**:
+  - **Zero-Dependency Pure-TS OOXML `.xlsx` Export**: Replaced legacy `xlsx@0.18.5` with a pure-TypeScript OOXML workbook writer (`ooxmlWorkbook.ts`) featuring spreadsheet formula-injection neutralization (`-416KB` export chunk reduction).
+  - **Edge Function & Database Hardening**: Allowlisted CORS (`Vary: Origin`), bounded payload caps, `correlation_id` error redaction across Edge Functions, atomic last-`super_admin` DB trigger + transactional role-mutation RPC, owner-scoped `avatars` storage RLS, and hardened HSTS / `Permissions-Policy` / COOP / CSP headers in `vercel.json`.
+  - **Self-Service Account Deletion, Local Wipe & Legal Surfaces**: Re-authenticated cloud account deletion (`delete-account` Edge Function), confirmed local device data wipe in Settings, and live `/legal/privacy` and `/legal/terms` routes.
+- **Storage Resilience, Input Bounds & CI Quality Gate**:
+  - Native `SecureStore` `> 1800B` spillover to app-private `FileSystem`, web `QuotaExceededError` catalog cache eviction + retry, namespace-isolated in-memory caches, canonical `DOMAIN_LIMITS` text bounds, granular `<ErrorBoundary>` screen isolation, and GitHub Actions CI (`117+` Jest suites).
+
+---
+
+## 🚀 Previous Release — v2.4.1
 
 ### What's New in v2.4.1
 - **iPhone Safari & Home Screen PWA Stability**: Hardened exercise library and active workout exercise picker against iOS WebKit `Jetsam` memory kills and multi-modal touch lockups.
@@ -174,9 +189,10 @@ The BeBig 2.0 interface is crafted with a high-contrast athletic dark theme (`#0
 | **Language** | [TypeScript 6.0](https://www.typescriptlang.org/) (Strict Mode) |
 | **State Management** | [Zustand 5.0](https://github.com/pmndrs/zustand) |
 | **Backend & Database** | [Supabase](https://supabase.com/) (PostgreSQL with Row Level Security) |
-| **Local Persistence** | Durable Storage Adapter (SQLite / Expo SecureStore / LocalStorage) |
-| **Web & PWA** | React Native Web (`react-native-web`) with PWA Manifest |
-| **Testing** | [Jest 29](https://jestjs.io/) & [React Native Testing Library 14](https://callstack.github.io/react-native-testing-library/) |
+| **Local Persistence** | Platform Storage Adapter (IndexedDB on Web; Expo SecureStore + `FileSystem` >1800B spillover on Native) |
+| **Data Export** | Pure-TypeScript OOXML `.xlsx` (`ooxmlWorkbook.ts`), `pdf-lib` PDF, RFC 4180 CSV, JSON |
+| **Web & PWA** | React Native Web (`react-native-web`), Network-First JS Service Worker (`bebig-pwa-v2.4.3`), PWA Manifest |
+| **Testing & CI** | [Jest 29](https://jestjs.io/) & [React Native Testing Library 14](https://callstack.github.io/react-native-testing-library/) (`117+` suites, GitHub Actions CI) |
 | **Monitoring** | [Sentry](https://sentry.io/) (Client & Edge error tracking) |
 | **Deployment** | [Vercel](https://vercel.com/) (Edge PWA Hosting) |
 

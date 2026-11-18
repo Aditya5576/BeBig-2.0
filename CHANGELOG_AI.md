@@ -326,3 +326,20 @@
 - `https://be-big-2-0.vercel.app/workout/active` -> HTTP `200`
 - `https://be-big-2-0.vercel.app/legal/privacy` -> HTTP `200`
 - `https://be-big-2-0.vercel.app/legal/terms` -> HTTP `200`
+
+
+## [Codex Audit Polish] — 2026-11-18 — Namespace-Isolated Exercise Caches, Strict Settings Typing & Docs Reconciliation (AUD-016, AUD-022, AUD-031, AUD-034, AUD-037, AUD-014, AUD-005)
+
+### Result
+- **AUD-022 / AUD-034 / AUD-037 Resolved (Docs Reconciliation)**: Updated `README.md` (previously `v2.4.1`) and `AI_BRAIN.md` (previously `v2.4.2`) to live `v2.4.3` parity covering pure-TS OOXML `.xlsx` export (`ooxmlWorkbook.ts`), iOS WebKit zero-bitmap + background photo compaction + Network-First SW auto-reload (`bebig-pwa-v2.4.3`), namespace-isolated caches, and current Jest/CI test gate status.
+- **AUD-016 Resolved (Namespace-Isolated In-Memory Caches)**: Keyed volatile custom exercise caches in `exerciseCacheStorage.ts` and `exerciseRepository.ts` by active user namespace (`auth:<id>`, `guest:<id>`, or `guest`), added a circular-import-free `clearExerciseMemoryCache()` registry in `customExerciseStorage.ts`, and wired automatic cache clearing across `useAuthStore.ts` (`signOut`, `exitGuestMode`, `SIGNED_OUT`, `setSession`, `enterGuestMode`, `SIGNED_IN`/`INITIAL_SESSION` user-ID transitions), `accountDeletionService.ts` (`eraseLocalDeviceData`), and `app/settings.tsx` (`handleClearCache`).
+- **AUD-031 Resolved (Zero `any` Casts in Settings)**: Replaced all 11 explicit `any` casts in `app/settings.tsx` with strict DOM/React/domain types (`HTMLInputElement`, `Blob | File`, `unknown` + `extractErrorMessage`, `Partial<OnboardingState>`, `ThemeMode`, `ReturnType<typeof useAppTheme>['colors']`), also catching and fixing a latent `colors.text` -> `colors.textPrimary` token bug on `deleteTextInput` and replacing the dynamic `require('../src/lib/storage')` warning with a static import.
+- **AUD-014 / AUD-005 Verified**: Added `AUD-016` multi-user/guest cache isolation tests and `AUD-031` zero-`any` guard to `tests/Phase3ResilienceAndHygiene.test.ts`; verified clean natural Jest teardown without `--forceExit` (`--detectOpenHandles`) and `npm audit --omit=dev` (`0` `xlsx` hits; `76` remaining transitive Expo/RN/Metro/Sentry build-toolchain advisories).
+
+### Verification
+- `npm audit --omit=dev`: `0` `xlsx` advisories (`76` total transitive advisories: `1` critical, `66` high, `9` moderate, `0` low).
+- `npm run typecheck` (`tsc --noEmit`): Passed with **0 errors**.
+- `npm run lint` (`expo lint`): Passed with **0 errors**, **46 warnings** (down from 47; 0 warnings in `app/settings.tsx`).
+- `npx jest tests/Phase3ResilienceAndHygiene.test.ts --detectOpenHandles` (without `--forceExit`): **1/1 suite**, **12/12 tests passed** in 5.695s with natural teardown.
+- `npx jest tests/Phase3ResilienceAndHygiene.test.ts tests/IOSWebKitExerciseCrashGuard.test.tsx tests/AccountDeletionAndPrivacy.test.tsx tests/Phase2BSecurityHardening.test.ts --maxWorkers=2 --testTimeout=15000`: **4/4 suites**, **60/60 tests passed** in 11.964s.
+- `npm run build:web` (`node scripts/build-web.js`): Passed with **0 errors**, exporting **45 static routes** to `dist/`.

@@ -7,9 +7,17 @@ import { AuthSession, AuthState, GuestSession } from '../types';
 import { purgeLegacyUnscopedStorage } from '../utils/userScope';
 import { workoutStorage } from '../../workout/storage/workoutStorage';
 import { templateStorage } from '../../templates/storage/templateStorage';
-import { customExerciseStorage } from '../../exercises/storage/customExerciseStorage';
+import { customExerciseStorage, clearExerciseMemoryCache } from '../../exercises/storage/customExerciseStorage';
 import { profileService, UserProfile } from '../../profile';
 import { useOnboardingStore } from '../../onboarding/store/useOnboardingStore';
+
+function clearAllUserMemoryCaches(): void {
+  workoutStorage.clearMemoryCache();
+  templateStorage.clearMemoryCache();
+  customExerciseStorage.clearMemoryCache();
+  clearExerciseMemoryCache();
+  profileService.clearMemoryCache();
+}
 
 interface AuthActions {
   initializeAuth: () => Promise<void>;
@@ -25,7 +33,7 @@ let authSubscription: { unsubscribe: () => void } | null = null;
 let authGeneration = 0;
 let inFlightInitPromise: Promise<void> | null = null;
 
-export const useAuthStore = create<AuthState & AuthActions>((set) => ({
+export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
   status: 'initializing',
   user: null,
   session: null,
@@ -86,6 +94,10 @@ export const useAuthStore = create<AuthState & AuthActions>((set) => ({
 
               if (event === 'INITIAL_SESSION') {
                 if (session) {
+                  const prevUserId = get().user?.id ?? null;
+                  if ((prevUserId && prevUserId !== session.user.id) || get().isGuest) {
+                    clearAllUserMemoryCaches();
+                  }
                   authGeneration++;
                   set({
                     status: 'authenticated',
@@ -96,6 +108,11 @@ export const useAuthStore = create<AuthState & AuthActions>((set) => ({
                   });
                 }
               } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+                const prevUserId = get().user?.id ?? null;
+                const nextUserId = session?.user?.id ?? null;
+                if (prevUserId !== nextUserId || get().isGuest) {
+                  clearAllUserMemoryCaches();
+                }
                 authGeneration++;
                 set({
                   status: session ? 'authenticated' : 'unauthenticated',
@@ -106,10 +123,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set) => ({
                 });
               } else if (event === 'SIGNED_OUT') {
                 authGeneration++;
-                workoutStorage.clearMemoryCache();
-                templateStorage.clearMemoryCache();
-                customExerciseStorage.clearMemoryCache();
-                profileService.clearMemoryCache();
+                clearAllUserMemoryCaches();
                 useOnboardingStore.getState().resetOnboarding();
                 set({
                   status: 'unauthenticated',
@@ -173,6 +187,10 @@ export const useAuthStore = create<AuthState & AuthActions>((set) => ({
 
             if (event === 'INITIAL_SESSION') {
               if (session) {
+                const prevUserId = get().user?.id ?? null;
+                if ((prevUserId && prevUserId !== session.user.id) || get().isGuest) {
+                  clearAllUserMemoryCaches();
+                }
                 authGeneration++;
                 set({
                   status: 'authenticated',
@@ -183,6 +201,11 @@ export const useAuthStore = create<AuthState & AuthActions>((set) => ({
                 });
               }
             } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+              const prevUserId = get().user?.id ?? null;
+              const nextUserId = session?.user?.id ?? null;
+              if (prevUserId !== nextUserId || get().isGuest) {
+                clearAllUserMemoryCaches();
+              }
               authGeneration++;
               set({
                 status: session ? 'authenticated' : 'unauthenticated',
@@ -193,10 +216,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set) => ({
               });
             } else if (event === 'SIGNED_OUT') {
               authGeneration++;
-              workoutStorage.clearMemoryCache();
-              templateStorage.clearMemoryCache();
-              customExerciseStorage.clearMemoryCache();
-              profileService.clearMemoryCache();
+              clearAllUserMemoryCaches();
               useOnboardingStore.getState().resetOnboarding();
               set({
                 status: 'unauthenticated',
@@ -227,6 +247,12 @@ export const useAuthStore = create<AuthState & AuthActions>((set) => ({
   },
 
   setSession: (session: AuthSession | null) => {
+    const prev = get();
+    const prevUserId = prev.user?.id ?? null;
+    const nextUserId = session?.user?.id ?? null;
+    if (prevUserId !== nextUserId || prev.isGuest) {
+      clearAllUserMemoryCaches();
+    }
     authGeneration++;
     set({
       status: session ? 'authenticated' : 'unauthenticated',
@@ -239,6 +265,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set) => ({
   },
 
   enterGuestMode: async (onboardingData?: OnboardingState) => {
+    clearAllUserMemoryCaches();
     authGeneration++;
     const now = new Date().toISOString();
     const guestSession: GuestSession = {
@@ -267,10 +294,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set) => ({
 
   exitGuestMode: async () => {
     authGeneration++;
-    workoutStorage.clearMemoryCache();
-    templateStorage.clearMemoryCache();
-    customExerciseStorage.clearMemoryCache();
-    profileService.clearMemoryCache();
+    clearAllUserMemoryCaches();
     await guestStorage.clearGuestSession();
     // Preserves local onboarding and workout preferences per requirement
     set({
@@ -287,10 +311,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set) => ({
 
   signOut: async () => {
     authGeneration++;
-    workoutStorage.clearMemoryCache();
-    templateStorage.clearMemoryCache();
-    customExerciseStorage.clearMemoryCache();
-    profileService.clearMemoryCache();
+    clearAllUserMemoryCaches();
     useOnboardingStore.getState().resetOnboarding();
     const state = useAuthStore.getState();
     if (state.isGuest) {

@@ -14,6 +14,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { syncMetadataStore } from '../../../services/sync/syncMetadataStore';
 import { profileService } from '../../profile/services/profileService';
 import { workoutStorage } from '../../workout/storage/workoutStorage';
+import { clearExerciseMemoryCache } from '../../exercises/storage/customExerciseStorage';
 
 export interface DeleteAccountOptions {
   confirmPhrase: string;
@@ -97,6 +98,7 @@ export async function eraseLocalDeviceData(targetScope?: UserScope | null): Prom
   platformStorage.clearMemoryCache();
   profileService.clearMemoryCache();
   workoutStorage.clearMemoryCache();
+  clearExerciseMemoryCache();
 }
 
 /**

@@ -25,6 +25,53 @@ const deleteStorage = async (key: string): Promise<void> => {
 // Track in-flight background photo compaction per storage key to prevent duplicate WebKit work
 const activeCompactionKeys = new Set<string>();
 
+// Registry for dependent in-memory exercise caches (exerciseCacheStorage, exerciseRepository)
+// so auth transitions can wipe all volatile caches synchronously without circular imports (AUD-016).
+const exerciseMemoryCacheCleaners = new Set<() => void>();
+let isClearingExerciseMemoryCache = false;
+
+/**
+ * Resolves a deterministic in-memory cache namespace key for the active or provided UserScope.
+ * Guarantees isolated namespaces across authenticated users, guest sessions, and unauthenticated state ('guest').
+ */
+export function resolveExerciseScopeNamespace(scope?: UserScope | null): string {
+  const resolved = scope !== undefined ? scope : getCurrentUserScope();
+  if (!resolved || !resolved.ownerId) {
+    return 'guest';
+  }
+  return resolved.ownerType === 'guest'
+    ? `guest:${resolved.ownerId}`
+    : `auth:${resolved.ownerId}`;
+}
+
+/**
+ * Registers a volatile exercise memory-cache cleaner to run whenever `clearExerciseMemoryCache()` is invoked.
+ */
+export function registerExerciseMemoryCacheCleaner(cleaner: () => void): void {
+  exerciseMemoryCacheCleaners.add(cleaner);
+}
+
+/**
+ * Synchronously clears all volatile in-memory exercise caches across storage and repository layers.
+ * Automatically invoked on auth sign-out, guest exit, user-ID switches, and local data erasure (AUD-016).
+ */
+export function clearExerciseMemoryCache(): void {
+  if (isClearingExerciseMemoryCache) return;
+  isClearingExerciseMemoryCache = true;
+  try {
+    activeCompactionKeys.clear();
+    for (const cleaner of exerciseMemoryCacheCleaners) {
+      try {
+        cleaner();
+      } catch {
+        // Non-fatal: continue clearing remaining caches
+      }
+    }
+  } finally {
+    isClearingExerciseMemoryCache = false;
+  }
+}
+
 function isOversizedDataUrl(val: unknown): val is string {
   return (
     typeof val === 'string' &&
@@ -158,7 +205,7 @@ export const customExerciseStorage = {
    * Clears volatile in-memory storage (called on logout/user switch).
    */
   clearMemoryCache: (): void => {
-    activeCompactionKeys.clear();
+    clearExerciseMemoryCache();
   },
 
   getCustomExercises: async (scope?: UserScope | null): Promise<Exercise[]> => {

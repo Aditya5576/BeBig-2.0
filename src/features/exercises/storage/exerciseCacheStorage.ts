@@ -11,7 +11,11 @@
 import { platformStorage } from '../../../lib/storage';
 import { Exercise, ExerciseCategory } from '../types';
 import { filterAndRankExercises } from '../utils/exerciseSearch';
-import { customExerciseStorage } from './customExerciseStorage';
+import {
+  customExerciseStorage,
+  registerExerciseMemoryCacheCleaner,
+  resolveExerciseScopeNamespace,
+} from './customExerciseStorage';
 import { UserScope } from '../../auth/utils/userScope';
 
 const EXERCISE_CATALOG_KEY = 'bebig.exercises.cache.catalog';
@@ -262,9 +266,10 @@ export const SEED_EXERCISES: Exercise[] = [
 
 class ExerciseCacheStorage {
   private memoryCatalog: Map<string, Exercise> = new Map();
-  private customCatalog: Map<string, Exercise> = new Map();
-  private isHydrated: boolean = false;
-  private inFlightHydration: Promise<void> | null = null;
+  private customCatalogByScope: Map<string, Map<string, Exercise>> = new Map();
+  private isCatalogHydrated: boolean = false;
+  private hydratedCustomScopes: Set<string> = new Set();
+  private inFlightHydrations: Map<string, Promise<void>> = new Map();
   private catalogRevision: number = 0;
   private lastSearchKey: string = '';
   private lastSearchResult: Exercise[] = [];
@@ -274,15 +279,47 @@ class ExerciseCacheStorage {
     SEED_EXERCISES.forEach((ex) => this.memoryCatalog.set(ex.id, ex));
   }
 
+  private getScopeCustomMap(scope?: UserScope | null, create: boolean = false): Map<string, Exercise> | undefined {
+    const namespace = resolveExerciseScopeNamespace(scope);
+    let scopeMap = this.customCatalogByScope.get(namespace);
+    if (!scopeMap && create) {
+      scopeMap = new Map<string, Exercise>();
+      this.customCatalogByScope.set(namespace, scopeMap);
+    }
+    return scopeMap;
+  }
+
   /**
-   * Sets and indexes custom exercises in memory for instant unified search.
+   * Clears volatile user-scoped custom exercise caches (all namespaces if scope omitted).
+   * Preserves public seed/provider catalog while preventing cross-user leaks (AUD-016).
    */
-  setCustomExercises(exercises: Exercise[]): void {
-    this.customCatalog.clear();
+  clearCustomMemoryCache(scope?: UserScope | null): void {
+    if (scope !== undefined) {
+      const namespace = resolveExerciseScopeNamespace(scope);
+      this.customCatalogByScope.delete(namespace);
+      this.hydratedCustomScopes.delete(namespace);
+      this.inFlightHydrations.delete(namespace);
+    } else {
+      this.customCatalogByScope.clear();
+      this.hydratedCustomScopes.clear();
+      this.inFlightHydrations.clear();
+    }
+    this.catalogRevision++;
+    this.lastSearchKey = '';
+    this.lastSearchResult = [];
+  }
+
+  /**
+   * Sets and indexes custom exercises in memory for instant unified search,
+   * strictly isolated under the active/provided user namespace.
+   */
+  setCustomExercises(exercises: Exercise[], scope?: UserScope | null): void {
+    const scopeMap = this.getScopeCustomMap(scope, true)!;
+    scopeMap.clear();
     if (Array.isArray(exercises)) {
       exercises.forEach((ex) => {
         if (ex && ex.id) {
-          this.customCatalog.set(ex.id, ex);
+          scopeMap.set(ex.id, ex);
         }
       });
     }
@@ -292,11 +329,12 @@ class ExerciseCacheStorage {
   }
 
   /**
-   * Adds or updates a single custom exercise in the unified search index.
+   * Adds or updates a single custom exercise in the user-scoped unified search index.
    */
-  saveCustomExercise(exercise: Exercise): void {
+  saveCustomExercise(exercise: Exercise, scope?: UserScope | null): void {
     if (exercise && exercise.id) {
-      this.customCatalog.set(exercise.id, exercise);
+      const scopeMap = this.getScopeCustomMap(scope, true)!;
+      scopeMap.set(exercise.id, exercise);
       this.catalogRevision++;
       this.lastSearchKey = '';
       this.lastSearchResult = [];
@@ -304,10 +342,11 @@ class ExerciseCacheStorage {
   }
 
   /**
-   * Removes a custom exercise from the unified search index.
+   * Removes a custom exercise from the user-scoped unified search index.
    */
-  deleteCustomExercise(id: string): void {
-    if (this.customCatalog.delete(id)) {
+  deleteCustomExercise(id: string, scope?: UserScope | null): void {
+    const scopeMap = this.getScopeCustomMap(scope, false);
+    if (scopeMap && scopeMap.delete(id)) {
       this.catalogRevision++;
       this.lastSearchKey = '';
       this.lastSearchResult = [];
@@ -315,10 +354,11 @@ class ExerciseCacheStorage {
   }
 
   /**
-   * Synchronously returns all currently indexed custom exercises.
+   * Synchronously returns all currently indexed custom exercises for the active/provided user namespace.
    */
-  getCustomExercisesSync(): Exercise[] {
-    return Array.from(this.customCatalog.values());
+  getCustomExercisesSync(scope?: UserScope | null): Exercise[] {
+    const scopeMap = this.getScopeCustomMap(scope, false);
+    return scopeMap ? Array.from(scopeMap.values()) : [];
   }
 
   /**
@@ -330,32 +370,41 @@ class ExerciseCacheStorage {
   }
 
   /**
-   * Synchronously return a cached exercise by ID if present in memory.
-   * Enables 0ms render when navigating to Exercise Detail.
+   * Synchronously return a cached exercise by ID if present in the active user's namespace or public catalog.
+   * Enables 0ms render when navigating to Exercise Detail without cross-user leakage.
    */
-  getCachedExerciseByIdSync(id: string): Exercise | null {
+  getCachedExerciseByIdSync(id: string, scope?: UserScope | null): Exercise | null {
     if (!id) return null;
-    return this.customCatalog.get(id) || this.memoryCatalog.get(id) || null;
+    const scopeMap = this.getScopeCustomMap(scope, false);
+    return scopeMap?.get(id) || this.memoryCatalog.get(id) || null;
   }
 
   /**
-   * Returns true if persistent cache hydration has already completed.
+   * Returns true if persistent catalog AND active user custom exercises have been hydrated.
    */
-  getIsHydrated(): boolean {
-    return this.isHydrated;
+  getIsHydrated(scope?: UserScope | null): boolean {
+    const namespace = resolveExerciseScopeNamespace(scope);
+    return this.isCatalogHydrated && this.hydratedCustomScopes.has(namespace);
   }
 
   /**
-   * Hydrates memory catalog and custom exercises from persistent platformStorage.
+   * Hydrates memory catalog and custom exercises from persistent platformStorage for the given namespace.
    */
-  async ensureHydrated(scope?: UserScope | null): Promise<void> {
-    if (this.isHydrated) return;
-    if (this.inFlightHydration) return this.inFlightHydration;
+  async ensureHydrated(scope?: UserScope | null, forceRefreshCustom: boolean = false): Promise<void> {
+    const namespace = resolveExerciseScopeNamespace(scope);
+    if (!forceRefreshCustom && this.isCatalogHydrated && this.hydratedCustomScopes.has(namespace)) return;
+    const existingFlight = this.inFlightHydrations.get(namespace);
+    if (existingFlight) {
+      if (!forceRefreshCustom) return existingFlight;
+      await existingFlight;
+    }
 
-    this.inFlightHydration = (async () => {
+    const flight = (async () => {
       try {
         const [rawCatalog, customExercises] = await Promise.all([
-          platformStorage.getItem(EXERCISE_CATALOG_KEY).catch(() => null),
+          this.isCatalogHydrated
+            ? Promise.resolve(null)
+            : platformStorage.getItem(EXERCISE_CATALOG_KEY).catch(() => null),
           customExerciseStorage.getCustomExercises(scope).catch(() => []),
         ]);
 
@@ -370,25 +419,29 @@ class ExerciseCacheStorage {
           }
         }
 
+        const scopeMap = this.getScopeCustomMap(scope, true)!;
+        scopeMap.clear();
         if (Array.isArray(customExercises) && customExercises.length > 0) {
           customExercises.forEach((ex) => {
             if (ex && ex.id) {
-              this.customCatalog.set(ex.id, ex);
+              scopeMap.set(ex.id, ex);
             }
           });
         }
       } catch {
         // Fall back to memory catalog
       } finally {
-        this.isHydrated = true;
-        this.inFlightHydration = null;
+        this.isCatalogHydrated = true;
+        this.hydratedCustomScopes.add(namespace);
+        this.inFlightHydrations.delete(namespace);
         this.catalogRevision++;
         this.lastSearchKey = '';
         this.lastSearchResult = [];
       }
     })();
 
-    return this.inFlightHydration;
+    this.inFlightHydrations.set(namespace, flight);
+    return flight;
   }
 
   /**
@@ -440,22 +493,24 @@ class ExerciseCacheStorage {
   }
 
   /**
-   * Retrieve a single exercise by ID from cache.
+   * Retrieve a single exercise by ID from cache (scoped to active or provided user namespace).
    */
-  async getCachedExerciseById(id: string): Promise<Exercise | null> {
+  async getCachedExerciseById(id: string, scope?: UserScope | null): Promise<Exercise | null> {
     if (!id) return null;
-    const custom = this.customCatalog.get(id);
+    const scopeMap = this.getScopeCustomMap(scope, false);
+    const custom = scopeMap?.get(id);
     if (custom) return custom;
     const mem = this.memoryCatalog.get(id);
     if (mem) return mem;
 
-    await this.ensureHydrated();
-    return this.customCatalog.get(id) || this.memoryCatalog.get(id) || null;
+    await this.ensureHydrated(scope);
+    const hydratedScopeMap = this.getScopeCustomMap(scope, false);
+    return hydratedScopeMap?.get(id) || this.memoryCatalog.get(id) || null;
   }
 
   /**
-   * Instant local search against cached catalog with query-memoization.
-   * Merges custom exercises and provider catalog into a unified index.
+   * Instant local search against cached catalog with namespace-isolated query memoization.
+   * Merges active user's custom exercises and public provider catalog into a unified index.
    */
   searchCached(
     options: {
@@ -464,24 +519,27 @@ class ExerciseCacheStorage {
       limit?: number;
       source?: 'all' | 'custom' | 'external';
     } = {},
+    scope?: UserScope | null,
   ): Exercise[] {
     const query = options.query?.trim() || '';
     const category = options.category && options.category !== 'all' ? options.category : '';
     const source = options.source || 'all';
-    const cacheKey = `${this.catalogRevision}::${source}::${category}::${query.toLowerCase()}`;
+    const namespace = resolveExerciseScopeNamespace(scope);
+    const cacheKey = `${this.catalogRevision}::${namespace}::${source}::${category}::${query.toLowerCase()}`;
 
     let baseResults: Exercise[];
     if (this.lastSearchKey === cacheKey) {
       baseResults = this.lastSearchResult;
     } else {
+      const scopeMap = this.getScopeCustomMap(scope, false);
       let pool: Exercise[];
       if (source === 'custom') {
-        pool = Array.from(this.customCatalog.values());
+        pool = scopeMap ? Array.from(scopeMap.values()) : [];
       } else if (source === 'external') {
         pool = Array.from(this.memoryCatalog.values());
       } else {
-        // 'all': unified index with custom exercises placed first
-        const customItems = Array.from(this.customCatalog.values());
+        // 'all': unified index with active user's custom exercises placed first
+        const customItems = scopeMap ? Array.from(scopeMap.values()) : [];
         const providerItems = Array.from(this.memoryCatalog.values());
         const mergedMap = new Map<string, Exercise>();
         customItems.forEach((c) => mergedMap.set(c.id, c));
@@ -518,13 +576,14 @@ class ExerciseCacheStorage {
    * Clear cache (useful for dev tools / testing).
    */
   async clearCache(): Promise<void> {
-    this.isHydrated = false;
-    this.inFlightHydration = null;
+    this.isCatalogHydrated = false;
+    this.hydratedCustomScopes.clear();
+    this.inFlightHydrations.clear();
     this.catalogRevision++;
     this.lastSearchKey = '';
     this.lastSearchResult = [];
     this.memoryCatalog.clear();
-    this.customCatalog.clear();
+    this.customCatalogByScope.clear();
     SEED_EXERCISES.forEach((ex) => this.memoryCatalog.set(ex.id, ex));
     try {
       await platformStorage.removeItem(EXERCISE_CATALOG_KEY);
@@ -536,3 +595,4 @@ class ExerciseCacheStorage {
 }
 
 export const exerciseCacheStorage = new ExerciseCacheStorage();
+registerExerciseMemoryCacheCleaner(() => exerciseCacheStorage.clearCustomMemoryCache());

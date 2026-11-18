@@ -1,4 +1,4 @@
-import { useAppTheme, useThemeStore } from '../src/features/theme';
+import { useAppTheme, useThemeStore, ThemeMode } from '../src/features/theme';
 import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, Pressable, TextInput, Image, Alert, Platform, Modal } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -6,6 +6,7 @@ import { ScreenContainer, ScreenScrollView, Text, Button, Card, Icon, BrandLogoB
 import { useAuthStore, eraseLocalDeviceData, deleteAccountAndCloudData } from '../src/features/auth';
 import {
   useOnboardingStore,
+  OnboardingState,
   Goal,
   ExperienceLevel,
   WorkoutDuration,
@@ -16,14 +17,28 @@ import {
   SelectableCard,
 } from '../src/features/onboarding';
 import { profileService, avatarService } from '../src/features/profile';
-import { guestStorage } from '../src/lib/storage';
+import { guestStorage, platformStorage } from '../src/lib/storage';
 import { spacing, radii } from '../src/constants/theme';
+import { clearExerciseMemoryCache } from '../src/features/exercises/storage/customExerciseStorage';
 import { DOMAIN_LIMITS, clampText } from '../src/constants/domainLimits';
 import { env } from '../src/config/env';
 import { workoutRepository } from '../src/features/workout/services/workoutRepository';
 import { templateRepository } from '../src/features/templates/services/templateRepository';
 import type { ExportFormat } from '../src/features/export';
 import { workoutNotificationService } from '../src/features/workout';
+
+function extractErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof Error && err.message) {
+    return err.message;
+  }
+  if (typeof err === 'object' && err !== null && 'message' in err) {
+    const msg = (err as { message?: unknown }).message;
+    if (typeof msg === 'string' && msg.length > 0) {
+      return msg;
+    }
+  }
+  return fallback;
+}
 
 export const ATHLETIC_AVATAR_PRESETS = [
   {
@@ -205,8 +220,8 @@ export default function SettingsScreen() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [avatarLoadError, setAvatarLoadError] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
-  const fileInputRef = useRef<any>(null);
-  const pendingAvatarFileRef = useRef<{ file: any; mimeType: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const pendingAvatarFileRef = useRef<{ file: Blob | File; mimeType: string } | null>(null);
   const isMountedRef = useRef(true);
   useEffect(() => {
     isMountedRef.current = true;
@@ -572,7 +587,7 @@ export default function SettingsScreen() {
             hasCompletedOnboarding: true,
           });
         }
-      } catch (upsertError: any) {
+      } catch (upsertError: unknown) {
         if (newlyUploadedAvatarUrl && user?.id) {
           void avatarService.deleteAvatarByUrl(user.id, newlyUploadedAvatarUrl);
         }
@@ -592,7 +607,7 @@ export default function SettingsScreen() {
       }
       pendingAvatarFileRef.current = null;
 
-      const onboardingUpdates: any = {};
+      const onboardingUpdates: Partial<OnboardingState> = {};
       if (updatedGoal && updatedGoal !== storeGoal) onboardingUpdates.goal = updatedGoal;
       if (updatedExperience && updatedExperience !== storeExperience) onboardingUpdates.experienceLevel = updatedExperience;
       if (updatedDaysPerWeek && updatedDaysPerWeek !== storeDaysPerWeek) onboardingUpdates.daysPerWeek = updatedDaysPerWeek;
@@ -606,9 +621,9 @@ export default function SettingsScreen() {
 
       setSuccessMessage('Fitness profile updated successfully!');
       setIsEditing(false);
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (isMountedRef.current) {
-        setErrorMessage(err?.message || 'Failed to save profile. Please try again.');
+        setErrorMessage(extractErrorMessage(err, 'Failed to save profile. Please try again.'));
       }
     } finally {
       if (isMountedRef.current) {
@@ -686,17 +701,17 @@ export default function SettingsScreen() {
       setShowDeleteModal(false);
       resetOnboarding();
       router.replace('/onboarding/welcome');
-    } catch (err: any) {
-      setDeleteError(err.message || 'An unexpected error occurred during account deletion.');
+    } catch (err: unknown) {
+      setDeleteError(extractErrorMessage(err, 'An unexpected error occurred during account deletion.'));
       setDeletingAccount(false);
     }
   };
 
   const handleClearCache = () => {
     try {
-      const { platformStorage } = require('../src/lib/storage');
       platformStorage.clearMemoryCache();
       profileService.clearMemoryCache();
+      clearExerciseMemoryCache();
       setSuccessMessage('Local memory and exercise cache cleared.');
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch {
@@ -715,7 +730,7 @@ export default function SettingsScreen() {
           style: 'destructive',
           onPress: () => {
             resetOnboarding();
-            router.replace('/onboarding/goal' as any);
+            router.replace('/onboarding/goal');
           },
         },
       ],
@@ -804,8 +819,8 @@ export default function SettingsScreen() {
         await shareOrDownloadExport(filename, content, mimeType, isBase64);
         setExportSuccess(`Templates exported successfully (${format.toUpperCase()}).`);
       }
-    } catch (err: any) {
-      setExportError(err?.message || 'Failed to export data.');
+    } catch (err: unknown) {
+      setExportError(extractErrorMessage(err, 'Failed to export data.'));
     } finally {
       setExportingType(null);
     }
@@ -1244,7 +1259,7 @@ export default function SettingsScreen() {
                           accept="image/jpeg,image/png,image/webp,image/gif"
                           style={{ display: 'none' }}
                           ref={fileInputRef}
-                          onChange={async (e: any) => {
+                          onChange={async (e: React.ChangeEvent<HTMLInputElement>) => {
                             const file = e.target?.files?.[0];
                             e.target.value = '';
                             if (!file) return;
@@ -1469,14 +1484,16 @@ export default function SettingsScreen() {
           </Text>
 
           <View style={styles.themeGroup}>
-            <ChipGroup
+            <ChipGroup<ThemeMode>
               options={[
                 { label: 'Dark', value: 'dark', testID: 'theme-dark' },
                 { label: 'Light', value: 'light', testID: 'theme-light' },
                 { label: 'System', value: 'system', testID: 'theme-system' },
               ]}
               selectedValue={mode}
-              onSelect={(val: any) => setMode(val)}
+              onSelect={(val) => {
+                void setMode(val);
+              }}
               chipStyle={styles.themeChip}
             />
           </View>
@@ -1927,7 +1944,9 @@ export default function SettingsScreen() {
   );
 }
 
-const createStyles = (colors: any) => StyleSheet.create({
+type SettingsThemeColors = ReturnType<typeof useAppTheme>['colors'];
+
+const createStyles = (colors: SettingsThemeColors) => StyleSheet.create({
   container: {
     paddingVertical: spacing.md,
   },
@@ -2428,7 +2447,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     borderWidth: 1,
     borderRadius: radii.md,
     paddingHorizontal: spacing.sm,
-    color: colors.text,
+    color: colors.textPrimary,
     fontSize: 14,
   },
   deleteModalActionsRow: {
