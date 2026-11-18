@@ -303,3 +303,26 @@
 - `npm run typecheck` (`tsc --noEmit`): Passed with **0 errors**.
 - `npm run lint` (`expo lint`): Passed with **0 errors**, **47 warnings** (0 new warnings).
 - `npm run build:web` (`node scripts/build-web.js`): Passed with **0 errors**, exporting **45 static routes** to `dist/`.
+
+
+## [Release v2.4.3] — 2026-11-18 — Production Deployment Verification
+
+### Deployment Summary
+- **Release Commit**: `2f88fd254578dff1ddebccb50124fc3b825c06e6` (`release(v2.4.3): deploy two-layer iOS WebKit crash & SW auto-reload fix, Phase 2B security hardening, and Phase 3 storage resilience`)
+- **Annotated Git Tag**: `v2.4.3` pushed to `origin`
+- **Vercel Production Deployment**: `dpl_G3AZFkELZTWHJQw6gynxWuSTkvFW` (`https://be-big-2-0-r96gem5q7-aditya-works.vercel.app` -> `https://be-big-2-0.vercel.app`) — Status `Ready` (`2m 50s` build)
+- **Supabase SQL Migrations Applied (`gkkvxfroxthvbiecramm`, `ap-northeast-1`)**:
+  - `20261118120000_atomic_super_admin_guard.sql` — verified `public.admin_mutate_role_atomic(uuid, uuid, text, text)` (`service_role` execute = `true`; `authenticated`/`anon`/`public` = `false`) and enabled trigger `protect_last_super_admin_trigger` on `public.admin_roles` (`enforce_last_super_admin_invariant`).
+  - `20261118120500_harden_avatars_storage_privacy.sql` — verified owner-scoped `SELECT` RLS policy `"Users can list and read own avatar folder"` (`(bucket_id = 'avatars') AND ((storage.foldername(name))[1] = (auth.uid())::text)`) on `storage.objects` with legacy broad list/public read policies removed.
+- **Supabase Edge Functions Deployed (`gkkvxfroxthvbiecramm`)**:
+  - `admin-assign-role`: `ACTIVE`, version `1`, `verify_jwt: true`
+  - `coach-agent`: `ACTIVE`, version `14`, `verify_jwt: true`
+  - `delete-account`: `ACTIVE`, version `2`, `verify_jwt: true`
+  - `coach-v2`: Untouched (`ACTIVE`, version `2`, paused boundary respected)
+
+### Live Verification
+- `https://be-big-2-0.vercel.app/` -> HTTP `200` (verified `Strict-Transport-Security: max-age=63072000; includeSubDomains; preload`, `Permissions-Policy`, `Cross-Origin-Opener-Policy: same-origin-allow-popups`, `Content-Security-Policy`)
+- `https://be-big-2-0.vercel.app/sw.js` -> HTTP `200`, `Cache-Control: no-cache, no-store, must-revalidate`, serving `bebig-pwa-v2.4.3` with `if (isJsBundle)` Network-First `/_expo/static/js/` handler
+- `https://be-big-2-0.vercel.app/workout/active` -> HTTP `200`
+- `https://be-big-2-0.vercel.app/legal/privacy` -> HTTP `200`
+- `https://be-big-2-0.vercel.app/legal/terms` -> HTTP `200`

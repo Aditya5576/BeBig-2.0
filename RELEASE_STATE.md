@@ -1,9 +1,11 @@
 # BeBig 2.0 — Release State
 
-## Production (Release `v2.4.3`)
+## Production (Live Verified — `v2.4.3`)
 
 - **URL**: https://be-big-2-0.vercel.app
 - **Live Version**: `v2.4.3` (`package.json`, `app.json`, `/sw.js` `bebig-pwa-v2.4.3`)
+- **Live Release Commit**: `2f88fd254578dff1ddebccb50124fc3b825c06e6` (tag `v2.4.3`)
+- **Vercel Production Deployment**: `dpl_G3AZFkELZTWHJQw6gynxWuSTkvFW` (`● Ready`, `2m 50s` build, 45 static routes, `/sw.js` serving `bebig-pwa-v2.4.3` with Network-First JS handler)
 - **Previous Verified Release**: `v2.4.2` (`0afb94bcfc2fcc67d2ac7e04c167c115153e4816`, Vercel `dpl_DBpWdWmqRb1BU1jQXtFoHfdxvKYE`)
 - **Supabase Production Project**: `BeBig 2.0` (`gkkvxfroxthvbiecramm`, `ap-northeast-1`)
   - Applied `v2.4.3` SQL Migrations: `20261118120000_atomic_super_admin_guard.sql`, `20261118120500_harden_avatars_storage_privacy.sql`
