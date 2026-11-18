@@ -1,28 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import {
+  getCorsHeaders,
+  createCorrelationId,
+  readBoundedJson,
+  errorResponse,
+  jsonResponse,
+} from "../_shared/security.ts"
 
-const ALLOWED_ORIGINS = [
-  'https://be-big-2-0.vercel.app',
-  'http://localhost:8081',
-  'http://localhost:19006',
-  'http://localhost:3000',
-  'http://localhost:5173',
-];
-
-const VERCEL_PREVIEW_REGEX = /^https:\/\/be-big-[a-z0-9-]+-adityas-projects-[a-z0-9]+\.vercel\.app$/;
-
-function getCorsHeaders(req: Request): Record<string, string> {
-  const origin = req.headers.get('Origin') || '';
-  let allowedOrigin = 'https://be-big-2-0.vercel.app';
-  if (ALLOWED_ORIGINS.includes(origin) || VERCEL_PREVIEW_REGEX.test(origin)) {
-    allowedOrigin = origin;
-  }
-  return {
-    'Access-Control-Allow-Origin': allowedOrigin,
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  };
-}
+const MAX_BODY_BYTES = 4 * 1024; // 4KB
 
 serve(async (req) => {
   const corsHeaders = getCorsHeaders(req);
@@ -34,21 +20,17 @@ serve(async (req) => {
 
   // 2. Reject non-POST methods with 405 Method Not Allowed (AUD-010)
   if (req.method !== 'POST') {
-    return new Response(
-      JSON.stringify({ error: 'Method not allowed. POST is required.' }),
-      { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return errorResponse('Method not allowed. POST is required.', 405, corsHeaders);
   }
+
+  const correlationId = createCorrelationId();
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
     if (!supabaseUrl || !supabaseServiceKey) {
-      return new Response(
-        JSON.stringify({ error: 'Server misconfiguration' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return errorResponse('Server misconfiguration', 500, corsHeaders, correlationId);
     }
 
     // 3. Create service role admin client
@@ -78,21 +60,18 @@ serve(async (req) => {
       );
     }
 
-    // 5. Parse and validate payload
-    let body: any = {};
-    try {
-      body = await req.json();
-    } catch {
-      return new Response(
-        JSON.stringify({ error: 'Invalid JSON payload' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    // 5. Parse and validate bounded payload
+    const parsed = await readBoundedJson<{ confirm?: unknown }>(req, MAX_BODY_BYTES);
+    if (!parsed.ok) {
+      return errorResponse(parsed.error, parsed.status, corsHeaders);
     }
+    const body = parsed.data;
 
     if (body?.confirm !== 'DELETE_MY_ACCOUNT') {
-      return new Response(
-        JSON.stringify({ error: 'Missing or invalid confirmation: confirm must equal "DELETE_MY_ACCOUNT"' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      return errorResponse(
+        'Missing or invalid confirmation: confirm must equal "DELETE_MY_ACCOUNT"',
+        400,
+        corsHeaders
       );
     }
 
@@ -140,26 +119,34 @@ serve(async (req) => {
     // 9. Delete user from auth.users via Supabase Admin API
     const { error: deleteUserError } = await supabaseAdmin.auth.admin.deleteUser(userId);
     if (deleteUserError) {
-      console.error('[delete-account] auth.admin.deleteUser error:', deleteUserError);
-      return new Response(
-        JSON.stringify({ error: 'Failed to delete authentication credentials' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      console.error(`[delete-account][${correlationId}] auth.admin.deleteUser error:`, deleteUserError);
+      return errorResponse(
+        'Failed to delete authentication credentials',
+        500,
+        corsHeaders,
+        correlationId
       );
     }
 
-    return new Response(
-      JSON.stringify({
+    return jsonResponse(
+      {
         success: true,
         message: 'Account, cloud storage, and database records successfully purged.',
         deleted_user_id: userId,
-      }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      },
+      200,
+      corsHeaders
     );
-  } catch (error: any) {
-    console.error('[delete-account] Unexpected exception:', error);
-    return new Response(
-      JSON.stringify({ error: 'An unexpected server error occurred during account deletion.' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  } catch (error: unknown) {
+    console.error(
+      `[delete-account][${correlationId}] Unexpected exception:`,
+      error instanceof Error ? error.message : 'unknown'
+    );
+    return errorResponse(
+      'An unexpected server error occurred during account deletion.',
+      500,
+      corsHeaders,
+      correlationId
     );
   }
 });

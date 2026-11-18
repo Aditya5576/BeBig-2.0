@@ -1,6 +1,6 @@
 {
   "name": "bebig",
-  "version": "2.4.2",
+  "version": "2.4.3",
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
@@ -44,7 +44,6 @@
     "react-native-screens": "~4.26.0",
     "react-native-svg": "15.15.4",
     "react-native-web": "^0.21.2",
-    "xlsx": "^0.18.5",
     "zustand": "^5.0.15"
   },
   "devDependencies": {

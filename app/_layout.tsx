@@ -105,13 +105,40 @@ export default wrapRootLayout(function RootLayout() {
   const { colors, activeMode } = useAppTheme();
   const isHydrated = useThemeStore((state) => state.isHydrated);
 
-  // Web Service Worker auto-update check on app mount
+  // Web Service Worker auto-update check + session-guarded single reload on controllerchange (v2.4.3)
   useEffect(() => {
-    if (Platform.OS === 'web' && typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistration().then((reg) => {
-        reg?.update().catch(() => {});
-      }).catch(() => {});
+    if (Platform.OS !== 'web' || typeof window === 'undefined' || !('serviceWorker' in navigator)) {
+      return;
     }
+
+    const RELOAD_GUARD_KEY = 'bebig_sw_reloaded_v243';
+
+    const handleControllerChange = () => {
+      try {
+        if (typeof sessionStorage !== 'undefined') {
+          if (sessionStorage.getItem(RELOAD_GUARD_KEY)) {
+            return;
+          }
+          sessionStorage.setItem(RELOAD_GUARD_KEY, '1');
+        }
+        window.location.reload();
+      } catch {
+        // Ignore storage/reload restrictions
+      }
+    };
+
+    navigator.serviceWorker.addEventListener?.('controllerchange', handleControllerChange);
+
+    navigator.serviceWorker
+      .getRegistration()
+      .then((reg) => {
+        reg?.update().catch(() => {});
+      })
+      .catch(() => {});
+
+    return () => {
+      navigator.serviceWorker.removeEventListener?.('controllerchange', handleControllerChange);
+    };
   }, []);
 
   // Modern athletic typography: Plus Jakarta Sans & JetBrains Mono

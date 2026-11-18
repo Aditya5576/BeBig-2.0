@@ -14,7 +14,7 @@ import {
   Modal,
 } from 'react-native';
 import { useRouter, useFocusEffect as routerFocusEffect } from 'expo-router';
-import { ScreenContainer, Text, Button, Card, Icon } from '../../src/components/ui';
+import { ScreenContainer, Text, Button, Card, Icon, ErrorBoundary } from '../../src/components/ui';
 import {
   workoutRepository,
   WorkoutSession,
@@ -45,7 +45,11 @@ export default function ActiveWorkoutScreen() {
   } catch {
     insets = { bottom: 0 };
   }
-  const styles = useMemo(() => createStyles(colors, insets as any), [colors, insets.bottom]);
+  const bottomInsetValue = insets.bottom;
+  const styles = useMemo(
+    () => createStyles(colors, { bottom: bottomInsetValue } as any),
+    [colors, bottomInsetValue]
+  );
 
   const router = useRouter();
 
@@ -70,14 +74,14 @@ export default function ActiveWorkoutScreen() {
     sessionRef.current = session;
   }, [session]);
 
-  const cancelDebouncedSave = () => {
+  const cancelDebouncedSave = useCallback(() => {
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = null;
     }
-  };
+  }, []);
 
-  const flushActiveWorkout = async (targetSession?: WorkoutSession) => {
+  const flushActiveWorkout = useCallback(async (targetSession?: WorkoutSession) => {
     // Do not autosave after the workout has been completed or discarded.
     // This prevents the unmount cleanup from resurrecting a cleared active draft.
     if (workoutCompletedRef.current) return;
@@ -95,7 +99,7 @@ export default function ActiveWorkoutScreen() {
     } catch {
       // Background autosave failure caught gracefully
     }
-  };
+  }, [cancelDebouncedSave]);
 
   const updateSessionAndAutosaveImmediate = async (newSession: WorkoutSession) => {
     setSession(newSession);
@@ -135,7 +139,7 @@ export default function ActiveWorkoutScreen() {
       subscription.remove();
       void flushActiveWorkout();
     };
-  }, []);
+  }, [flushActiveWorkout]);
 
   useFocusEffect(
     useCallback(() => {
@@ -172,7 +176,7 @@ export default function ActiveWorkoutScreen() {
       return () => {
         isFocused = false;
       };
-    }, [])
+    }, [router])
   );
 
   const [loading, setLoading] = useState(true);
@@ -200,16 +204,27 @@ export default function ActiveWorkoutScreen() {
     });
   };
 
+  const sessionExerciseSignature = useMemo(
+    () =>
+      session?.exercises
+        ?.map((e) => `${e.exerciseId}_${e.order}_${e.exerciseName}`)
+        .join(',') ?? '',
+    [session?.exercises]
+  );
+
   // Fetch last performance per exercise from local completed history
   useEffect(() => {
-    if (!session || !session.exercises || session.exercises.length === 0) return;
+    const currentSession = sessionRef.current;
+    if (!currentSession || !currentSession.exercises || currentSession.exercises.length === 0) return;
 
     let isMounted = true;
 
     async function loadLastPerformances() {
       try {
+        const latest = sessionRef.current;
+        if (!latest || !latest.exercises) return;
         const completed = await workoutRepository.getCompletedWorkouts();
-        const map = buildLastPerformanceMap(session!.exercises, completed, session?.id);
+        const map = buildLastPerformanceMap(latest.exercises, completed, latest.id);
 
         if (isMounted) {
           setLastPerformanceMap(map);
@@ -224,10 +239,7 @@ export default function ActiveWorkoutScreen() {
     return () => {
       isMounted = false;
     };
-  }, [
-    session?.id,
-    session?.exercises?.map((e) => `${e.exerciseId}_${e.order}_${e.exerciseName}`).join(','),
-  ]);
+  }, [session?.id, sessionExerciseSignature]);
 
   // Load active workout draft
   useEffect(() => {
@@ -279,23 +291,6 @@ export default function ActiveWorkoutScreen() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const formatShortDate = (dateStr?: string) => {
-    if (!dateStr) return '';
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return '';
-    return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
-  };
-
-  // Autosave helper
-  const updateSessionAndAutosave = async (newSession: WorkoutSession) => {
-    setSession(newSession);
-    try {
-      await workoutRepository.updateActiveWorkout(newSession);
-    } catch {
-      // Background autosave failure caught gracefully
-    }
-  };
 
   // Add exercises from picker (multi-select)
   const handleSelectExercises = async (exercisesToAdd: Exercise[]) => {
@@ -745,6 +740,11 @@ export default function ActiveWorkoutScreen() {
         keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
         style={styles.keyboardContainer}
       >
+        <ErrorBoundary
+          testID="active-workout-error-boundary"
+          fallbackTitle="Active workout display issue"
+          fallbackMessage="Your workout progress is safely saved locally. Tap below to reload the workout view."
+        >
         <ScrollView
           ref={scrollViewRef}
           onScroll={(e) => {
@@ -905,6 +905,7 @@ export default function ActiveWorkoutScreen() {
             />
           </View>
         </ScrollView>
+        </ErrorBoundary>
       </KeyboardAvoidingView>
 
       {/* Persistent Bottom Rest Overlay */}

@@ -1,8 +1,8 @@
 import { useAppTheme, useThemeStore } from '../src/features/theme';
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, TextInput, Image, Alert, Platform, Modal } from 'react-native';
+import { View, StyleSheet, Pressable, TextInput, Image, Alert, Platform, Modal } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ScreenContainer, ScreenScrollView, Text, Button, Card, Icon, BrandLogoBadge } from '../src/components/ui';
+import { ScreenContainer, ScreenScrollView, Text, Button, Card, Icon, BrandLogoBadge, ErrorBoundary } from '../src/components/ui';
 import { useAuthStore, eraseLocalDeviceData, deleteAccountAndCloudData } from '../src/features/auth';
 import {
   useOnboardingStore,
@@ -15,9 +15,10 @@ import {
   ChipGroup,
   SelectableCard,
 } from '../src/features/onboarding';
-import { profileService, avatarService, UserProfile } from '../src/features/profile';
+import { profileService, avatarService } from '../src/features/profile';
 import { guestStorage } from '../src/lib/storage';
 import { spacing, radii } from '../src/constants/theme';
+import { DOMAIN_LIMITS, clampText } from '../src/constants/domainLimits';
 import { env } from '../src/config/env';
 import { workoutRepository } from '../src/features/workout/services/workoutRepository';
 import { templateRepository } from '../src/features/templates/services/templateRepository';
@@ -836,6 +837,11 @@ export default function SettingsScreen() {
 
   return (
     <ScreenContainer style={styles.container}>
+      <ErrorBoundary
+        testID="settings-error-boundary"
+        fallbackTitle="Unable to display settings"
+        fallbackMessage="An unexpected error occurred while rendering Settings. Tap below to reload."
+      >
       <ScreenScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Top Screen Header */}
         <View style={styles.headerRow}>
@@ -1091,9 +1097,11 @@ export default function SettingsScreen() {
                     testID="input-display-name"
                     value={editDisplayName}
                     onChangeText={(val) => {
-                      editDisplayNameRef.current = val;
-                      setEditDisplayName(val);
+                      const clamped = clampText(val, DOMAIN_LIMITS.DISPLAY_NAME_MAX_LENGTH);
+                      editDisplayNameRef.current = clamped;
+                      setEditDisplayName(clamped);
                     }}
+                    maxLength={DOMAIN_LIMITS.DISPLAY_NAME_MAX_LENGTH}
                     placeholder="e.g. Aditya Patil"
                     placeholderTextColor={colors.textMuted}
                     style={styles.textInput}
@@ -1236,8 +1244,9 @@ export default function SettingsScreen() {
                           accept="image/jpeg,image/png,image/webp,image/gif"
                           style={{ display: 'none' }}
                           ref={fileInputRef}
-                          onChange={(e: any) => {
+                          onChange={async (e: any) => {
                             const file = e.target?.files?.[0];
+                            e.target.value = '';
                             if (!file) return;
                             const validation = avatarService.validateAvatarFile(file);
                             if (!validation.valid) {
@@ -1245,6 +1254,20 @@ export default function SettingsScreen() {
                               return;
                             }
                             setErrorMessage(null);
+
+                            // Strip EXIF metadata & cap resolution via offscreen canvas (AUD-020)
+                            const sanitized = await avatarService.sanitizeWebAvatarImage(file);
+                            if (!isMountedRef.current) return;
+                            if (sanitized) {
+                              pendingAvatarFileRef.current = {
+                                file: sanitized.file,
+                                mimeType: sanitized.mimeType,
+                              };
+                              editAvatarUrlRef.current = sanitized.previewDataUrl;
+                              setEditAvatarUrl(sanitized.previewDataUrl);
+                              return;
+                            }
+
                             pendingAvatarFileRef.current = { file, mimeType: file.type || 'image/jpeg' };
 
                             if (typeof URL !== 'undefined' && URL.createObjectURL) {
@@ -1254,6 +1277,7 @@ export default function SettingsScreen() {
                             } else {
                               const reader = new FileReader();
                               reader.onload = (uploadEvent) => {
+                                if (!isMountedRef.current) return;
                                 const result = uploadEvent.target?.result as string;
                                 if (result) {
                                   editAvatarUrlRef.current = result;
@@ -1262,7 +1286,6 @@ export default function SettingsScreen() {
                               };
                               reader.readAsDataURL(file);
                             }
-                            e.target.value = '';
                           }}
                         />
                         <Button
@@ -1281,9 +1304,11 @@ export default function SettingsScreen() {
                       testID="input-avatar-url"
                       value={editAvatarUrl}
                       onChangeText={(val) => {
-                        editAvatarUrlRef.current = val;
-                        setEditAvatarUrl(val);
+                        const clamped = clampText(val, DOMAIN_LIMITS.AVATAR_URL_MAX_LENGTH);
+                        editAvatarUrlRef.current = clamped;
+                        setEditAvatarUrl(clamped);
                       }}
+                      maxLength={DOMAIN_LIMITS.AVATAR_URL_MAX_LENGTH}
                       placeholder="Or enter image URL (https://...)"
                       placeholderTextColor={colors.textMuted}
                       style={styles.textInput}
@@ -1812,6 +1837,7 @@ export default function SettingsScreen() {
           </View>
         </Card>
       </ScreenScrollView>
+      </ErrorBoundary>
 
       {/* Account Deletion Confirmation Modal (AUD-006) */}
       <Modal

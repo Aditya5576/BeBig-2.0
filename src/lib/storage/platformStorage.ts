@@ -1,15 +1,24 @@
 /**
- * BeBig 2.0 — Cross-Platform Persistent Key-Value Storage
+ * BeBig 2.0 — Cross-Platform Persistent Key-Value Storage (Hardened AUD-017 / AUD-018)
  *
  * Provides a unified, high-capacity, durable persistence engine:
  * - Web (PWA): Uses IndexedDB ('bebig_db', store: 'keyval') to overcome
  *   the 5MB localStorage quota, with transparent one-time migration
- *   from legacy localStorage and graceful fallback to localStorage / memory.
- * - Mobile (iOS / Android): Uses hardware-backed expo-secure-store (Keychain / KeyStore).
+ *   from legacy localStorage, automatic QuotaExceededError eviction of
+ *   rebuildable exercise cache, and graceful fallback to localStorage / memory.
+ * - Mobile (iOS / Android): Small secrets/tokens (<= 1800 bytes) remain in
+ *   hardware-backed expo-secure-store (Keychain / KeyStore); large domain
+ *   payloads (> 1800 bytes) transparently spill over to app-private
+ *   FileSystem.documentDirectory with a lightweight SecureStore pointer so
+ *   writes never hit Android Keystore's 2048-byte limit or truncate data.
+ * - Sanitized Telemetry: Classifies storage errors (`quota_exceeded`,
+ *   `unavailable`, `parse_error`, `security_error`, `unknown`) without ever
+ *   logging workout notes, credentials, or raw user payloads.
  * - SSR / Node / Test: Uses in-memory Map fallback.
  */
 
 import * as SecureStore from 'expo-secure-store';
+import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 
 export interface KeyValueStorage {
@@ -20,9 +29,204 @@ export interface KeyValueStorage {
   clearMemoryCache: (prefix?: string) => void;
 }
 
+export type StorageErrorKind =
+  | 'quota_exceeded'
+  | 'unavailable'
+  | 'parse_error'
+  | 'security_error'
+  | 'unknown';
+
+export interface StorageErrorTelemetryEvent {
+  operation: 'getItem' | 'setItem' | 'removeItem' | 'removeItemIfMatchingId';
+  keyNamespace: string;
+  kind: StorageErrorKind;
+  recovered: boolean;
+}
+
+type StorageErrorListener = (event: StorageErrorTelemetryEvent) => void;
+
 const DB_NAME = 'bebig_db';
 const STORE_NAME = 'keyval';
 const DB_VERSION = 1;
+
+// Safe ceiling below Android Keystore / SecureStore 2048-byte limit (AUD-017)
+export const SECURESTORE_MAX_BYTES = 1800;
+export const LARGE_PAYLOAD_FILE_PREFIX = '__BEBIG_FILE__:';
+export const EVICTABLE_WEB_CACHE_KEYS: readonly string[] = [
+  'bebig.exercises.cache',
+  'bebig.exercises.cache.v2',
+];
+
+const storageErrorListeners = new Set<StorageErrorListener>();
+
+/**
+ * Classifies storage errors into structured categories without inspecting user data.
+ */
+export function classifyStorageError(err: unknown): StorageErrorKind {
+  if (!err) return 'unknown';
+  const name = typeof err === 'object' && 'name' in err ? String((err as any).name) : '';
+  const message =
+    typeof err === 'object' && 'message' in err ? String((err as any).message) : String(err);
+  const combined = `${name} ${message}`.toLowerCase();
+
+  if (
+    combined.includes('quotaexceeded') ||
+    combined.includes('quota') ||
+    combined.includes('ns_error_dom_quota_reached') ||
+    combined.includes('disk full') ||
+    combined.includes('no space')
+  ) {
+    return 'quota_exceeded';
+  }
+  if (
+    combined.includes('securityerror') ||
+    combined.includes('permission') ||
+    combined.includes('access denied') ||
+    combined.includes('private browsing')
+  ) {
+    return 'security_error';
+  }
+  if (combined.includes('syntaxerror') || combined.includes('json')) {
+    return 'parse_error';
+  }
+  if (
+    combined.includes('unavailable') ||
+    combined.includes('not available') ||
+    combined.includes('disabled')
+  ) {
+    return 'unavailable';
+  }
+  return 'unknown';
+}
+
+/**
+ * Extracts only the non-PII namespace prefix of a storage key (e.g. `bebig.workout.active`).
+ */
+export function sanitizeStorageKeyNamespace(key: string): string {
+  const parts = key.split('.');
+  if (parts.length <= 3) return parts.join('.');
+  return parts.slice(0, 3).join('.');
+}
+
+/**
+ * Registers a telemetry listener for sanitized storage fault events (zero PII/values).
+ */
+export function onStorageError(listener: StorageErrorListener): () => void {
+  storageErrorListeners.add(listener);
+  return () => {
+    storageErrorListeners.delete(listener);
+  };
+}
+
+function emitStorageError(
+  operation: StorageErrorTelemetryEvent['operation'],
+  key: string,
+  err: unknown,
+  recovered: boolean
+): void {
+  const event: StorageErrorTelemetryEvent = {
+    operation,
+    keyNamespace: sanitizeStorageKeyNamespace(key),
+    kind: classifyStorageError(err),
+    recovered,
+  };
+  for (const listener of storageErrorListeners) {
+    try {
+      listener(event);
+    } catch {
+      // Telemetry listener errors must never break storage operations
+    }
+  }
+}
+
+function getUtf8ByteLength(str: string): number {
+  if (typeof TextEncoder !== 'undefined') {
+    return new TextEncoder().encode(str).length;
+  }
+  // Conservative UTF-8 upper-bound fallback
+  return str.length * 2;
+}
+
+function getNativeSpillFilePath(key: string): string | null {
+  if (!FileSystem.documentDirectory) return null;
+  // Deterministic safe filename derived from key (FNV-1a 32-bit hash + sanitized prefix)
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < key.length; i++) {
+    hash ^= key.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  const safePrefix = sanitizeStorageKeyNamespace(key).replace(/[^a-zA-Z0-9_-]/g, '_');
+  return `${FileSystem.documentDirectory}bebig_kv/${safePrefix}_${hash.toString(16)}.json`;
+}
+
+async function ensureNativeKvDir(): Promise<void> {
+  if (!FileSystem.documentDirectory) return;
+  const dir = `${FileSystem.documentDirectory}bebig_kv/`;
+  const info = await FileSystem.getInfoAsync(dir);
+  if (!info.exists) {
+    await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+  }
+}
+
+async function readNativeValue(key: string): Promise<string | null> {
+  const raw = await SecureStore.getItemAsync(key);
+  if (raw === null || raw === undefined) return null;
+
+  if (raw.startsWith(LARGE_PAYLOAD_FILE_PREFIX)) {
+    const filePath = raw.slice(LARGE_PAYLOAD_FILE_PREFIX.length);
+    if (!filePath) return null;
+    const info = await FileSystem.getInfoAsync(filePath);
+    if (!info.exists) return null;
+    return FileSystem.readAsStringAsync(filePath);
+  }
+
+  return raw;
+}
+
+async function writeNativeValue(key: string, value: string): Promise<void> {
+  const bytes = getUtf8ByteLength(value);
+  if (bytes > SECURESTORE_MAX_BYTES && FileSystem.documentDirectory) {
+    const spillPath = getNativeSpillFilePath(key);
+    if (spillPath) {
+      await ensureNativeKvDir();
+      await FileSystem.writeAsStringAsync(spillPath, value);
+      await SecureStore.setItemAsync(key, `${LARGE_PAYLOAD_FILE_PREFIX}${spillPath}`);
+      return;
+    }
+  }
+
+  // If previously spilled to file and now small, clean up old file after SecureStore write
+  let previousSpillPath: string | null = null;
+  try {
+    const existing = await SecureStore.getItemAsync(key);
+    if (existing && existing.startsWith(LARGE_PAYLOAD_FILE_PREFIX)) {
+      previousSpillPath = existing.slice(LARGE_PAYLOAD_FILE_PREFIX.length);
+    }
+  } catch {
+    // Ignore pre-read error
+  }
+
+  await SecureStore.setItemAsync(key, value);
+
+  if (previousSpillPath) {
+    await FileSystem.deleteAsync(previousSpillPath, { idempotent: true }).catch(() => {});
+  }
+}
+
+async function removeNativeValue(key: string): Promise<void> {
+  try {
+    const existing = await SecureStore.getItemAsync(key);
+    if (existing && existing.startsWith(LARGE_PAYLOAD_FILE_PREFIX)) {
+      const filePath = existing.slice(LARGE_PAYLOAD_FILE_PREFIX.length);
+      if (filePath) {
+        await FileSystem.deleteAsync(filePath, { idempotent: true }).catch(() => {});
+      }
+    }
+  } catch {
+    // Proceed to delete SecureStore key regardless
+  }
+  await SecureStore.deleteItemAsync(key);
+}
 
 /**
  * In-memory fallback map for environments without persistent storage.
@@ -76,7 +280,7 @@ export const idbStorage = {
     const db = await openIDB();
     return new Promise((resolve, reject) => {
       let isSettled = false;
-      const fail = (err: any) => {
+      const fail = (err: unknown) => {
         if (!isSettled) {
           isSettled = true;
           reject(err);
@@ -105,7 +309,7 @@ export const idbStorage = {
     const db = await openIDB();
     return new Promise((resolve, reject) => {
       let isSettled = false;
-      const fail = (err: any) => {
+      const fail = (err: unknown) => {
         if (!isSettled) {
           isSettled = true;
           reject(err);
@@ -138,7 +342,7 @@ export const idbStorage = {
     const db = await openIDB();
     return new Promise((resolve, reject) => {
       let isSettled = false;
-      const fail = (err: any) => {
+      const fail = (err: unknown) => {
         if (!isSettled) {
           isSettled = true;
           reject(err);
@@ -162,7 +366,9 @@ export const idbStorage = {
             store.delete(key);
             didDelete = true;
           }
-        } catch {}
+        } catch (parseErr) {
+          emitStorageError('removeItemIfMatchingId', key, parseErr, false);
+        }
       };
 
       tx.oncomplete = () => {
@@ -178,6 +384,30 @@ export const idbStorage = {
     });
   },
 };
+
+/**
+ * Evicts non-critical rebuildable exercise catalog caches to reclaim browser storage
+ * quota before retrying an urgent write (e.g., active workout autosave).
+ */
+async function evictRebuildableWebCaches(): Promise<void> {
+  for (const cacheKey of EVICTABLE_WEB_CACHE_KEYS) {
+    memoryStorage.delete(cacheKey);
+    if (idbStorage.isAvailable()) {
+      try {
+        await idbStorage.remove(cacheKey);
+      } catch {
+        // Best-effort eviction
+      }
+    }
+    if (typeof localStorage !== 'undefined') {
+      try {
+        localStorage.removeItem(cacheKey);
+      } catch {
+        // Best-effort eviction
+      }
+    }
+  }
+}
 
 /**
  * Unified Platform Storage Engine.
@@ -198,31 +428,32 @@ export const platformStorage: KeyValueStorage = {
           if (typeof localStorage !== 'undefined') {
             const legacyVal = localStorage.getItem(key);
             if (legacyVal !== null && legacyVal !== undefined) {
-              // Migrate to IndexedDB asynchronously
               try {
                 await idbStorage.set(key, legacyVal);
-
-                // Fix 2: Verify migrated data before legacy cleanup
                 const verifiedVal = await idbStorage.get(key);
                 if (verifiedVal === legacyVal) {
                   localStorage.removeItem(key);
                 }
-              } catch {
-                // Keep legacy value in localStorage if migration write or verification fails
+              } catch (migrationErr) {
+                emitStorageError('getItem', key, migrationErr, true);
               }
               return legacyVal;
             }
           }
-        } catch {
-          // IndexedDB failed (e.g. strict private mode); fallback to localStorage
+        } catch (idbErr) {
+          emitStorageError('getItem', key, idbErr, true);
         }
       }
 
       // Fallback to localStorage if IDB is unavailable or errored
       if (typeof localStorage !== 'undefined') {
-        const localVal = localStorage.getItem(key);
-        if (localVal !== null && localVal !== undefined) {
-          return localVal;
+        try {
+          const localVal = localStorage.getItem(key);
+          if (localVal !== null && localVal !== undefined) {
+            return localVal;
+          }
+        } catch (localErr) {
+          emitStorageError('getItem', key, localErr, true);
         }
       }
 
@@ -231,12 +462,12 @@ export const platformStorage: KeyValueStorage = {
 
     // 2. Native Mobile Platform (iOS / Android)
     try {
-      const val = await SecureStore.getItemAsync(key);
+      const val = await readNativeValue(key);
       if (val !== null && val !== undefined) {
         return val;
       }
-    } catch {
-      // Fallback to memory
+    } catch (nativeErr) {
+      emitStorageError('getItem', key, nativeErr, true);
     }
 
     // In test environment, also check memoryStorage or localStorage
@@ -254,39 +485,63 @@ export const platformStorage: KeyValueStorage = {
     memoryStorage.set(key, value);
 
     if (Platform.OS === 'web') {
-      let success = false;
-      let lastError: any = new Error('No persistent web storage available.');
+      const attemptWebWrite = async (): Promise<{ success: boolean; error: unknown }> => {
+        let lastError: unknown = new Error('No persistent web storage available.');
 
-      if (idbStorage.isAvailable()) {
-        try {
-          await idbStorage.set(key, value);
-          success = true;
-        } catch (err) {
-          lastError = err;
+        if (idbStorage.isAvailable()) {
+          try {
+            await idbStorage.set(key, value);
+            return { success: true, error: null };
+          } catch (err) {
+            lastError = err;
+          }
         }
-      }
 
-      if (!success && typeof localStorage !== 'undefined') {
-        try {
-          localStorage.setItem(key, value);
-          success = true;
-        } catch (err) {
-          lastError = err;
+        if (typeof localStorage !== 'undefined') {
+          try {
+            localStorage.setItem(key, value);
+            return { success: true, error: null };
+          } catch (err) {
+            lastError = err;
+          }
         }
+
+        return { success: false, error: lastError };
+      };
+
+      const first = await attemptWebWrite();
+      if (first.success) return;
+
+      // AUD-018: If quota exceeded, evict rebuildable exercise catalog caches and retry once
+      if (classifyStorageError(first.error) === 'quota_exceeded') {
+        await evictRebuildableWebCaches();
+        const retry = await attemptWebWrite();
+        if (retry.success) {
+          emitStorageError('setItem', key, first.error, true);
+          return;
+        }
+        emitStorageError('setItem', key, retry.error, false);
+        throw retry.error;
       }
 
-      if (!success) {
-        if (process.env.NODE_ENV === 'test' && !idbStorage.isAvailable() && typeof localStorage === 'undefined') return;
-        throw lastError;
+      if (
+        process.env.NODE_ENV === 'test' &&
+        !idbStorage.isAvailable() &&
+        typeof localStorage === 'undefined'
+      ) {
+        return;
       }
-      return;
+
+      emitStorageError('setItem', key, first.error, false);
+      throw first.error;
     }
 
-    // Native Mobile Platform
+    // Native Mobile Platform (with >1800B FileSystem spillover — AUD-017)
     try {
-      await SecureStore.setItemAsync(key, value);
+      await writeNativeValue(key, value);
     } catch (error) {
       if (process.env.NODE_ENV === 'test') return;
+      emitStorageError('setItem', key, error, false);
       throw error;
     }
   },
@@ -296,7 +551,7 @@ export const platformStorage: KeyValueStorage = {
 
     if (Platform.OS === 'web') {
       let success = false;
-      let lastError: any = new Error('No persistent web storage available.');
+      let lastError: unknown = new Error('No persistent web storage available.');
 
       if (idbStorage.isAvailable()) {
         try {
@@ -317,7 +572,14 @@ export const platformStorage: KeyValueStorage = {
       }
 
       if (!success) {
-        if (process.env.NODE_ENV === 'test' && !idbStorage.isAvailable() && typeof localStorage === 'undefined') return;
+        if (
+          process.env.NODE_ENV === 'test' &&
+          !idbStorage.isAvailable() &&
+          typeof localStorage === 'undefined'
+        ) {
+          return;
+        }
+        emitStorageError('removeItem', key, lastError, false);
         throw lastError;
       }
       return;
@@ -325,9 +587,10 @@ export const platformStorage: KeyValueStorage = {
 
     // Native Mobile Platform
     try {
-      await SecureStore.deleteItemAsync(key);
+      await removeNativeValue(key);
     } catch (error) {
       if (process.env.NODE_ENV === 'test') return;
+      emitStorageError('removeItem', key, error, false);
       throw error;
     }
   },
@@ -349,7 +612,9 @@ export const platformStorage: KeyValueStorage = {
               if (JSON.parse(localVal)?.id === expectedId) {
                 localStorage.removeItem(key);
               }
-            } catch {}
+            } catch (err) {
+              emitStorageError('removeItemIfMatchingId', key, err, true);
+            }
           }
         }
         const mem = memoryStorage.get(key);
@@ -358,10 +623,14 @@ export const platformStorage: KeyValueStorage = {
             if (JSON.parse(mem)?.id === expectedId) {
               memoryStorage.delete(key);
             }
-          } catch {}
+          } catch (err) {
+            emitStorageError('removeItemIfMatchingId', key, err, true);
+          }
         }
         return deleted;
-      } catch {}
+      } catch (idbErr) {
+        emitStorageError('removeItemIfMatchingId', key, idbErr, true);
+      }
     }
 
     // 2. Synchronous Memory / Local / Native Check
@@ -378,26 +647,32 @@ export const platformStorage: KeyValueStorage = {
             localStorage.removeItem(key);
           }
           if (Platform.OS !== 'web') {
-            await SecureStore.deleteItemAsync(key).catch(() => {});
+            await removeNativeValue(key).catch((err) => {
+              emitStorageError('removeItemIfMatchingId', key, err, true);
+            });
           }
           return true;
         }
-      } catch {}
+      } catch (err) {
+        emitStorageError('removeItemIfMatchingId', key, err, true);
+      }
       return false;
     }
 
-    // If native platform SecureStore:
+    // If native platform SecureStore / FileSystem:
     if (Platform.OS !== 'web') {
       try {
-        const val = await SecureStore.getItemAsync(key);
+        const val = await readNativeValue(key);
         if (val) {
           const parsed = JSON.parse(val);
           if (parsed?.id === expectedId) {
-            await SecureStore.deleteItemAsync(key);
+            await removeNativeValue(key);
             return true;
           }
         }
-      } catch {}
+      } catch (err) {
+        emitStorageError('removeItemIfMatchingId', key, err, true);
+      }
     }
 
     return false;
@@ -415,4 +690,3 @@ export const platformStorage: KeyValueStorage = {
     }
   },
 };
-

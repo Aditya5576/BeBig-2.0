@@ -9,16 +9,31 @@
  * - Non-privileged client calls: uses authenticated user session via supabase client
  */
 
-import { supabase, isSupabaseConfigured } from '../../../lib/supabase';
+import { supabase } from '../../../lib/supabase';
+import {
+  downscaleWebImageToMaxEdge,
+  DownscaledWebImageResult,
+} from '../../exercises/storage/exercisePhotoStorage';
 
 export const AVATAR_BUCKET_NAME = 'avatars';
 export const MAX_AVATAR_SIZE_BYTES = 2 * 1024 * 1024; // 2MB
+export const AVATAR_MAX_EDGE_PX = 800;
+export const AVATAR_JPEG_QUALITY = 0.82;
 export const ALLOWED_AVATAR_MIME_TYPES = [
   'image/jpeg',
   'image/png',
   'image/webp',
   'image/gif',
 ];
+
+export interface SanitizedAvatarResult {
+  file: Blob;
+  previewDataUrl: string;
+  mimeType: 'image/jpeg';
+  width: number;
+  height: number;
+  exifStripped: true;
+}
 
 export interface FileValidationResult {
   valid: boolean;
@@ -58,6 +73,32 @@ export class AvatarService implements IAvatarService {
     }
 
     return { valid: true };
+  }
+
+  /**
+   * Re-encodes a web avatar image via offscreen HTMLCanvasElement (max 800px, JPEG 0.82)
+   * to strip all EXIF GPS/device/camera metadata and cap decoded bitmap memory (AUD-020).
+   * Returns null gracefully in non-DOM/native/test runtimes where Canvas is unavailable.
+   */
+  async sanitizeWebAvatarImage(
+    source: Blob | string
+  ): Promise<SanitizedAvatarResult | null> {
+    const downscaled: DownscaledWebImageResult | null = await downscaleWebImageToMaxEdge(
+      source,
+      AVATAR_MAX_EDGE_PX,
+      AVATAR_JPEG_QUALITY
+    );
+    if (!downscaled || !downscaled.blob) {
+      return null;
+    }
+    return {
+      file: downscaled.blob,
+      previewDataUrl: downscaled.dataUrl,
+      mimeType: 'image/jpeg',
+      width: downscaled.width,
+      height: downscaled.height,
+      exifStripped: true,
+    };
   }
 
   /**

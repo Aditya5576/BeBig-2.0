@@ -162,12 +162,29 @@ describe('Checkpoint 5 — PWA Installation Layer', () => {
       expect(swContent).toContain('url.origin !== self.location.origin');
     });
 
-    it('never caches authenticated requests or API endpoints', () => {
+    it('never caches authenticated requests or API endpoints (AUD-013)', () => {
       expect(swContent).toContain("request.headers.has('authorization')");
       expect(swContent).toContain("request.headers.has('apikey')");
       expect(swContent).toContain("url.pathname.startsWith('/api/')");
       expect(swContent).toContain("url.pathname.startsWith('/rest/')");
       expect(swContent).toContain("url.pathname.startsWith('/auth/')");
+      expect(swContent).toContain("url.pathname.startsWith('/functions/')");
+      expect(swContent).toContain("url.pathname.startsWith('/storage/')");
+    });
+
+    it('enforces shell-only navigation caching and honors Cache-Control no-store/private (AUD-013)', () => {
+      // Only public root shell ('/' or '/index.html') may be cached on navigate
+      expect(swContent).toContain('isPublicShellPath(url.pathname)');
+      expect(swContent).toContain("cache.put('/', clone)");
+      expect(swContent).not.toContain('cache.put(request, clone)\n');
+
+      // Refuses to cache responses marked no-store or private
+      expect(swContent).toContain('isNonCacheableResponse');
+      expect(swContent).toContain("cacheControl.includes('no-store')");
+      expect(swContent).toContain("cacheControl.includes('private')");
+
+      // Purges all non-current caches on activate
+      expect(swContent).toContain('if (key !== CACHE_NAME)');
     });
 
     it('uses Network-First strategy for HTML navigation requests', () => {

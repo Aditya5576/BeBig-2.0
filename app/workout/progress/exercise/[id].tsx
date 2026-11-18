@@ -25,6 +25,7 @@ export default function ExerciseProgressionScreen() {
   const [resolvedName, setResolvedName] = useState<string>(name || 'Exercise Progression');
   const [loading, setLoading] = useState(true);
   const [expandedSessions, setExpandedSessions] = useState<Record<string, boolean>>({});
+  const hasLoadedRef = React.useRef(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -33,7 +34,7 @@ export default function ExerciseProgressionScreen() {
         setLoading(false);
         return;
       }
-      if (snapshots.length === 0) {
+      if (!hasLoadedRef.current) {
         setLoading(true);
       }
       void (async () => {
@@ -56,6 +57,7 @@ export default function ExerciseProgressionScreen() {
           allSnapshots.sort((a, b) => new Date(a.sessionDate).getTime() - new Date(b.sessionDate).getTime());
 
           setSnapshots(allSnapshots);
+          hasLoadedRef.current = allSnapshots.length > 0;
 
           // Infer exercise name if omitted in URL search params
           if (!name && allSnapshots.length > 0) {

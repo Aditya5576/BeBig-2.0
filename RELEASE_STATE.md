@@ -1,58 +1,41 @@
 # BeBig 2.0 — Release State
 
-## Production (Live Verified)
+## Production (Release `v2.4.3`)
 
 - **URL**: https://be-big-2-0.vercel.app
-- **Configured Version**: v2.4.1 (`package.json`, `app.json`)
-- **Target Release Tag**: `v2.4.1`
-- **Deployment Status**: Ready for Production Release
-- **Deployment Method**: Automatic Vercel deployment on `main` branch push
+- **Live Version**: `v2.4.3` (`package.json`, `app.json`, `/sw.js` `bebig-pwa-v2.4.3`)
+- **Previous Verified Release**: `v2.4.2` (`0afb94bcfc2fcc67d2ac7e04c167c115153e4816`, Vercel `dpl_DBpWdWmqRb1BU1jQXtFoHfdxvKYE`)
+- **Supabase Production Project**: `BeBig 2.0` (`gkkvxfroxthvbiecramm`, `ap-northeast-1`)
+  - Applied `v2.4.3` SQL Migrations: `20261118120000_atomic_super_admin_guard.sql`, `20261118120500_harden_avatars_storage_privacy.sql`
+  - Deployed Edge Functions: `admin-assign-role` (`ACTIVE`, v1, `verify_jwt: true`), `coach-agent` (`ACTIVE`, v14, `verify_jwt: true`), `delete-account` (`ACTIVE`, v2, `verify_jwt: true`), `coach-v2` (paused, untouched at v2)
+- **Deployment Method**: Automatic Vercel deployment on `main` branch push + explicit Supabase CLI deployments
 
-## Deployed Features in Production (v2.4.1)
-- **iOS WebKit Crash Guard**: Inline single-layer overlay replacing web modal portals with dynamic `100dvh` iOS keyboard compensation and multi-event teardown (`popstate`, `keydown`, `unmount`)
-- **Jetsam Memory Defense**: Bounded `FlatList` virtualization, capped header recents, and lazy decoding thumbnail suppression in compact picker mode
-- **SPA Routing Resilience**: Vercel route ordering (`/exercises/new` ahead of `:id`), asset exclusion regex, and Service Worker navigation fallback on 404/network drop
-- **Granular Error Boundary**: Component-level fallback catching isolated card errors without disrupting workout sessions
-- **Versioned "What's New in v2.4.1" Modal**: Once-per-version update acknowledgement modal highlighting v2.4.1 capabilities
+## Deployed Features in Production (`v2.4.3`)
+- **Two-Layer Live iPhone PWA Crash & SW Auto-Reload Fix (`v2.4.3`)**:
+  - **Layer 1 (JS Bundle Freshness + Automatic SW Recovery)**: Bumped `public/sw.js` cache to `bebig-pwa-v2.4.3`, added **Network-First** caching for `/_expo/static/js/` and `.js` bundles, and wired `reg.update()` + `controllerchange` single-reload recovery (`sessionStorage` guard `bebig_sw_reloaded_v243`) in `app/_layout.tsx`.
+  - **Layer 2 (Zero-Bitmap Picker + Legacy Photo Compaction)**: Stripped `images` and `imageUrl` payloads from `ExercisePickerModal` (`FlatList` & `RECENTLY USED`) via `stripExerciseImagePayloads()` and added non-blocking sequential background compaction (`compactOversizedCustomExercises` / `downscaleDataUrlToMaxEdge`) for legacy oversized (`>150KB`) custom exercise photos on web.
+- **Phase 2B Security Hardening (`AUD-005`, `AUD-010`, `AUD-012`, `AUD-013`, `AUD-019`, `AUD-020`)**:
+  - `AUD-005`: Removed `xlsx@0.18.5`; replaced with zero-dependency pure-TS OOXML writer (`ooxmlWorkbook.ts`) + formula-injection neutralization (`-416KB` export bundle).
+  - `AUD-010`: Shared allowlisted CORS (`Vary: Origin`), `405` guards, bounded JSON caps, and `correlation_id` error redaction across `admin-assign-role`, `coach-agent`, and `delete-account`.
+  - `AUD-012`: Hardened `vercel.json` with HSTS (`max-age=63072000; includeSubDomains`), `Permissions-Policy`, `Cross-Origin-Opener-Policy`, and functional CSP.
+  - `AUD-013`: Shell-only Service Worker navigation caching + `Cache-Control: no-store/private` bypass + `/functions/` & `/storage/` exclusion in `public/sw.js`.
+  - `AUD-019`: Applied `20261118120000_atomic_super_admin_guard.sql` (`protect_last_super_admin_trigger` + `service_role`-only `admin_mutate_role_atomic` RPC).
+  - `AUD-020`: Applied `20261118120500_harden_avatars_storage_privacy.sql` (owner-scoped `SELECT` RLS on `storage.objects`) + web JPEG EXIF stripping (`avatarService.sanitizeWebAvatarImage()`).
+- **Phase 3 Storage Resilience, Hook Hygiene & Input Bounds (`AUD-015`, `AUD-017`, `AUD-018`, `AUD-022`, `AUD-024`, `AUD-026`, `AUD-034`)**:
+  - `AUD-017` / `AUD-018`: Native `SecureStore` >1800B `FileSystem` spillover, structured zero-PII storage error classification, and web `QuotaExceededError` catalog cache eviction + retry.
+  - `AUD-015`: Eliminated all `react-hooks/exhaustive-deps` warnings across active workout, timer, template, exercise detail, and progress screens.
+  - `AUD-024` / `AUD-026`: Centralized `DOMAIN_LIMITS` + `clampText` input bounds and added granular `<ErrorBoundary>` wrappers across `/workout/active`, `/settings`, `/workout/progress/weekly`, and `/workout/progress/prs`.
+- **Carry-Forward Features (`v2.4.2`)**: Self-Service Account Deletion (`AUD-006`), Legal & Terms routes (`AUD-007`), Erase Local Device Data (`AUD-011`), Active-Workout Guest Migration (`AUD-002`), CI Quality Gate (`AUD-004`), Secret & Backup Containment (`AUD-001`), Cross-Platform Web Build (`AUD-009`).
 
-## Historical Releases
-### Deployed Features in Production (v2.4.0)
+## Permanent Exclusions & Deferred Boundaries
 
-- **Cinematic Startup Sequence**: 3.5s multi-stage Obsidian Athletic splash screen with progressive-overload barbell asset, ambient Electric Blue / Emerald breathing glow, and hardware-accelerated progress bar
-- **BrandLogoBadge Architecture**: Framed `#131B2E` Obsidian Athletic emblem badges with Electric Blue border glow across Home, Settings, and Onboarding headers
-- **Athletic Typography Upgrade**: App-wide integration of `Plus Jakarta Sans` (headings, body, badges) and `JetBrains Mono` (high-precision tabular workout metrics and timers)
-- **Instant Multi-Word Custom Search**: Cold-start cache hydration and order-independent keyword tokenization delivering 0ms custom movement resolution
-- **Resilient Summary Recovery**: Safe session resolution and missing-param guards preventing 404 dead-ends on `/workout/summary`
-- **Versioned "What's New in v2.4.0" Modal**: Once-per-version update acknowledgement modal highlighting v2.4.0 capabilities
-
-## Historical Releases
-
-### Deployed Features in Production (v2.1.1 · b511ab6)
-
-- **Task 1**: Automatic workout-template session numbering (`Session #1`, `Session #2`)
-- **Task 2**: Profile photo upload, cropping, and cross-platform persistence
-- **Task 3**: Recently used exercises in the exercise picker
-- **Task 4**: Genuine Excel (.xlsx) and PDF (.pdf) export for history and templates
-- **Task 5**: Progress Analytics 2.0, weekly performance trends, & AI Weekly Analysis
-- **Task 6**: iOS and Android workout/rest-timer background notifications
-- **PR #5 Hotfix**: Profile black screen fix (deferred heavy export imports), PDF WinAnsi Unicode fix (U+202F), and iOS `timeSensitive` notification registration
-- **Prior Foundation**: Workout 2.0 athlete experience, Rest Timer UI polish, Exercise Library, CSP configuration
-
-## Development Status (Pending / Local Work)
-
-- **Current Working Branch**: `feat/m1-remove-scheduled-workouts`
-- **Current HEAD**: `b511ab6b2158c3c57bde95904b1765868d5b3958`
-- **Pending Uncommitted Milestones**:
-  - **M1 (Removal)**: Safely remove scheduled workouts (local verification complete, uncommitted)
-  - **M3 (Optimization)**: Bounded AI Coach history query & lifetime volume preservation (local verification complete, uncommitted)
-  - **What's New Popup**: Version-aware release notes modal with onboarding protection (local verification complete, uncommitted)
-  - **M4 (Audit)**: Avatar storage privacy audit & path sanitization (local verification complete, uncommitted)
-- **M2 Milestone**: Workout/rest-timer notifications audit (explicitly deferred)
+- **`AUD-008`** (`app/+html.tsx` viewport zoom lock): Permanently excluded by policy.
+- **M2 Timer Notifications Audit & AI Coach V2** (`app/coach/`, `src/features/coach/`, `supabase/functions/coach-v2/`): Paused / deferred.
 
 ## Release Rule
 
-1. Test production end-to-end on physical device during gym usage.
-2. Record any production issues.
-3. Fix production issues if discovered.
+1. Verify locally (`typecheck`, `lint`, full Jest suite, `build:web`).
+2. Obtain explicit user approval before committing, pushing, running migrations, or deploying Edge Functions.
+3. Validate live production URL, Service Worker cache version, and physical iPhone PWA behavior after release.
 
 > **Important**: Do not delete or overwrite this state file during normal development.

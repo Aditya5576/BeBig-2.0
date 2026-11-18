@@ -47,6 +47,7 @@ import {
 import { Exercise, ExerciseCategory } from '../types';
 import { useAuthStore } from '../../auth';
 import { spacing, radii } from '../../../constants/theme';
+import { DOMAIN_LIMITS, clampText } from '../../../constants/domainLimits';
 
 export interface CustomExerciseFormProps {
   onSuccess: (created: Exercise) => void | Promise<void>;
@@ -325,7 +326,8 @@ export function CustomExerciseForm({
             placeholder="e.g. Incline Smith Machine Press"
             placeholderTextColor={colors.textMuted}
             value={name}
-            onChangeText={setName}
+            onChangeText={(val) => setName(clampText(val, DOMAIN_LIMITS.EXERCISE_NAME_MAX_LENGTH))}
+            maxLength={DOMAIN_LIMITS.EXERCISE_NAME_MAX_LENGTH}
             autoFocus
             returnKeyType="next"
             onSubmitEditing={() => primaryMusclesRef.current?.focus()}
@@ -515,7 +517,10 @@ export function CustomExerciseForm({
             placeholder="e.g. Upper Chest, Front Delts"
             placeholderTextColor={colors.textMuted}
             value={primaryMuscles}
-            onChangeText={setPrimaryMuscles}
+            onChangeText={(val) =>
+              setPrimaryMuscles(clampText(val, DOMAIN_LIMITS.MUSCLE_LIST_INPUT_MAX_LENGTH))
+            }
+            maxLength={DOMAIN_LIMITS.MUSCLE_LIST_INPUT_MAX_LENGTH}
             returnKeyType="next"
             onSubmitEditing={() => secondaryMusclesRef.current?.focus()}
             blurOnSubmit={false}
@@ -534,7 +539,10 @@ export function CustomExerciseForm({
             placeholder="e.g. Triceps"
             placeholderTextColor={colors.textMuted}
             value={secondaryMuscles}
-            onChangeText={setSecondaryMuscles}
+            onChangeText={(val) =>
+              setSecondaryMuscles(clampText(val, DOMAIN_LIMITS.MUSCLE_LIST_INPUT_MAX_LENGTH))
+            }
+            maxLength={DOMAIN_LIMITS.MUSCLE_LIST_INPUT_MAX_LENGTH}
             returnKeyType="next"
             onSubmitEditing={() => instructionsRef.current?.focus()}
             blurOnSubmit={false}
@@ -553,7 +561,10 @@ export function CustomExerciseForm({
             placeholder="Add key form cues, grip setup, or execution tips..."
             placeholderTextColor={colors.textMuted}
             value={description}
-            onChangeText={setDescription}
+            onChangeText={(val) =>
+              setDescription(clampText(val, DOMAIN_LIMITS.EXERCISE_INSTRUCTIONS_MAX_LENGTH))
+            }
+            maxLength={DOMAIN_LIMITS.EXERCISE_INSTRUCTIONS_MAX_LENGTH}
             multiline
             numberOfLines={4}
             returnKeyType="default"

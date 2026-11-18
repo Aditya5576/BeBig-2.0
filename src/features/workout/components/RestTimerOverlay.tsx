@@ -4,7 +4,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, Button, Card, Icon } from '../../../components/ui';
 import { useAppTheme } from '../../theme';
 import { ActiveRestTimer } from '../types';
-import { spacing, radii } from '../../../constants/theme';
 
 interface RestTimerOverlayProps {
   activeRestTimer: ActiveRestTimer;
@@ -94,7 +93,8 @@ export function RestTimerOverlay({
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const styles = useMemo(() => createStyles(colors, insets), [colors, insets.bottom]);
+  const bottomInset = insets.bottom;
+  const styles = useMemo(() => createStyles(colors, { bottom: bottomInset }), [colors, bottomInset]);
 
   if (isFinished) {
     return (

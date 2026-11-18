@@ -3,7 +3,7 @@
  *
  * Provides functions to export workout history and workout templates
  * into standard formats:
- * - Excel (.xlsx): Genuine multi-sheet workbooks (Summary and Details) using SheetJS (xlsx)
+ * - Excel (.xlsx): Genuine multi-sheet workbooks (Summary and Details) using pure-TS OOXML writer (AUD-005)
  * - PDF (.pdf): Formatted reports with headers, summaries, tables, and footers using pdf-lib
  * - JSON (.json) & CSV (.csv): Preserved for open data portability
  *
@@ -11,12 +11,18 @@
  */
 
 import { Platform, Share } from 'react-native';
-import * as XLSX from 'xlsx';
 import type { RGB } from 'pdf-lib';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { WorkoutSession } from '../../workout/types';
 import { WorkoutTemplate } from '../../templates/types';
+import {
+  OoxmlWorkbook,
+  createOoxmlWorkbook,
+  appendOoxmlSheet,
+  writeOoxmlWorkbookToBase64,
+  sanitizeSpreadsheetCell,
+} from './ooxmlWorkbook';
 
 /**
  * Loads pdf-lib from its standalone pre-bundled distribution.
@@ -35,17 +41,21 @@ function getPdfLib() {
 export type ExportFormat = 'xlsx' | 'pdf' | 'json' | 'csv';
 
 /**
- * Escapes a single CSV field following RFC 4180 standards.
+ * Escapes a single CSV field following RFC 4180 standards and neutralizes
+ * spreadsheet formula-injection triggers (=, +, @, non-numeric -).
  */
 export function escapeCsvField(value: unknown): string {
   if (value === null || value === undefined) {
     return '';
   }
-  const str = String(value);
-  if (/[",\r\n]/.test(str)) {
-    return `"${str.replace(/"/g, '""')}"`;
+  const safe =
+    typeof value === 'string'
+      ? String(sanitizeSpreadsheetCell(value))
+      : String(value);
+  if (/[",\r\n]/.test(safe)) {
+    return `"${safe.replace(/"/g, '""')}"`;
   }
-  return str;
+  return safe;
 }
 
 /**
@@ -226,8 +236,8 @@ export function exportTemplatesToCsv(templates: WorkoutTemplate[]): string {
  * 1. "Workout Summary" sheet: high-level session statistics
  * 2. "Exercise & Set Details" sheet: detailed per-set logged performance
  */
-export function buildWorkoutsWorkbook(workouts: WorkoutSession[]): XLSX.WorkBook {
-  const wb = XLSX.utils.book_new();
+export function buildWorkoutsWorkbook(workouts: WorkoutSession[]): OoxmlWorkbook {
+  const wb = createOoxmlWorkbook();
 
   // Sheet 1: Workout Summary
   const summaryHeaders = [
@@ -259,8 +269,7 @@ export function buildWorkoutsWorkbook(workouts: WorkoutSession[]): XLSX.WorkBook
     ];
   });
 
-  const summarySheet = XLSX.utils.aoa_to_sheet([summaryHeaders, ...summaryRows]);
-  XLSX.utils.book_append_sheet(wb, summarySheet, 'Workout Summary');
+  appendOoxmlSheet(wb, 'Workout Summary', summaryHeaders, summaryRows);
 
   // Sheet 2: Exercise & Set Details
   const detailsHeaders = [
@@ -311,8 +320,7 @@ export function buildWorkoutsWorkbook(workouts: WorkoutSession[]): XLSX.WorkBook
     }
   }
 
-  const detailsSheet = XLSX.utils.aoa_to_sheet([detailsHeaders, ...detailsRows]);
-  XLSX.utils.book_append_sheet(wb, detailsSheet, 'Exercise & Set Details');
+  appendOoxmlSheet(wb, 'Exercise & Set Details', detailsHeaders, detailsRows);
 
   return wb;
 }
@@ -322,8 +330,8 @@ export function buildWorkoutsWorkbook(workouts: WorkoutSession[]): XLSX.WorkBook
  * 1. "Template Summary" sheet: high-level template overview
  * 2. "Template Exercises" sheet: detailed exercise target configurations
  */
-export function buildTemplatesWorkbook(templates: WorkoutTemplate[]): XLSX.WorkBook {
-  const wb = XLSX.utils.book_new();
+export function buildTemplatesWorkbook(templates: WorkoutTemplate[]): OoxmlWorkbook {
+  const wb = createOoxmlWorkbook();
 
   // Sheet 1: Template Summary
   const summaryHeaders = [
@@ -346,8 +354,7 @@ export function buildTemplatesWorkbook(templates: WorkoutTemplate[]): XLSX.WorkB
     t.updatedAt || '',
   ]);
 
-  const summarySheet = XLSX.utils.aoa_to_sheet([summaryHeaders, ...summaryRows]);
-  XLSX.utils.book_append_sheet(wb, summarySheet, 'Template Summary');
+  appendOoxmlSheet(wb, 'Template Summary', summaryHeaders, summaryRows);
 
   // Sheet 2: Template Exercises
   const detailsHeaders = [
@@ -382,8 +389,7 @@ export function buildTemplatesWorkbook(templates: WorkoutTemplate[]): XLSX.WorkB
     }
   }
 
-  const detailsSheet = XLSX.utils.aoa_to_sheet([detailsHeaders, ...detailsRows]);
-  XLSX.utils.book_append_sheet(wb, detailsSheet, 'Template Exercises');
+  appendOoxmlSheet(wb, 'Template Exercises', detailsHeaders, detailsRows);
 
   return wb;
 }
@@ -393,12 +399,12 @@ export function buildTemplatesWorkbook(templates: WorkoutTemplate[]): XLSX.WorkB
  */
 export function exportWorkoutsToXlsx(workouts: WorkoutSession[]): string {
   const wb = buildWorkoutsWorkbook(workouts);
-  return XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
+  return writeOoxmlWorkbookToBase64(wb);
 }
 
 export function exportTemplatesToXlsx(templates: WorkoutTemplate[]): string {
   const wb = buildTemplatesWorkbook(templates);
-  return XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
+  return writeOoxmlWorkbookToBase64(wb);
 }
 
 /**

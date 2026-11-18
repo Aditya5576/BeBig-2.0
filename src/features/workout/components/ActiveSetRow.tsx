@@ -3,7 +3,8 @@ import { View, StyleSheet, TextInput, Pressable, Modal, useWindowDimensions } fr
 import { useAppTheme } from '../../theme';
 import { Text, Icon } from '../../../components/ui';
 import { WorkoutExercise, WorkoutSet, SetType } from '../types';
-import { spacing, radii } from '../../../constants/theme';
+import { spacing } from '../../../constants/theme';
+import { DOMAIN_LIMITS, clampText } from '../../../constants/domainLimits';
 
 export interface ActiveSetRowProps {
   exercise: WorkoutExercise;
@@ -100,8 +101,9 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
   }, [exercise.exerciseId, set.id, onUpdateSetField]);
 
   const handleNotesChange = useCallback((val: string) => {
-    setLocalNotes(val);
-    onUpdateSetField(exercise.exerciseId, set.id, 'notes', val);
+    const clamped = clampText(val, DOMAIN_LIMITS.SET_NOTES_MAX_LENGTH);
+    setLocalNotes(clamped);
+    onUpdateSetField(exercise.exerciseId, set.id, 'notes', clamped);
   }, [exercise.exerciseId, set.id, onUpdateSetField]);
 
   const commitWeight = useCallback(() => {
@@ -423,6 +425,7 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
             onBlur={commitNotes}
             onSubmitEditing={commitNotes}
             style={styles.notesInput}
+            maxLength={DOMAIN_LIMITS.SET_NOTES_MAX_LENGTH}
             autoFocus={!hasExistingNote}
             returnKeyType="done"
           />

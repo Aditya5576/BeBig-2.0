@@ -34,6 +34,28 @@ export interface ExercisePickerModalProps {
   showRecentlyUsed?: boolean;
 }
 
+/**
+ * Strips heavy inline base64 / remote image payloads from Exercise objects
+ * before rendering inside the virtualized picker FlatList so React Fiber and
+ * WebKit never hold or diff multi-megabyte image strings in memory (v2.4.3).
+ */
+export function stripExerciseImagePayloads(exercise: Exercise): Exercise {
+  if (!exercise) return exercise;
+  const hasImages = Array.isArray(exercise.images) && exercise.images.length > 0;
+  const hasLegacyImageUrl = (exercise as any).imageUrl !== undefined;
+  if (!hasImages && !hasLegacyImageUrl) {
+    return exercise;
+  }
+  const stripped: any = {
+    ...exercise,
+    images: [],
+  };
+  if (hasLegacyImageUrl) {
+    stripped.imageUrl = undefined;
+  }
+  return stripped as Exercise;
+}
+
 export const ExercisePickerModal = React.memo(function ExercisePickerModal({
   visible,
   onClose,
@@ -118,25 +140,33 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
     };
   }, [visible, propsRecentExercises, showRecentlyUsed]);
 
+  // Lightweight picker projections with image payloads stripped so FlatList never diffs multi-MB base64 strings
+  const lightweightExercises = useMemo(
+    () => exercises.map(stripExerciseImagePayloads),
+    [exercises]
+  );
+
   // Filter recently used exercises matching current deferred search & category filters
   const visibleRecentExercises = useMemo(() => {
     if (recentExercisesList.length === 0) return [];
 
     const trimmedQuery = deferredSearchQuery.trim();
-    return recentExercisesList.filter((item) => {
-      if (selectedSource === 'custom' && !item.isCustom) return false;
-      if (selectedSource === 'external' && item.isCustom) return false;
-      if (selectedCategory !== 'all' && item.category !== selectedCategory) return false;
+    return recentExercisesList
+      .filter((item) => {
+        if (selectedSource === 'custom' && !item.isCustom) return false;
+        if (selectedSource === 'external' && item.isCustom) return false;
+        if (selectedCategory !== 'all' && item.category !== selectedCategory) return false;
 
-      if (trimmedQuery.length > 0) {
-        const query = trimmedQuery.toLowerCase();
-        const matchesName = (item.name || '').toLowerCase().includes(query);
-        const matchesCat = (item.categoryName || '').toLowerCase().includes(query);
-        if (!matchesName && !matchesCat) return false;
-      }
+        if (trimmedQuery.length > 0) {
+          const query = trimmedQuery.toLowerCase();
+          const matchesName = (item.name || '').toLowerCase().includes(query);
+          const matchesCat = (item.categoryName || '').toLowerCase().includes(query);
+          if (!matchesName && !matchesCat) return false;
+        }
 
-      return true;
-    });
+        return true;
+      })
+      .map(stripExerciseImagePayloads);
   }, [recentExercisesList, selectedSource, selectedCategory, deferredSearchQuery]);
 
   // Reset search query & transient state cleanly on every open/close visibility transition
@@ -585,7 +615,7 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
           >
           <FlatList
             testID="picker-exercise-list"
-            data={exercises}
+            data={lightweightExercises}
             extraData={`${selectedCount}_${visibleRecentExercises.length}`}
             keyExtractor={(item) => item.id}
             renderItem={renderItem}

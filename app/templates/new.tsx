@@ -18,14 +18,13 @@ import {
 } from '../../src/features/templates';
 import { Exercise } from '../../src/features/exercises';
 import { spacing, radii } from '../../src/constants/theme';
+import { DOMAIN_LIMITS, clampText } from '../../src/constants/domainLimits';
 import {
   WORKOUT_FOCUS_OPTIONS,
   deriveWorkoutFocus,
-  getSuggestedSessionNumber,
   getSuggestedTemplateSessionNumber,
 } from '../../src/features/templates/utils/templateUtils';
 import { WorkoutTemplate } from '../../src/features/templates/types';
-import { workoutRepository, WorkoutSession } from '../../src/features/workout';
 
 type FormExercise = Omit<TemplateExercise, 'order'>;
 
@@ -41,16 +40,17 @@ export default function CreateTemplateScreen() {
   const [activeFocus, setActiveFocus] = useState<string>('Other');
   const [sequenceNumber, setSequenceNumber] = useState<number>(1);
   const [allTemplates, setAllTemplates] = useState<WorkoutTemplate[]>([]);
-  const [allWorkouts, setAllWorkouts] = useState<WorkoutSession[]>([]);
   const [isPickerVisible, setIsPickerVisible] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const activeFocusRef = React.useRef(activeFocus);
+  activeFocusRef.current = activeFocus;
+  const nameRef = React.useRef(name);
+  nameRef.current = name;
 
   React.useEffect(() => {
     async function load() {
       const tpls = await templateRepository.getTemplates();
-      const completed = await workoutRepository.getCompletedWorkouts();
-      setAllWorkouts(completed);
       setAllTemplates(tpls);
     }
     load();
@@ -80,12 +80,13 @@ export default function CreateTemplateScreen() {
   React.useEffect(() => {
     if (exercises.length === 0) return;
     const focus = deriveWorkoutFocus(exercises);
-    if (focus !== activeFocus) {
+    if (focus !== activeFocusRef.current) {
       const seq = getSuggestedTemplateSessionNumber(allTemplates, focus);
       setActiveFocus(focus);
       setSequenceNumber(seq);
       // Auto-update name if it's currently generated or empty
-      if (!name || name.includes(' — Session ')) {
+      const currentName = nameRef.current;
+      if (!currentName || currentName.includes(' — Session ')) {
         setName(`${focus} — Session ${seq}`);
       }
     }
@@ -242,7 +243,8 @@ export default function CreateTemplateScreen() {
               placeholder="e.g. Upper Body Hypertrophy A"
               placeholderTextColor={colors.textMuted}
               value={name}
-              onChangeText={setName}
+              onChangeText={(val) => setName(clampText(val, DOMAIN_LIMITS.TEMPLATE_NAME_MAX_LENGTH))}
+              maxLength={DOMAIN_LIMITS.TEMPLATE_NAME_MAX_LENGTH}
               autoFocus
             />
           </View>

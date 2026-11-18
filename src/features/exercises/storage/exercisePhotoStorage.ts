@@ -17,6 +17,7 @@ import { platformStorage } from '../../../lib/storage';
 export const MAX_PHOTO_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
 export const MAX_WEB_IMAGE_EDGE_PX = 800;
 export const WEB_IMAGE_JPEG_QUALITY = 0.82;
+export const LARGE_DATA_URL_THRESHOLD_CHARS = 150_000; // ~110KB base64 threshold for background compaction
 export const ALLOWED_PHOTO_MIME_TYPES = [
   'image/jpeg',
   'image/png',
@@ -159,6 +160,30 @@ export async function downscaleWebImageToMaxEdge(
       }
     }
   }
+}
+
+/**
+ * Downscales an oversized `data:image/...` URL to maxEdge (default 800px) JPEG
+ * using offscreen HTMLCanvasElement (with immediate canvas GPU cleanup).
+ * Returns the original string untouched if already compact, non-data-URL, or in non-DOM runtimes.
+ */
+export async function downscaleDataUrlToMaxEdge(
+  dataUrl: string,
+  maxEdge: number = MAX_WEB_IMAGE_EDGE_PX,
+  quality: number = WEB_IMAGE_JPEG_QUALITY,
+): Promise<string> {
+  if (!dataUrl || typeof dataUrl !== 'string') {
+    return dataUrl;
+  }
+  if (!dataUrl.startsWith('data:image/') || dataUrl.length <= LARGE_DATA_URL_THRESHOLD_CHARS) {
+    return dataUrl;
+  }
+
+  const downscaled = await downscaleWebImageToMaxEdge(dataUrl, maxEdge, quality);
+  if (downscaled?.dataUrl && downscaled.dataUrl.length < dataUrl.length) {
+    return downscaled.dataUrl;
+  }
+  return dataUrl;
 }
 
 export interface PhotoValidationResult {

@@ -19,16 +19,24 @@ declare const __dirname: string;
 const fs = require('fs');
 const path = require('path');
 
-import { ExercisePickerModal } from '../src/features/templates/components/ExercisePickerModal';
+import {
+  ExercisePickerModal,
+  stripExerciseImagePayloads,
+} from '../src/features/templates/components/ExercisePickerModal';
 import { CustomExerciseForm } from '../src/features/exercises/components/CustomExerciseForm';
 import { ExerciseCard } from '../src/features/exercises/components/ExerciseCard';
 import { ErrorBoundary } from '../src/components/ui/ErrorBoundary';
 import { exerciseRepository } from '../src/features/exercises/services/exerciseRepository';
-import { customExerciseStorage } from '../src/features/exercises/storage/customExerciseStorage';
+import {
+  customExerciseStorage,
+  compactOversizedCustomExercises,
+} from '../src/features/exercises/storage/customExerciseStorage';
 import {
   computeDownscaledDimensions,
   downscaleWebImageToMaxEdge,
+  downscaleDataUrlToMaxEdge,
   MAX_WEB_IMAGE_EDGE_PX,
+  LARGE_DATA_URL_THRESHOLD_CHARS,
 } from '../src/features/exercises/storage/exercisePhotoStorage';
 import { Exercise } from '../src/features/exercises/types';
 import CreateCustomExerciseScreen from '../app/exercises/new';
@@ -742,10 +750,140 @@ describe('iOS WebKit Exercise Crash Guard & SPA Stability', () => {
       expect(result).toBeNull();
     });
 
-    it('bumps public/sw.js cache version to bebig-pwa-v2.4.2', () => {
+    it('strips large imageUrl and images payloads from ExercisePickerModal list items (v2.4.3)', async () => {
+      const giantBase64 = `data:image/jpeg;base64,${'A'.repeat(200_000)}`;
+      const heavyExercise: any = {
+        id: 'heavy_custom_1',
+        name: 'Military Press Wide Bar',
+        description: 'Heavy pre-v2.4.2 custom photo',
+        category: 'shoulders',
+        categoryName: 'Shoulders',
+        primaryMuscles: [{ id: 'm1', name: 'Deltoids' }],
+        secondaryMuscles: [],
+        equipment: [{ id: 'eq1', name: 'Barbell' }],
+        sourceProvider: 'custom',
+        isCustom: true,
+        imageUrl: giantBase64,
+        images: [{ id: 'img_heavy', url: giantBase64, isMain: true }],
+      };
+
+      const stripped = stripExerciseImagePayloads(heavyExercise) as any;
+      expect(stripped.images).toEqual([]);
+      expect(stripped.imageUrl).toBeUndefined();
+      expect(stripped.name).toBe('Military Press Wide Bar');
+
+      const getCachedSpy = jest
+        .spyOn(exerciseRepository, 'getCachedExercises')
+        .mockReturnValue([heavyExercise]);
+      const getExercisesSpy = jest.spyOn(exerciseRepository, 'getExercises').mockResolvedValue({
+        exercises: [heavyExercise],
+        totalCount: 1,
+        hasMore: false,
+        nextOffset: undefined,
+      });
+
+      try {
+        const rendered = await render(
+          <ExercisePickerModal
+            visible={true}
+            onClose={jest.fn()}
+            onSelectExercises={jest.fn()}
+            selectedExerciseIds={[]}
+            multiSelect={true}
+          />
+        );
+
+        await waitFor(() => {
+          const list = rendered.getByTestId('picker-exercise-list');
+          expect(list.props.data).toHaveLength(1);
+          expect(list.props.data[0].images).toEqual([]);
+          expect(list.props.data[0].imageUrl).toBeUndefined();
+        });
+      } finally {
+        getCachedSpy.mockRestore();
+        getExercisesSpy.mockRestore();
+      }
+    });
+
+    it('downscaleDataUrlToMaxEdge compacts oversized data URLs (>150k chars) and leaves compact/non-DOM URLs unchanged (v2.4.3)', async () => {
+      // Compact data URL stays untouched
+      const compactUrl = 'data:image/jpeg;base64,/9j/small';
+      expect(await downscaleDataUrlToMaxEdge(compactUrl)).toBe(compactUrl);
+
+      // Non-DOM runtime returns oversized data URL unchanged without throwing
+      const oversizedUrl = `data:image/jpeg;base64,${'B'.repeat(LARGE_DATA_URL_THRESHOLD_CHARS + 5000)}`;
+      expect(await downscaleDataUrlToMaxEdge(oversizedUrl)).toBe(oversizedUrl);
+
+      // Simulated Web HTMLCanvasElement shrinks oversized data URL and clears canvas GPU memory
+      const originalDocument = (globalThis as any).document;
+      const originalImage = (globalThis as any).Image;
+      const mockCanvas: any = {
+        width: 0,
+        height: 0,
+        getContext: jest.fn(() => ({ drawImage: jest.fn() })),
+        toDataURL: jest.fn(() => 'data:image/jpeg;base64,/9j/compacted800px'),
+      };
+      (globalThis as any).document = { createElement: jest.fn(() => mockCanvas) };
+      (globalThis as any).Image = class MockImage {
+        naturalWidth = 4032;
+        naturalHeight = 3024;
+        crossOrigin = '';
+        onload: (() => void) | null = null;
+        onerror: (() => void) | null = null;
+        set src(_v: string) {
+          if (this.onload) this.onload();
+        }
+      };
+
+      try {
+        const shrunk = await downscaleDataUrlToMaxEdge(oversizedUrl, 800, 0.82);
+        expect(shrunk).toBe('data:image/jpeg;base64,/9j/compacted800px');
+        expect(mockCanvas.width).toBe(0);
+        expect(mockCanvas.height).toBe(0);
+
+        // Background migration helper compacts stored custom exercises
+        const { exercises: compactedList, changed } = await compactOversizedCustomExercises([
+          {
+            id: 'legacy_1',
+            name: 'Sholder Machine Fly',
+            description: '',
+            category: 'shoulders',
+            categoryName: 'Shoulders',
+            primaryMuscles: [],
+            secondaryMuscles: [],
+            equipment: [],
+            sourceProvider: 'custom',
+            isCustom: true,
+            images: [{ id: 'p1', url: oversizedUrl, isMain: true }],
+          },
+        ]);
+        expect(changed).toBe(true);
+        expect(compactedList[0].images[0].url).toBe('data:image/jpeg;base64,/9j/compacted800px');
+      } finally {
+        (globalThis as any).document = originalDocument;
+        (globalThis as any).Image = originalImage;
+      }
+    });
+
+    it('bumps public/sw.js to bebig-pwa-v2.4.3 with Network-First JS strategy and auto-reload in _layout.tsx', () => {
       const swPath = path.resolve(__dirname, '../public/sw.js');
       const swContent = fs.readFileSync(swPath, 'utf8');
-      expect(swContent).toContain("const CACHE_NAME = 'bebig-pwa-v2.4.2';");
+      expect(swContent).toContain("const CACHE_NAME = 'bebig-pwa-v2.4.3';");
+      expect(swContent).toContain("url.pathname.startsWith('/_expo/static/js/')");
+      // Network-First for JS bundles: fetch(request) precedes caches.match(request) in JS block
+      const jsIdx = swContent.indexOf('if (isJsBundle)');
+      const fetchIdx = swContent.indexOf('fetch(request)', jsIdx);
+      const cacheFallbackIdx = swContent.indexOf('caches.match(request)', jsIdx);
+      expect(jsIdx).toBeGreaterThan(-1);
+      expect(fetchIdx).toBeGreaterThan(jsIdx);
+      expect(cacheFallbackIdx).toBeGreaterThan(fetchIdx);
+
+      // app/_layout.tsx wires controllerchange + sessionStorage single-reload guard
+      const layoutPath = path.resolve(__dirname, '../app/_layout.tsx');
+      const layoutContent = fs.readFileSync(layoutPath, 'utf8');
+      expect(layoutContent).toContain('controllerchange');
+      expect(layoutContent).toContain('bebig_sw_reloaded_v243');
+      expect(layoutContent).toContain('reg?.update()');
     });
   });
 });

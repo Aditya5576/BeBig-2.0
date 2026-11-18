@@ -2,7 +2,7 @@ import { useAppTheme } from '../../../src/features/theme';
 import React, { useState, useCallback, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { useRouter, useFocusEffect as routerFocusEffect } from 'expo-router';
-import { ScreenContainer, Text, Button, Card, Icon } from '../../../src/components/ui';
+import { ScreenContainer, Text, Button, Card, Icon, ErrorBoundary } from '../../../src/components/ui';
 import {
   workoutRepository,
   calculatePersonalRecords,
@@ -21,11 +21,12 @@ export default function PersonalRecordsScreen() {
 
   const [records, setRecords] = useState<PersonalRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const hasLoadedRef = React.useRef(false);
 
   useFocusEffect(
     useCallback(() => {
       let isMounted = true;
-      if (records.length === 0) {
+      if (!hasLoadedRef.current) {
         setLoading(true);
       }
       void (async () => {
@@ -33,7 +34,9 @@ export default function PersonalRecordsScreen() {
           const workouts = await workoutRepository.getCompletedWorkouts();
           if (!isMounted) return;
           const { allPRs } = calculatePersonalRecords(workouts);
-          setRecords(allPRs || []);
+          const resolved = allPRs || [];
+          setRecords(resolved);
+          hasLoadedRef.current = resolved.length > 0;
         } catch {
           if (isMounted) setRecords([]);
         } finally {
@@ -61,6 +64,11 @@ export default function PersonalRecordsScreen() {
 
   return (
     <ScreenContainer>
+      <ErrorBoundary
+        testID="prs-error-boundary"
+        fallbackTitle="Unable to display personal records"
+        fallbackMessage="An unexpected error occurred while rendering your PR leaderboard. Tap below to reload."
+      >
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
@@ -252,6 +260,7 @@ export default function PersonalRecordsScreen() {
           </View>
         )}
       </ScrollView>
+      </ErrorBoundary>
     </ScreenContainer>
   );
 }

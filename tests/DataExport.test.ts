@@ -11,7 +11,6 @@
  */
 
 import { Platform, Share } from 'react-native';
-import * as XLSX from 'xlsx';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 
@@ -45,6 +44,8 @@ import {
   exportTemplatesToPdf,
   sanitizePdfText,
   shareOrDownloadExport,
+  sheetToRecords,
+  sanitizeSpreadsheetCell,
 } from '../src/features/export';
 import { WorkoutSession } from '../src/features/workout/types';
 import { WorkoutTemplate } from '../src/features/templates/types';
@@ -163,14 +164,14 @@ describe('DataExport Service', () => {
       const wb = buildWorkoutsWorkbook(sampleWorkouts);
       expect(wb.SheetNames).toEqual(['Workout Summary', 'Exercise & Set Details']);
 
-      const summaryData = XLSX.utils.sheet_to_json<any>(wb.Sheets['Workout Summary']);
+      const summaryData = sheetToRecords(wb.Sheets['Workout Summary']);
       expect(summaryData).toHaveLength(1);
       expect(summaryData[0]['Workout ID']).toBe('w-101');
       expect(summaryData[0]['Workout Name']).toBe('Heavy Push A');
       expect(summaryData[0]['Duration (min)']).toBe(60);
       expect(summaryData[0]['Total Volume (kg)']).toBe(4200);
 
-      const detailsData = XLSX.utils.sheet_to_json<any>(wb.Sheets['Exercise & Set Details']);
+      const detailsData = sheetToRecords(wb.Sheets['Exercise & Set Details']);
       expect(detailsData).toHaveLength(1);
       expect(detailsData[0]['Exercise Name']).toBe('Incline Barbell Bench');
       expect(detailsData[0]['Weight (kg)']).toBe(85);
@@ -179,21 +180,64 @@ describe('DataExport Service', () => {
       expect(detailsData[0]['Completed']).toBe('Yes');
     });
 
-    it('generates valid base64 encoded XLSX binary string that decodes to a valid workbook', () => {
+    it('generates valid base64 encoded XLSX PKZIP binary string with OOXML sheets (zero xlsx dependency)', () => {
       const b64 = exportWorkoutsToXlsx(sampleWorkouts);
       expect(typeof b64).toBe('string');
       expect(b64.length).toBeGreaterThan(100);
 
       const bytes = base64ToUint8Array(b64);
-      const parsedWb = XLSX.read(bytes, { type: 'array' });
-      expect(parsedWb.SheetNames).toContain('Workout Summary');
-      expect(parsedWb.SheetNames).toContain('Exercise & Set Details');
+      // PKZIP local file header magic bytes: PK\x03\x04
+      expect(bytes[0]).toBe(0x50);
+      expect(bytes[1]).toBe(0x4b);
+      expect(bytes[2]).toBe(0x03);
+      expect(bytes[3]).toBe(0x04);
+
+      const archiveText = new TextDecoder('utf-8').decode(bytes);
+      expect(archiveText).toContain('[Content_Types].xml');
+      expect(archiveText).toContain('xl/workbook.xml');
+      expect(archiveText).toContain('xl/worksheets/sheet1.xml');
+      expect(archiveText).toContain('xl/worksheets/sheet2.xml');
+      expect(archiveText).toContain('Workout Summary');
+      expect(archiveText).toContain('Exercise &amp; Set Details');
+      expect(archiveText).toContain('Incline Barbell Bench');
+    });
+
+    it('neutralizes hostile spreadsheet formula injection payloads in XLSX and CSV exports (AUD-005)', () => {
+      expect(sanitizeSpreadsheetCell('=CMD|\' /C calc\'!A0')).toBe("'=CMD|' /C calc'!A0");
+      expect(sanitizeSpreadsheetCell('+SUM(A1:A10)')).toBe("'+SUM(A1:A10)");
+      expect(sanitizeSpreadsheetCell('@HYPERLINK("https://evil.test")')).toBe('\'@HYPERLINK("https://evil.test")');
+      expect(sanitizeSpreadsheetCell('-2+3+cmd|\' /C calc\'!A0')).toBe("'-2+3+cmd|' /C calc'!A0");
+      // Numeric values remain untouched
+      expect(sanitizeSpreadsheetCell(100)).toBe(100);
+      expect(sanitizeSpreadsheetCell('-12.5')).toBe('-12.5');
+      expect(escapeCsvField('=HYPERLINK("https://evil.test")')).toBe('"\'=HYPERLINK(""https://evil.test"")"');
+
+      const hostileWorkout: WorkoutSession = {
+        ...sampleWorkouts[0],
+        name: '=1+1',
+        exercises: [
+          {
+            ...sampleWorkouts[0].exercises[0],
+            actualSets: [
+              {
+                ...sampleWorkouts[0].exercises[0].actualSets[0],
+                notes: '=CMD|\' /C calc\'!A0',
+              },
+            ],
+          },
+        ],
+      };
+
+      const b64 = exportWorkoutsToXlsx([hostileWorkout]);
+      const archiveText = new TextDecoder('utf-8').decode(base64ToUint8Array(b64));
+      expect(archiveText).toContain('&apos;=1+1');
+      expect(archiveText).toContain('&apos;=CMD|');
     });
 
     it('handles empty workouts list in XLSX export', () => {
       const wb = buildWorkoutsWorkbook([]);
       expect(wb.SheetNames).toEqual(['Workout Summary', 'Exercise & Set Details']);
-      const summaryData = XLSX.utils.sheet_to_json<any>(wb.Sheets['Workout Summary']);
+      const summaryData = sheetToRecords(wb.Sheets['Workout Summary']);
       expect(summaryData).toHaveLength(0);
     });
 
@@ -201,11 +245,11 @@ describe('DataExport Service', () => {
       const wb = buildTemplatesWorkbook(sampleTemplates);
       expect(wb.SheetNames).toEqual(['Template Summary', 'Template Exercises']);
 
-      const summaryData = XLSX.utils.sheet_to_json<any>(wb.Sheets['Template Summary']);
+      const summaryData = sheetToRecords(wb.Sheets['Template Summary']);
       expect(summaryData[0]['Template Name']).toBe('Upper Body Hypertrophy');
       expect(summaryData[0]['Session Number']).toBe(3);
 
-      const exercisesData = XLSX.utils.sheet_to_json<any>(wb.Sheets['Template Exercises']);
+      const exercisesData = sheetToRecords(wb.Sheets['Template Exercises']);
       expect(exercisesData[0]['Exercise Name']).toBe('Barbell Bent Over Row');
       expect(exercisesData[0]['Target Sets']).toBe(4);
       expect(exercisesData[0]['Target Reps']).toBe('8-10');
@@ -215,7 +259,7 @@ describe('DataExport Service', () => {
     it('handles empty templates list in XLSX export', () => {
       const wb = buildTemplatesWorkbook([]);
       expect(wb.SheetNames).toEqual(['Template Summary', 'Template Exercises']);
-      const exercisesData = XLSX.utils.sheet_to_json<any>(wb.Sheets['Template Exercises']);
+      const exercisesData = sheetToRecords(wb.Sheets['Template Exercises']);
       expect(exercisesData).toHaveLength(0);
     });
   });

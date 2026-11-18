@@ -2,7 +2,7 @@ import React, { useState, useCallback, useMemo } from 'react';
 import { View, StyleSheet, ActivityIndicator, Pressable } from 'react-native';
 import { useRouter, useFocusEffect as routerFocusEffect } from 'expo-router';
 import { useAppTheme } from '../../../src/features/theme';
-import { ScreenContainer, ScreenScrollView, Text, Icon } from '../../../src/components/ui';
+import { ScreenContainer, ScreenScrollView, Text, Icon, ErrorBoundary } from '../../../src/components/ui';
 import { workoutRepository, WorkoutSession } from '../../../src/features/workout';
 import { calculateWeeklyPerformance, calculateProgressAnalytics, AnalyticsPeriod } from '../../../src/features/performance';
 import { WeeklyPerformanceCard } from '../../../src/features/performance/WeeklyPerformanceCard';
@@ -15,7 +15,7 @@ const useFocusEffect =
   ((cb: () => void | (() => void)) => {
     React.useEffect(() => {
       return cb?.();
-    }, []);
+    }, [cb]);
   });
 
 export default function WeeklyPerformanceScreen() {
@@ -58,6 +58,11 @@ export default function WeeklyPerformanceScreen() {
 
   return (
     <ScreenContainer>
+      <ErrorBoundary
+        testID="weekly-performance-error-boundary"
+        fallbackTitle="Unable to display weekly analytics"
+        fallbackMessage="An unexpected error occurred while computing your weekly training trends. Tap below to retry."
+      >
       <ScreenScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
@@ -122,6 +127,7 @@ export default function WeeklyPerformanceScreen() {
           </>
         )}
       </ScreenScrollView>
+      </ErrorBoundary>
     </ScreenContainer>
   );
 }

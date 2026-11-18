@@ -111,7 +111,7 @@ export default function ExerciseDetailScreen() {
 
     async function loadExercise() {
       if (!id) return;
-      if (!exercise) {
+      if (!exerciseRepository.getCachedExerciseByIdSync(id)) {
         setLoading(true);
       }
       setError(null);
@@ -127,8 +127,13 @@ export default function ExerciseDetailScreen() {
           }
         }
       } catch (err: any) {
-        if (isMounted && !exercise) {
-          setError(err?.message || 'Failed to load exercise details.');
+        if (isMounted) {
+          setExercise((prev) => {
+            if (!prev) {
+              setError(err?.message || 'Failed to load exercise details.');
+            }
+            return prev;
+          });
         }
       } finally {
         if (isMounted) {

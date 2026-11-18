@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, StyleProp, ViewStyle } from 'react-native';
 import { Text } from '../../../components/ui/Text';
 
@@ -40,14 +40,14 @@ export function ActiveWorkoutTimer({
   style,
   testID = 'active-workout-timer',
 }: ActiveWorkoutTimerProps) {
-  const calculateElapsed = (): number => {
+  const calculateElapsed = useCallback((): number => {
     if (!startedAt) return 0;
     const startMs = new Date(startedAt).getTime();
     if (isNaN(startMs)) return 0;
     const pausedSecs = accumulatedPauseSeconds || 0;
     const endMs = pausedAt ? new Date(pausedAt).getTime() : Date.now();
     return Math.max(0, Math.floor((endMs - startMs) / 1000) - pausedSecs);
-  };
+  }, [startedAt, accumulatedPauseSeconds, pausedAt]);
 
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(calculateElapsed);
 
@@ -67,7 +67,7 @@ export function ActiveWorkoutTimer({
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [startedAt, accumulatedPauseSeconds, pausedAt, status]);
+  }, [calculateElapsed, pausedAt, status]);
 
   return (
     <View style={[styles.timerBadge, style]} testID={testID}>

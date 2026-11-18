@@ -1,19 +1,21 @@
 /**
  * BeBig 2.0 PWA Service Worker
- * Version: bebig-pwa-v1
+ * Version: bebig-pwa-v2.4.3 (AUD-013 shell-only caching + Network-First JS bundles)
  *
  * Conservative static app shell cache.
- * STRICT SECURITY INVARIANTS:
- * - NEVER caches Supabase API requests (cross-origin or /rest/ /auth/)
+ * STRICT SECURITY INVARIANTS (AUD-013):
+ * - NEVER caches Supabase API requests (cross-origin or /rest/ /auth/ /functions/ /storage/)
  * - NEVER caches authenticated requests (Authorization / apikey headers)
+ * - NEVER caches responses marked Cache-Control: no-store or private
+ * - NEVER caches arbitrary navigation URLs (only caches public root shell '/' / '/index.html')
  * - NEVER caches private user data, workouts, templates, exercises, or sync records
  * - NEVER modifies or synchronizes offline mutations (IndexedDB handles persistence)
  * - NEVER force-reloads client pages (active workouts are never disrupted)
  */
 
-const CACHE_NAME = 'bebig-pwa-v2.4.2'; // CACHE_NAME = 'bebig-pwa-v1'
+const CACHE_NAME = 'bebig-pwa-v2.4.3'; // CACHE_NAME = 'bebig-pwa-v1'
 
-// Minimal core assets precached on install
+// Minimal core static app-shell assets precached on install
 const PRECACHE_ASSETS = [
   '/',
   '/manifest.json',
@@ -24,6 +26,16 @@ const PRECACHE_ASSETS = [
   '/icons/icon-maskable-192.png',
   '/icons/icon-maskable-512.png'
 ];
+
+function isPublicShellPath(pathname) {
+  return pathname === '/' || pathname === '/index.html';
+}
+
+function isNonCacheableResponse(response) {
+  if (!response || !response.headers) return false;
+  const cacheControl = (response.headers.get('cache-control') || '').toLowerCase();
+  return cacheControl.includes('no-store') || cacheControl.includes('private');
+}
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -42,8 +54,8 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((keys) => {
       return Promise.all(
         keys.map((key) => {
-          if (key.startsWith('bebig-') && key !== CACHE_NAME) {
-            console.log('[SW] Purging stale cache:', key);
+          if (key !== CACHE_NAME) {
+            console.log('[SW] Purging stale/non-shell cache:', key);
             return caches.delete(key);
           }
         })
@@ -78,28 +90,34 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 5. SECURITY: Bypass any internal API or sync endpoints
+  // 5. SECURITY: Bypass any internal API, auth, function, storage, or sync endpoints
   if (
     url.pathname.startsWith('/api/') ||
     url.pathname.startsWith('/rest/') ||
-    url.pathname.startsWith('/auth/')
+    url.pathname.startsWith('/auth/') ||
+    url.pathname.startsWith('/functions/') ||
+    url.pathname.startsWith('/storage/')
   ) {
     return;
   }
 
-  // 6. Navigation requests (HTML documents):
-  // Network-First with cache fallback. Always attempt fresh HTML from server first
-  // so deep routes and fresh builds stay current. Fall back to cached page or app shell offline.
-  // CRITICAL: If server responds with 404/5xx or network fails, fall back to cached '/' app shell
-  // so deep routes (e.g. /workout/active, /exercises, /workout/summary) NEVER fail with "Site not found".
+  // 6. Navigation requests (HTML documents) — AUD-013 Shell-Only Discipline:
+  // Network-First with public root shell fallback.
+  // NEVER cache arbitrary navigation URLs (e.g. /settings, /admin/*, /workout/history/*).
+  // Only refresh the cached public root shell ('/' or '/index.html') if response is public & cacheable.
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          if (response && response.status === 200 && response.type === 'basic') {
+          if (
+            response &&
+            response.status === 200 &&
+            response.type === 'basic' &&
+            isPublicShellPath(url.pathname) &&
+            !isNonCacheableResponse(response)
+          ) {
             const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-            return response;
+            caches.open(CACHE_NAME).then((cache) => cache.put('/', clone));
           }
           if (!response || response.status >= 400) {
             // Server returned 404 or error for deep route: fallback to cached root index app shell
@@ -111,29 +129,50 @@ self.addEventListener('fetch', (event) => {
           return response;
         })
         .catch(() => {
-          return caches.match(request).then((cachedResponse) => {
-            if (cachedResponse) {
-              return cachedResponse;
-            }
-            // Fallback to cached root index app shell
-            return caches.match('/').then((cachedRoot) => {
-              if (cachedRoot) return cachedRoot;
-              return caches.match('/index.html');
-            });
+          // Offline fallback: ALWAYS serve the public cached app shell (never per-route cached HTML)
+          return caches.match('/').then((cachedRoot) => {
+            if (cachedRoot) return cachedRoot;
+            return caches.match('/index.html');
           });
         })
     );
     return;
   }
 
-  // 7. Static Application Assets (JS bundles, CSS, icons, fonts):
-  // Cache-First with network fallback. Content-hashed JS bundles and static assets
-  // are safely loaded from cache first for instant mobile performance.
+  // 7. JavaScript Bundles (/_expo/static/js/ and .js):
+  // Network-First with cache fallback offline so iOS Safari PWAs NEVER stay pinned
+  // to stale JS bundles after a production deployment (v2.4.3).
+  const isJsBundle =
+    url.pathname.startsWith('/_expo/static/js/') ||
+    /\.js$/i.test(url.pathname);
+
+  if (isJsBundle) {
+    event.respondWith(
+      fetch(request)
+        .then((networkResponse) => {
+          if (
+            networkResponse &&
+            networkResponse.status === 200 &&
+            networkResponse.type === 'basic' &&
+            !isNonCacheableResponse(networkResponse)
+          ) {
+            const clone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          }
+          return networkResponse;
+        })
+        .catch(() => caches.match(request))
+    );
+    return;
+  }
+
+  // 8. Static Application Shell Assets (CSS, icons, fonts, images):
+  // Cache-First with network fallback. Respects Cache-Control: no-store / private.
   const isStaticAsset =
     url.pathname.startsWith('/_expo/static/') ||
     url.pathname.startsWith('/assets/') ||
     url.pathname.startsWith('/icons/') ||
-    /\.(js|css|png|jpg|jpeg|gif|svg|woff|woff2|ico)$/i.test(url.pathname);
+    /\.(css|png|jpg|jpeg|gif|svg|woff|woff2|ico)$/i.test(url.pathname);
 
   if (isStaticAsset) {
     event.respondWith(
@@ -145,7 +184,8 @@ self.addEventListener('fetch', (event) => {
           if (
             networkResponse &&
             networkResponse.status === 200 &&
-            networkResponse.type === 'basic'
+            networkResponse.type === 'basic' &&
+            !isNonCacheableResponse(networkResponse)
           ) {
             const clone = networkResponse.clone();
             caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));

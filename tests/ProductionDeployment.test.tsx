@@ -45,16 +45,40 @@ describe('Production Deployment Configuration', () => {
       expect(manifestContentType.value).toContain('application/manifest+json');
     });
 
-    it('configures security headers for all routes', () => {
+    it('configures security headers for all routes (AUD-012)', () => {
       const config = JSON.parse(fs.readFileSync(vercelJsonPath, 'utf8'));
       const globalHeader = config.headers.find((h: any) => h.source === '/(.*)');
       expect(globalHeader).toBeDefined();
 
-      const nosniff = globalHeader.headers.find((k: any) => k.key === 'X-Content-Type-Options');
-      expect(nosniff.value).toBe('nosniff');
+      const headerMap = new Map<string, string>(
+        globalHeader.headers.map((k: any) => [k.key, k.value])
+      );
 
-      const frameOptions = globalHeader.headers.find((k: any) => k.key === 'X-Frame-Options');
-      expect(frameOptions.value).toBe('DENY');
+      expect(headerMap.get('X-Content-Type-Options')).toBe('nosniff');
+      expect(headerMap.get('X-Frame-Options')).toBe('DENY');
+      expect(headerMap.get('Referrer-Policy')).toBe('strict-origin-when-cross-origin');
+
+      // AUD-012: HSTS, Permissions-Policy, COOP, and functional CSP
+      const hsts = headerMap.get('Strict-Transport-Security') || '';
+      expect(hsts).toContain('max-age=63072000');
+      expect(hsts).toContain('includeSubDomains');
+
+      const perms = headerMap.get('Permissions-Policy') || '';
+      expect(perms).toContain('camera=()');
+      expect(perms).toContain('microphone=()');
+      expect(perms).toContain('geolocation=()');
+
+      expect(headerMap.get('Cross-Origin-Opener-Policy')).toBe('same-origin-allow-popups');
+
+      const csp = headerMap.get('Content-Security-Policy') || '';
+      expect(csp).toContain("default-src 'self'");
+      expect(csp).toContain("object-src 'none'");
+      expect(csp).toContain("frame-ancestors 'none'");
+      expect(csp).toContain('https://*.supabase.co');
+      expect(csp).toContain('https://*.sentry.io');
+      expect(csp).toContain('https://wger.de');
+      expect(csp).toContain('https://*.vercel.app');
+      expect(csp).toContain('upgrade-insecure-requests');
     });
 
     it('configures rewrites for all dynamic routes and SPA fallback', () => {

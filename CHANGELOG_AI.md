@@ -255,3 +255,51 @@
 - `https://be-big-2-0.vercel.app/legal/privacy` -> HTTP `200`
 - `https://be-big-2-0.vercel.app/legal/terms` -> HTTP `200`
 - `https://be-big-2-0.vercel.app/workout/active` -> HTTP `200`
+
+
+## [Phase 2B] — 2026-11-18 — Security Hardening, Shell-Only SW Caching & Dependency Remediation (AUD-005, AUD-010, AUD-012, AUD-013, AUD-019, AUD-020)
+
+### Result
+- **AUD-005 Resolved (Vulnerable `xlsx` Removed + Formula Injection Guard)**: Uninstalled unmaintained `xlsx@0.18.5` (Prototype Pollution `GHSA-4r6h-8v6p-xvw6` & ReDoS `GHSA-5pgg-2g8v-p4x9`), replaced with zero-dependency pure-TS OOXML `.xlsx` writer `src/features/export/services/ooxmlWorkbook.ts`, neutralized spreadsheet formula-injection triggers (`=`, `+`, `@`, `\t`, `\r`, non-numeric `-`) in both `.xlsx` and `.csv` exports, and shrank the export web bundle chunk from `965KB` to `549KB` (`-416KB`).
+- **AUD-010 Resolved (Edge Function Security Hardening)**: Created `supabase/functions/_shared/security.ts` and hardened all non-paused Edge Functions (`admin-assign-role`, `coach-agent`, `delete-account`) with allowlisted CORS + `Vary: Origin` (zero wildcard `*`), explicit `405 Method Not Allowed`, bounded JSON payload caps (`413 Payload Too Large`), strict input/UUID/role enum validation, and generic error responses with `correlation_id`.
+- **AUD-012 Resolved (HTTP Security Headers)**: Added `Strict-Transport-Security`, `Permissions-Policy`, and `Cross-Origin-Opener-Policy: same-origin-allow-popups` to `vercel.json` alongside functional CSP supporting Supabase, Vercel, Sentry, Wger, and Expo Web hydration.
+- **AUD-013 Resolved (Service Worker Shell-Only Caching)**: Hardened `public/sw.js` to cache only the public root shell (`/` / `/index.html`) and static app-shell assets, never caching arbitrary navigation URLs, `Cache-Control: no-store`/`private` responses, or `/api/`, `/rest/`, `/auth/`, `/functions/`, `/storage/` endpoints, while purging all non-current caches on activate.
+- **AUD-019 Resolved (Atomic Super-Admin Guard Migration — Local Only)**: Authored `supabase/migrations/20261118120000_atomic_super_admin_guard.sql` implementing a transaction advisory-locked `BEFORE DELETE OR UPDATE` last-super-admin trigger and atomic `admin_mutate_role_atomic` RPC (`service_role` only) combining role mutation + audit log insert in one transaction.
+- **AUD-020 Resolved (Avatar EXIF Strip & Owner-Scoped Storage RLS — Local Only)**: Added `avatarService.sanitizeWebAvatarImage()` (offscreen `HTMLCanvasElement` re-encode to `<= 800px` JPEG `0.82` stripping EXIF metadata with explicit canvas GPU and blob-URL cleanup), wired into `app/settings.tsx`, and authored local migration `supabase/migrations/20261118120500_harden_avatars_storage_privacy.sql` restricting `avatars` `SELECT`/listing RLS strictly to `${auth.uid()}/`.
+
+### Verification
+- `npm audit --omit=dev`: `XLSX_AUDIT_HITS=0` (0 `xlsx` advisories remain).
+- `npm run typecheck` (`tsc --noEmit`): Passed with **0 errors**.
+- `npm run lint` (`expo lint`): Passed with **0 errors** (68 pre-existing warnings; 0 new warnings).
+- `npx jest tests/Phase2BSecurityHardening.test.ts tests/DataExport.test.ts tests/ProductionDeployment.test.tsx tests/PWAInstallation.test.tsx tests/ProfileAvatarPersistence.test.tsx tests/AccountDeletionAndPrivacy.test.tsx tests/IOSWebKitExerciseCrashGuard.test.tsx --maxWorkers=2 --testTimeout=15000 --forceExit`: **7/7 suites**, **118/118 tests passed** in 69.673s.
+- `npm run build:web` (`node scripts/build-web.js`): Passed with **0 errors**, exporting **45 static routes** to `dist/`.
+
+
+## [Phase 3] — 2026-11-18 — Storage Resilience, Hook Hygiene, Input Bounds, Error Boundaries & Docs Reconciliation (AUD-015, AUD-017, AUD-018, AUD-022, AUD-024, AUD-026, AUD-034)
+
+### Result
+- **AUD-017 & AUD-018 Resolved (Storage Resilience & Fault Telemetry)**: Hardened `src/lib/storage/platformStorage.ts` so native payloads `> 1800` bytes transparently spill over to durable app-private `FileSystem.documentDirectory/bebig_kv/` with a compact `__BEBIG_FILE__:` pointer in `SecureStore` (eliminating 2KB hardware keystore limits while keeping small auth tokens in Keychain/KeyStore). Added structured `classifyStorageError()`, zero-PII `onStorageError()` telemetry (`keyNamespace` only), and automatic Web `QuotaExceededError` recovery evicting rebuildable exercise catalog caches before retrying once.
+- **AUD-015 Resolved (Zero Hook-Dependency Warnings Repo-Wide)**: Eliminated all 11 `react-hooks/exhaustive-deps` warnings across `app/workout/active.tsx`, `ActiveWorkoutTimer.tsx`, `RestTimerOverlay.tsx`, `app/templates/new.tsx`, `app/exercises/[id].tsx`, `app/workout/progress/exercise/[id].tsx`, `app/workout/progress/prs.tsx`, and `app/workout/progress/weekly.tsx`, reducing total lint warnings from `69` to `47` with `0` errors.
+- **AUD-024 Resolved (Canonical Domain Input Bounds)**: Created `src/constants/domainLimits.ts` (`DOMAIN_LIMITS` + `clampText()`) and wired explicit `maxLength` + clamping into set notes (`ActiveSetRow.tsx`), custom exercise fields (`CustomExerciseForm.tsx`), template names (`app/templates/new.tsx`), and profile display name / avatar URL (`app/settings.tsx`).
+- **AUD-026 Resolved (Granular Screen Error Boundaries)**: Wrapped data-heavy screens (`app/workout/active.tsx`, `app/settings.tsx`, `app/workout/progress/weekly.tsx`, `app/workout/progress/prs.tsx`) in `<ErrorBoundary>` with retry controls preserving locally saved workout state.
+- **AUD-022 & AUD-034 Resolved (Living Docs Reconciliation)**: Reconciled `AI_BRAIN.md`, `DECISIONS.md`, and `RELEASE_STATE.md` with live `v2.4.2` (`0afb94b`) + locally verified Phase 2B & Phase 3 work and documented the exact required deployment sequence.
+
+### Verification
+- `npm run typecheck` (`tsc --noEmit`): Passed with **0 errors**.
+- `npm run lint` (`expo lint`): Passed with **0 errors**, **47 warnings** (`0` `react-hooks/exhaustive-deps` warnings repo-wide).
+- `npx jest --maxWorkers=2 --testTimeout=15000 --forceExit`: **117/117 test suites passed (100%)**, **1,323/1,323 tests passed (100%)** in 121.398s (including 9/9 in `tests/Phase3ResilienceAndHygiene.test.ts`).
+- `npm run build:web` (`node scripts/build-web.js`): Passed with **0 errors**, exporting **45 static routes** to `dist/`.
+
+
+## [Hotfix v2.4.3] — 2026-11-18 — Two-Layer iPhone PWA Crash Fix (Pre-v2.4.2 Photo Compaction, Picker Payload Stripping & Network-First SW Auto-Update)
+
+### Result
+- Resolved both remaining contributors to the live iPhone PWA crash observed in `video_1.mp4`:
+  1. **Stale PWA JS Bundle Eviction**: Switched `/_expo/static/js/` (and `.js` assets) in `public/sw.js` to **Network-First** with offline cache fallback, bumped `CACHE_NAME` to `'bebig-pwa-v2.4.3'`, and wired `registration.update()` + a session-guarded single `controllerchange` reload (`bebig_sw_reloaded_v243`) in `app/_layout.tsx` so installed iPhone PWAs automatically self-update without manual Safari cache clearing.
+  2. **Pre-v2.4.2 Multi-MB Base64 Custom Photo Compaction & Picker Stripping**: Added `downscaleDataUrlToMaxEdge()` (`exercisePhotoStorage.ts`) and non-blocking sequential background compaction on web load in `customExerciseStorage.ts` (shrinking stored `data:image/` payloads `> 150,000` chars down to `<= 800px` JPEG quality `0.82` and persisting back to IndexedDB), plus `stripExerciseImagePayloads()` in `ExercisePickerModal.tsx` so `FlatList` and `RECENTLY USED` never retain or diff multi-MB base64 strings even before background compaction completes.
+
+### Verification
+- `npx jest tests/IOSWebKitExerciseCrashGuard.test.tsx tests/PWAInstallation.test.tsx tests/ExerciseThumbnail.test.tsx tests/RecentlyUsedExercises.test.tsx --maxWorkers=2 --testTimeout=15000 --forceExit`: **4/4 suites**, **57/57 tests passed** in 12.433s.
+- `npm run typecheck` (`tsc --noEmit`): Passed with **0 errors**.
+- `npm run lint` (`expo lint`): Passed with **0 errors**, **47 warnings** (0 new warnings).
+- `npm run build:web` (`node scripts/build-web.js`): Passed with **0 errors**, exporting **45 static routes** to `dist/`.
