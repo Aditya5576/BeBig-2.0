@@ -244,7 +244,7 @@ describe('Production Error Monitoring & Privacy Sanitization', () => {
     expect(Sentry.init).toHaveBeenCalledWith(expect.objectContaining({
       dsn: 'https://fake@sentry.io/123',
       environment: 'production',
-      release: 'BeBig@2.1.1+b511ab6',
+      release: 'bebig-2.0@2.1.1',
       dist: 'b511ab6',
       sendDefaultPii: false,
       enableAutoSessionTracking: true,

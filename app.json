@@ -2,7 +2,7 @@
   "expo": {
     "name": "BeBig",
     "slug": "bebig",
-    "version": "2.5.2",
+    "version": "2.6.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "bebig",
@@ -68,7 +68,15 @@
           "color": "#38BDF8"
         }
       ],
-      "expo-font"
+      "expo-font",
+      [
+        "@sentry/react-native/expo",
+        {
+          "organization": "bebig",
+          "project": "bebig-mobile"
+        }
+      ],
+      "expo-image"
     ],
     "extra": {
       "router": {},

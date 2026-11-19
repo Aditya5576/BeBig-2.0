@@ -1,6 +1,7 @@
 import { useAppTheme, useThemeStore, ThemeMode } from '../src/features/theme';
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, Pressable, TextInput, Image, Alert, Platform, Modal } from 'react-native';
+import { View, StyleSheet, Pressable, TextInput, Alert, Platform, Modal } from 'react-native';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { ScreenContainer, ScreenScrollView, Text, Button, Card, Icon, BrandLogoBadge, ErrorBoundary } from '../src/components/ui';
 import { useAuthStore, eraseLocalDeviceData, deleteAccountAndCloudData } from '../src/features/auth';
@@ -275,6 +276,11 @@ export default function SettingsScreen() {
   const [editHeight, setEditHeight] = useState('');
   const [editWeight, setEditWeight] = useState('');
   const [editAvatarUrl, setEditAvatarUrl] = useState('');
+  const [previewAvatarError, setPreviewAvatarError] = useState(false);
+
+  useEffect(() => {
+    setPreviewAvatarError(false);
+  }, [editAvatarUrl]);
 
   const [editGoal, setEditGoal] = useState<Goal | null>(null);
   const [editExperience, setEditExperience] = useState<ExperienceLevel | null>(null);
@@ -904,6 +910,10 @@ export default function SettingsScreen() {
                 <Image
                   source={{ uri: avatarUrl }}
                   style={styles.avatarImage}
+                  contentFit="cover"
+                  transition={150}
+                  cachePolicy="disk"
+                  recyclingKey={avatarUrl}
                   onError={() => setAvatarLoadError(true)}
                   testID="profile-avatar-image"
                 />
@@ -1189,14 +1199,19 @@ export default function SettingsScreen() {
                   {/* Avatar Live Preview */}
                   <View style={styles.avatarPreviewRow} testID="avatar-preview-box">
                     <View style={styles.previewAvatarWrapper}>
-                      {editAvatarUrl ? (
+                      {editAvatarUrl && !previewAvatarError ? (
                         <Image
                           source={{ uri: editAvatarUrl }}
                           style={styles.avatarPreviewImage}
-                          onError={() => {}}
+                          contentFit="cover"
+                          transition={150}
+                          cachePolicy="disk"
+                          recyclingKey={editAvatarUrl}
+                          onError={() => setPreviewAvatarError(true)}
+                          testID="avatar-preview-image"
                         />
                       ) : (
-                        <View style={styles.avatarFallback}>
+                        <View style={styles.avatarFallback} testID="avatar-preview-fallback">
                           <Text style={styles.avatarInitialsText}>{initials}</Text>
                         </View>
                       )}

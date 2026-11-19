@@ -167,17 +167,16 @@ export function initErrorMonitoring(): boolean {
 
   try {
     const environment = env.appEnv || 'production';
-    const release = env.version
-      ? `${env.appName || 'BeBig'}@${env.version}${env.commitSha ? `+${env.commitSha}` : ''}`
-      : undefined;
-    const dist = env.commitSha || undefined;
+    const releaseVersion = env.version || '2.5.2';
+    const release = `bebig-2.0@${releaseVersion}`;
+    const dist = env.commitSha || '1';
 
     Sentry.init({
       dsn,
       debug: false,
       environment,
-      ...(release ? { release } : {}),
-      ...(dist ? { dist } : {}),
+      release,
+      dist,
       sendDefaultPii: false,
       enableAutoSessionTracking: true,
       beforeSend(event) {

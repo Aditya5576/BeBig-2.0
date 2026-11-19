@@ -3,6 +3,88 @@
 - Refined PR typography and history UI.
 - Stabilized Cinematic Splash Screen with BeBig Barbell Crest.
 
+## [Tier 2 Server-Side Catalog & expo-image] — 2026-11-19 — Server-Side Wger Ingestion, Strict License Allowlist, expo-image Disk Caching & WebKit Memory Guards
+
+### Problem
+1. **Client-Side Wger Flakiness**:
+   - Client devices fetching directly from `wger.de` suffered from mobile latency, CORS flakiness, and external downtime.
+2. **Licensing Compliance & IP Governance**:
+   - Absence of an explicit, validated server catalog with verified open licenses (CC-BY-SA, CC-BY, CC0) left open the possibility of ingesting proprietary or non-compliant exercise data.
+3. **Image Caching & Memory Pressure**:
+   - Standard React Native `<Image>` components lacked native persistent disk caching and smooth transition controls.
+   - Dense exercise lists scrolling 100+ items without thumbnail suppression risked iOS Safari WebKit GPU/Jetsam memory pressure.
+
+### Root cause
+Direct client-to-external API architecture, lack of a centralized server-side ingestion queue with license gating, and reliance on un-cached `<Image>` primitives.
+
+### Changes
+1. **Server Catalog Schema Migration (`supabase/migrations/20261119_wger_exercise_catalog.sql`)**:
+   - Created `public.wger_exercise_catalog` table with columns for `wger_id`, `name`, `description`, `category`, `primary_muscles`, `secondary_muscles`, `equipment`, `image_url`, `license_name`, `license_author`, and `attribution_text`.
+   - Enabled RLS with public `SELECT` for active exercises and write permissions restricted strictly to `service_role`.
+   - Added performant btree indexes on `category`, `name`, `is_active`, and `wger_id`.
+2. **Server-Side Ingestion Edge Function (`supabase/functions/sync-wger-catalog/index.ts`)**:
+   - Enforces CORS allowlist, POST-only methods, and correlation IDs via `_shared/security.ts`.
+   - Authenticated via `CRON_SECRET`, service-role key, or verified super-admin JWT.
+   - Strictly enforces open license allowlist (`CC-BY-SA`, `CC-BY`, `CC0`, `Public Domain`), rejecting proprietary records.
+   - Upserts verified exercises into `public.wger_exercise_catalog`.
+3. **Client-Side Server Catalog Ingestion & Offline Resilience (`WgerExerciseProvider.ts`, `wgerMapper.ts`, `wgerLicense.ts`)**:
+   - `WgerExerciseProvider.listExercises` and `getExerciseById` query Supabase `wger_exercise_catalog` first with safe timeouts.
+   - Implemented schema backoff (`isMissingSchemaError`, `markRemoteResourceMissing`) and graceful fallback to direct Wger fetch when offline or unmigrated.
+   - Added `mapWgerCatalogRecordToExercise` to map catalog records cleanly to domain `Exercise` models.
+4. **Media Upgrade to `expo-image` (`ExerciseThumbnail.tsx`, `app/exercises/[id].tsx`, `app/settings.tsx`, `app/home.tsx`)**:
+   - Installed `expo-image` (`~57.0.5`) aligned with Expo SDK 57 and React 19.
+   - Upgraded exercise detail views, thumbnails, and profile avatars to `expo-image` with `cachePolicy="disk"`, `contentFit`, `transition={150}`, and `recyclingKey`.
+   - Enforced `hideThumbnail={true}` in dense FlatList rows (`ExerciseCard.tsx`, `app/exercises/index.tsx`) rendering lightweight vector SVG badges to guard against iOS Safari WebKit Jetsam crashes.
+5. **Test Coverage (`tests/Tier2ServerCatalogAndExpoImage.test.tsx`)**:
+   - Added 10 tests validating license allowlists, domain mapping, server-first query fallback mechanics, `expo-image` props, and row thumbnail suppression.
+
+6. **Codex Audit Resolution (P1, P2, P3)**:
+   - **P1 Canonical License Gate**: Replaced substring `.includes()` with exact normalized canonical set matching in `wgerLicense.ts` and `sync-wger-catalog`. Eliminated author inference fallback, rejecting missing/null licenses immediately.
+   - **P2 Functional onError Image Fallbacks**: Added `detailImageError` state in `app/exercises/[id].tsx` falling back to clean placeholder card with workout icon on load failure. Added `previewAvatarError` state in `app/settings.tsx` falling back to initials avatar badge.
+   - **P3 Verification Hygiene**: Updated `tests/ErrorMonitoring.test.ts` to assert `bebig-2.0@2.1.1`. Removed EOF trailing blank line in `wgerMapper.ts` (`git diff --check` exits 0). Removed unused `KeysetCursor` import in `syncMetadataStore.ts` (0 eslint warnings).
+   - **Test Hardening**: Expanded `tests/Tier2ServerCatalogAndExpoImage.test.tsx` to 14 tests covering substring tricks, missing license author rejection, and detail image `onError` degradation.
+
+## [Tier 1 Reliability & Zod Boundary Validation] — 2026-11-19 — CI Node 22, Natural Handle Termination, Zod Boundary Schemas, Sentry Plugin & Narrow Selectors
+
+### Problem
+1. **CI Masking & Runtime Requirements**:
+   - The CI quality gate ran on Node 20, missing Expo SDK 57's recommended Node 22 runtime alignment.
+   - The Jest command utilized `--forceExit`, which masked unclosed async handles and prevented detection of resource leaks.
+   - The workflow lacked a critical production dependency vulnerability check step.
+2. **Untrusted Boundary Validation**:
+   - Untrusted external API responses (`wgerMapper.ts`) and local storage sync hydration (`syncMetadataStore.ts`) relied on primitive manual object checks that could fail to catch malformed structures or mutated state.
+3. **Unnecessary Admin Guard Re-renders**:
+   - `src/hooks/useAdminAuth.ts` subscribed to the entire `useAuthStore` state via `const { user, status } = useAuthStore()`, causing admin guards to re-render whenever unrelated auth state changed.
+4. **Sentry Source-Map Readiness**:
+   - Expo config lacked `@sentry/react-native/expo` plugin registration and standardized release tags (`bebig-2.0@${version}`).
+5. **Redundant Dependencies**:
+   - Unused packages (`@expo-google-fonts/jetbrains-mono`, `expo-print`, `test-renderer`, and top-level `expo-constants`) inflated the package footprint.
+
+### Root cause
+1. Absence of strict runtime Zod schemas at API and storage boundaries.
+2. Whole-store Zustand subscriptions in hook logic.
+3. Unpurged legacy packages from prior prototype features.
+
+### Changes
+1. **CI Quality Gate Hardening (`.github/workflows/ci.yml`)**:
+   - Upgraded runner to `node-version: '22'`.
+   - Removed `--forceExit` from the Jest test step to enforce clean natural teardown.
+   - Added production dependency security audit: `npm audit --omit=dev --audit-level=critical`.
+2. **Narrow Zustand Selectors (`src/hooks/useAdminAuth.ts`)**:
+   - Replaced whole-store subscription with narrow selectors: `const status = useAuthStore((s) => s.status);` and `const userId = useAuthStore((s) => s.user?.id ?? null);`.
+   - Stabilized `useEffect` dependencies around `[userId, status]`.
+3. **Runtime Schema Validation via Zod (`wgerMapper.ts`, `syncMetadataStore.ts`)**:
+   - Installed `zod` (`^4.6.7`).
+   - Added `wgerItemSchema` validating external Wger exercise API items.
+   - Added `syncMetadataStateSchema` validating local storage hydration with safe fallback to initial watermarks upon corruption.
+4. **Sentry Source-Map Readiness (`app.json`, `errorMonitoring.ts`)**:
+   - Added `@sentry/react-native/expo` plugin in `app.json`.
+   - Standardized release and dist tagging (`release: bebig-2.0@${version}`, `dist: env.commitSha`).
+5. **Dependency Cleanup (`package.json`)**:
+   - Uninstalled `@expo-google-fonts/jetbrains-mono`, `expo-print`, `test-renderer`, and `expo-constants`.
+6. **Test Coverage (`tests/Tier1ReliabilityAndZod.test.tsx`)**:
+   - Added 8 unit tests covering Zod Wger parsing, sync metadata fallback, and narrow selector render stability.
+
 ## [Release v2.5.2] — 2026-11-19 — Production Deployment & Astra Audit Hardening Release
 
 - **Commit**: `96849ee` (annotated tag `v2.5.2`)

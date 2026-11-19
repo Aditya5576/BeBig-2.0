@@ -17,14 +17,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
-  Image,
   StyleSheet,
   StyleProp,
   ViewStyle,
-  ImageErrorEventData,
-  NativeSyntheticEvent,
-  Platform,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useAppTheme } from '../../theme';
 import { radii } from '../../../constants/theme';
 import { Exercise } from '../types';
@@ -138,10 +135,11 @@ export const ExerciseThumbnail = React.memo(function ExerciseThumbnail({
           testID={`${containerTestId}-image`}
           source={{ uri: mediaUri }}
           style={[styles.image, { width: size, height: size, borderRadius }]}
-          resizeMode="cover"
-          fadeDuration={0}
-          onError={(_e: NativeSyntheticEvent<ImageErrorEventData>) => setImageError(true)}
-          {...(Platform.OS === 'web' ? ({ loading: 'lazy', decoding: 'async' } as any) : {})}
+          contentFit="cover"
+          transition={150}
+          cachePolicy="disk"
+          recyclingKey={mediaUri}
+          onError={() => setImageError(true)}
         />
       </View>
     );

@@ -4,7 +4,7 @@
 - **Name**: BeBig 2.0
 - **Type**: Mobile fitness and workout-tracking application.
 - **Target**: iOS (Primary), Android (Secondary), Web (PWA compatible — https://be-big-2-0.vercel.app).
-- **Live Production Version**: `v2.5.2` (tag `v2.5.2`).
+- **Live Production Version**: `v2.6.0` (tag `v2.6.0`).
 
 ## Stack
 - **Framework**: React Native (`0.86.3`) with Expo SDK `~57.0.25` and Expo Router (45 static web routes).
@@ -17,7 +17,7 @@
   - **In-Memory Cache Isolation (`AUD-016`)**: Custom exercise and profile in-memory caches are namespace-keyed by active user scope (`auth:<id>` / `guest:<id>` / `guest`) and cleared automatically via `clearExerciseMemoryCache()` / `profileService.clearMemoryCache()` on sign-out, guest exit, local wipe, or user-ID change.
 - **Backend / Database**: Supabase PostgreSQL with Row-Level Security (RLS) (`gkkvxfroxthvbiecramm`, `ap-northeast-1`), atomic last-`super_admin` trigger (`protect_last_super_admin_trigger`) + `service_role`-only `admin_mutate_role_atomic` RPC (`AUD-019`), and owner-scoped `avatars` storage RLS (`AUD-020`).
 - **Exports**: Zero-dependency pure-TypeScript OOXML `.xlsx` writer (`ooxmlWorkbook.ts`, with formula-injection neutralization, `AUD-005`), `pdf-lib` PDF reports, JSON, and RFC 4180 CSV.
-- **PWA & Security**: Shell-only Service Worker with Network-First `/_expo/static/js/` bundle delivery (`public/sw.js`, `bebig-pwa-v2.5.2`, `AUD-013`) + session-guarded `controllerchange` single-reload recovery (`app/_layout.tsx`), HSTS + `Permissions-Policy` + COOP + CSP (`vercel.json`, `AUD-012`), origin-allowlisted Edge Functions (`supabase/functions/_shared/security.ts`, `AUD-010`), self-service account deletion (`delete-account`, `AUD-006`), legal routes (`/legal/privacy`, `/legal/terms`, `AUD-007`), and confirmed local device wipe (`AUD-011`).
+- **PWA & Security**: Shell-only Service Worker with Network-First `/_expo/static/js/` bundle delivery (`public/sw.js`, `bebig-pwa-v2.6.0`, `AUD-013`) + session-guarded `controllerchange` single-reload recovery (`app/_layout.tsx`), HSTS + `Permissions-Policy` + COOP + CSP (`vercel.json`, `AUD-012`), origin-allowlisted Edge Functions (`supabase/functions/_shared/security.ts`, `AUD-010`), self-service account deletion (`delete-account`, `AUD-006`), legal routes (`/legal/privacy`, `/legal/terms`, `AUD-007`), and confirmed local device wipe (`AUD-011`).
 - **Media & iOS WebKit Safety**: Exercise list rows (`ExercisePickerModal` and `/exercises`) render pure-SVG badges (`hideThumbnail={true}`, 0 decoded `<Image>` bitmaps) and strip inline image payloads (`stripExerciseImagePayloads`) to prevent iOS Safari Jetsam crashes; web photo & avatar uploads are EXIF-stripped and downscaled via offscreen `HTMLCanvasElement` to `<= 800px` JPEG (`0.82`) (`AUD-020`), with sequential background compaction for legacy `> 150KB` custom exercise photos (`customExerciseStorage.ts`).
 - **External Providers**: `WgerExerciseProvider.ts` performs direct client-side fetches (`https://wger.de/api/v2`) with local `exerciseCacheStorage` caching and curated media catalog (`281` verified CC-BY-SA entries).
 - **Testing & CI**: Jest + React Native Testing Library (`117+` suites; `--maxWorkers=2 --testTimeout=15000`; Phase 3 resilience suite verified with natural teardown via `--detectOpenHandles`), GitHub Actions CI gate (`.github/workflows/ci.yml`, `AUD-004`).

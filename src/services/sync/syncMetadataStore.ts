@@ -12,6 +12,7 @@
  * 4. Local entity storage remains the source of truth for the UI.
  */
 
+import { z } from 'zod';
 import { getCurrentUserScope, UserScope } from '../../features/auth/utils/userScope';
 import { workoutStorage } from '../../features/workout/storage/workoutStorage';
 import { templateStorage } from '../../features/templates/storage/templateStorage';
@@ -19,7 +20,6 @@ import { customExerciseStorage } from '../../features/exercises/storage/customEx
 import { platformStorage } from '../../lib/storage';
 import {
   EntitySyncMetadata,
-  KeysetCursor,
   RecoveryScanResult,
   SyncEntityType,
   SyncMetadataState,
@@ -29,6 +29,43 @@ import {
 } from './types';
 
 export const BASE_SYNC_METADATA_KEY = 'bebig.sync.metadata';
+
+/**
+ * Zod runtime validation schema for local sync metadata hydration.
+ */
+export const syncStatusSchema = z.enum(['synced', 'pending_upload', 'pending_delete', 'error']);
+export const syncEntityTypeSchema = z.enum(['workout', 'template', 'custom_exercise', 'scheduled_workout']);
+
+export const entitySyncMetadataSchema = z.object({
+  entityType: syncEntityTypeSchema,
+  id: z.string(),
+  clientUpdatedAt: z.string(),
+  deletedAt: z.string().nullable(),
+  syncStatus: syncStatusSchema,
+  lastSyncedServerUpdatedAt: z.string().optional(),
+});
+
+export const keysetCursorSchema = z.object({
+  updatedAt: z.string(),
+  id: z.string(),
+});
+
+export const watermarkStateSchema = z.object({
+  lastCompletedWatermark: z.string().nullable(),
+  activeCursor: keysetCursorSchema.nullable(),
+  hasMore: z.boolean(),
+});
+
+export const syncMetadataStateSchema = z.object({
+  records: z.record(z.string(), entitySyncMetadataSchema).default({}),
+  watermarks: z.object({
+    workout: watermarkStateSchema.optional(),
+    template: watermarkStateSchema.optional(),
+    custom_exercise: watermarkStateSchema.optional(),
+    scheduled_workout: watermarkStateSchema.optional(),
+  }),
+  activeStreamEntity: syncEntityTypeSchema.nullable().optional(),
+});
 
 /**
  * Composite key helper to prevent identity collisions across different entity types.
@@ -124,21 +161,27 @@ export const syncMetadataStore = {
       }
 
       const parsed = JSON.parse(raw);
-      if (!parsed || typeof parsed !== 'object' || !parsed.records || !parsed.watermarks) {
+      const parseResult = syncMetadataStateSchema.safeParse(parsed);
+      if (!parseResult.success) {
+        console.warn(
+          '[SYNC_METADATA_STORE] Corrupted or invalid sync metadata detected in storage, resetting to initial state:',
+          parseResult.error.message
+        );
         const fallback = createInitialSyncMetadataState();
         memoryCache.set(userId, fallback);
         return fallback;
       }
 
+      const valid = parseResult.data;
       const state: SyncMetadataState = {
-        records: parsed.records || {},
+        records: (valid.records as any) || {},
         watermarks: {
-          workout: parsed.watermarks.workout || createInitialWatermarkState(),
-          template: parsed.watermarks.template || createInitialWatermarkState(),
-          custom_exercise: parsed.watermarks.custom_exercise || createInitialWatermarkState(),
-          scheduled_workout: parsed.watermarks.scheduled_workout || createInitialWatermarkState(),
+          workout: valid.watermarks.workout || createInitialWatermarkState(),
+          template: valid.watermarks.template || createInitialWatermarkState(),
+          custom_exercise: valid.watermarks.custom_exercise || createInitialWatermarkState(),
+          scheduled_workout: valid.watermarks.scheduled_workout || createInitialWatermarkState(),
         },
-        activeStreamEntity: parsed.activeStreamEntity || null,
+        activeStreamEntity: valid.activeStreamEntity || null,
       };
 
       memoryCache.set(userId, state);

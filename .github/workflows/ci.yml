@@ -22,10 +22,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Node.js 20
+      - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: '22'
           cache: 'npm'
 
       - name: Secret & Backup Leak Guard
@@ -41,14 +41,17 @@ jobs:
       - name: Install dependencies (clean install)
         run: npm ci
 
+      - name: Production dependency security audit
+        run: npm audit --omit=dev --audit-level=critical
+
       - name: TypeScript typecheck
         run: npm run typecheck
 
       - name: ESLint check
         run: npm run lint
 
-      - name: Full test suite (114 suites)
-        run: npx jest --maxWorkers=2 --testTimeout=15000 --forceExit
+      - name: Full test suite (natural handle termination)
+        run: npx jest --maxWorkers=2 --testTimeout=15000
 
       - name: Production web build
         run: npm run build:web

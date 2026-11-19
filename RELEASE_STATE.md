@@ -1,12 +1,10 @@
 # BeBig 2.0 — Release State
 
-## Production (Live Verified — `v2.5.2`)
+## Production (Live Release — `v2.6.0`)
 
 - **URL**: https://be-big-2-0.vercel.app
-- **Live Version**: `v2.5.2` (`package.json`, `app.json`, `/sw.js` `bebig-pwa-v2.5.2`)
-- **Live Release Commit**: `96849ee` (tag `v2.5.2`)
-- **Vercel Production Deployment**: `be-big-2-0-2dat8qyqh-aditya-works.vercel.app` (`● Ready`, 3m build, 45 static routes, `/sw.js` serving `bebig-pwa-v2.5.2`)
-- **Previous Verified Releases**: `v2.5.1` (`2d74de3`), `v2.5.0` (`68c7c38`), `v2.4.4` (`6be31bb`), `v2.4.3` (`2f88fd2`), `v2.4.2` (`0afb94b`)
+- **Live Version**: `v2.6.0` (`package.json`, `app.json`, `/sw.js` `bebig-pwa-v2.6.0`)
+- **Previous Verified Releases**: `v2.5.2` (`96849ee`), `v2.5.1` (`2d74de3`), `v2.5.0` (`68c7c38`), `v2.4.4` (`6be31bb`), `v2.4.3` (`2f88fd2`), `v2.4.2` (`0afb94b`)
 - **Supabase Production Project**: `BeBig 2.0` (`gkkvxfroxthvbiecramm`, `ap-northeast-1`)
   - Applied SQL Migrations:
     - `20261118120000_atomic_super_admin_guard.sql`
@@ -15,21 +13,35 @@
     - `20261118_admin_panel_m2.sql` (`trainer_workout_templates`, `assigned_workouts`)
     - `20261118_admin_panel_m3.sql` (`global_exercise_catalog`, `get_admin_user_directory`, active announcements banner)
     - `20261119_admin_panel_m4.sql` (`admin_delete_user` RPC, `profiles.full_name`, `exercise-images` storage bucket)
-  - Deployed Edge Functions: `admin-assign-role` (`ACTIVE`, v1, `verify_jwt: true`), `coach-agent` (`ACTIVE`, v14, `verify_jwt: true`), `delete-account` (`ACTIVE`, v3, `verify_jwt: true`), `coach-v2` (paused, untouched at v2)
+    - `20261119_wger_exercise_catalog.sql` (`public.wger_exercise_catalog` table with 14 columns, RLS read policy for anon/authenticated, service_role write policy)
+  - Deployed Edge Functions:
+    - `sync-wger-catalog` (`ACTIVE`, v1, `verify_jwt: false` with `CRON_SECRET` / bearer auth, canonical licensing filter)
+    - `admin-assign-role` (`ACTIVE`, v1, `verify_jwt: true`)
+    - `coach-agent` (`ACTIVE`, v14, `verify_jwt: true`)
+    - `delete-account` (`ACTIVE`, v3, `verify_jwt: true`)
+    - `coach-v2` (paused, untouched at v2)
 - **Deployment Method**: Automatic Vercel deployment on `main` branch push + explicit Supabase CLI deployments
 
-## Key Enhancements in `v2.5.2` (Astra Audit Hardening & Milestone 5)
+## Key Enhancements in `v2.6.0` (Server-Side Wger Catalog, expo-image Caching, Zod Validation & CI Hardening)
 
-- **`P0-01`**: Single-transaction atomic IndexedDB read-merge-write (`bebig_cross_tab_locks`) with zero await gaps inside transaction callbacks + Web Locks / storage lease contention fallback + deleted tombstone tracking.
-- **`P0-02`**: Unified monotonic sequence CAS (`Math.max(revision, version)`) across `workoutStorage.ts` and `workoutRepository.ts` with explicit conflict return (`{ ok: false, conflict: true, persistedRevision, incomingRevision }`).
-- **`P1-01`**: Complete local erasure of scoped completed workouts (`BASE_COMPLETED_WORKOUTS_KEY`) in `accountDeletionService.ts` with loud failure reporting if any key survives.
-- **`P1-02`**: Zero-shift pagination in recursive cloud storage cleanup (`deleteUserStorageFolder`) across `avatars`, `exercise-photos`, and `exercise-demos` with fail-fast HTTP 500 error abort before auth deletion.
-- **`P2-01`**: Upgraded `shell-quote` to `1.12.0` (`>= 1.11.0`) in `package-lock.json` resolving critical security vulnerability without breaking expo dependencies.
-- **Milestone 5 Features**: Custom workout numeric keypad (`WorkoutNumericKeypad.tsx`) with kg and reps modes, admin diagnostics terminal copy all / copy row, upgraded home announcements banner, trainer templates catalog search with assigned workout normalization, and dedicated "Global" exercise filter.
-- **`P3-02`**: Aligned `Auth.test.tsx` and `DropSetTrackingAndAnalytics.test.tsx` assertions to current production UI behavior.
-- **`P3-03`**: Reconciled release state documentation and eliminated all contradictory legacy sections.
+- **Tier 2 Server-Side Wger Catalog & Ingestion**:
+  - `public.wger_exercise_catalog` remote PostgreSQL table with full attribution fields (`license_name`, `license_author`, `attribution_text`).
+  - `sync-wger-catalog` Edge Function with exact canonical allowlist (`CC-BY-SA 4/3`, `CC-BY 4/3`, `CC0`), author attribution preservation, and initial verified 20-exercise batch ingestion.
+- **`expo-image` Transition**:
+  - Migrated legacy `<Image>` to `expo-image` across `app/exercises/[id].tsx`, `src/features/exercises/components/ExerciseThumbnail.tsx`, `app/home.tsx`, and `app/settings.tsx`.
+  - Automatic memory and disk caching (`cachePolicy="disk"`), smooth cross-dissolve transitions, and placeholder fallbacks on load failures.
+- **Tier 1 Reliability & Hygiene**:
+  - Zod boundary validation for untrusted external payloads (`wgerMapper.ts`).
+  - Strict HTTPS URL validation for external images (`WgerExerciseProvider.ts`).
+  - Safe JSON metadata parsing (`syncMetadataStore.ts`).
+  - Bounded Sentry error logging with scrubbed PII (`errorMonitoring.ts`).
+  - Hardened GitHub Actions CI workflow (`.github/workflows/ci.yml`) with parallel typecheck, lint, test, and security audit jobs.
+- **Codex Audit Resolution (`P1`, `P2`, `P3`)**:
+  - `P1`: Exact canonical license set matching in `wgerLicense.ts` and `sync-wger-catalog/index.ts` (rejected substring tricks and author inference).
+  - `P2`: Added `onError` fallback handlers and placeholder badges in exercise detail and settings avatar preview.
+  - `P3`: Aligned error monitoring test to release version and eliminated whitespace/import issues.
 
-## Deployed Features in Production (`v2.5.2`)
+## Deployed Features in Production (`v2.6.0`)
 
 - **Admin Control Panel Full Milestones (M1-M4)**:
   - Role-Based Access Control (`super_admin` / `admin` via `admin_roles`), system diagnostics terminal, athlete announcements.

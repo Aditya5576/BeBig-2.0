@@ -1,10 +1,20 @@
 import { Exercise } from '../../types';
 import { ExerciseFilterOptions, ExerciseListResult, IExerciseProvider } from '../types';
-import { mapWgerToExercise } from './wgerMapper';
+import { mapWgerToExercise, mapWgerCatalogRecordToExercise } from './wgerMapper';
 import { WgerExerciseInfoItem, WgerExerciseInfoResponse } from './wgerTypes';
+import { supabase, isSupabaseConfigured } from '../../../../lib/supabase';
+import {
+  isDeviceOffline,
+  isMissingSchemaError,
+  isRemoteResourceBackedOff,
+  markRemoteResourceMissing,
+  withSafeTimeout,
+} from '../../../../lib/supabase/resilience';
 
 const DEFAULT_BASE_URL = 'https://wger.de/api/v2';
 const DEFAULT_TIMEOUT_MS = 10000;
+const WGER_CATALOG_RESOURCE_KEY = 'table:wger_exercise_catalog';
+
 
 // Wger category IDs mapping
 const WGER_CATEGORY_IDS: Record<string, number> = {
@@ -76,6 +86,64 @@ export class WgerExerciseProvider implements IExerciseProvider {
     }
 
     const requestPromise = (async (): Promise<ExerciseListResult> => {
+      // 1. Try server-side fast cached catalog first (eliminating mobile CORS & latency)
+      if (
+        isSupabaseConfigured() &&
+        !isDeviceOffline() &&
+        !isRemoteResourceBackedOff(WGER_CATALOG_RESOURCE_KEY)
+      ) {
+        try {
+          let queryBuilder = supabase
+            .from('wger_exercise_catalog')
+            .select(
+              'id, wger_id, name, description, category, primary_muscles, secondary_muscles, equipment, image_url, license_name, license_author, attribution_text, is_active',
+              { count: 'exact' }
+            )
+            .eq('is_active', true);
+
+          if (options.category && options.category !== 'all') {
+            queryBuilder = queryBuilder.eq('category', options.category.toLowerCase());
+          }
+
+          if (options.query && options.query.trim().length > 0) {
+            queryBuilder = queryBuilder.ilike('name', `%${options.query.trim()}%`);
+          }
+
+          const from = offset;
+          const to = offset + limit - 1;
+          queryBuilder = queryBuilder.range(from, to).order('name', { ascending: true });
+
+          const timeoutResult = await withSafeTimeout(
+            queryBuilder,
+            3500,
+            { data: null, count: null, error: new Error('Timeout') } as any
+          );
+
+          if (timeoutResult.error) {
+            if (isMissingSchemaError(timeoutResult.error)) {
+              markRemoteResourceMissing(WGER_CATALOG_RESOURCE_KEY);
+            }
+          } else if (Array.isArray(timeoutResult.data) && timeoutResult.data.length > 0) {
+            const exercises: Exercise[] = [];
+            for (const row of timeoutResult.data) {
+              const mapped = mapWgerCatalogRecordToExercise(row);
+              if (mapped) exercises.push(mapped);
+            }
+            const total = typeof timeoutResult.count === 'number' ? timeoutResult.count : exercises.length;
+            const hasMore = offset + limit < total;
+            return {
+              exercises,
+              totalCount: total,
+              hasMore,
+              nextOffset: hasMore ? offset + limit : undefined,
+            };
+          }
+        } catch {
+          // Fall through to direct Wger API fetch
+        }
+      }
+
+      // 2. Fallback to direct Wger API fetch (or when catalog table is empty)
       try {
         const res = await this.fetchWithTimeout(cacheKey);
 
@@ -144,6 +212,39 @@ export class WgerExerciseProvider implements IExerciseProvider {
     }
 
     const requestPromise = (async (): Promise<Exercise | null> => {
+      // 1. Try server-side fast cached catalog first
+      const numId = Number(cleanId);
+      if (
+        isSupabaseConfigured() &&
+        !isDeviceOffline() &&
+        !isRemoteResourceBackedOff(WGER_CATALOG_RESOURCE_KEY) &&
+        !isNaN(numId)
+      ) {
+        try {
+          const timeoutResult = await withSafeTimeout(
+            supabase
+              .from('wger_exercise_catalog')
+              .select('*')
+              .eq('wger_id', numId)
+              .maybeSingle(),
+            3000,
+            { data: null, error: new Error('Timeout') } as any
+          );
+
+          if (timeoutResult.error) {
+            if (isMissingSchemaError(timeoutResult.error)) {
+              markRemoteResourceMissing(WGER_CATALOG_RESOURCE_KEY);
+            }
+          } else if (timeoutResult.data) {
+            const mapped = mapWgerCatalogRecordToExercise(timeoutResult.data);
+            if (mapped) return mapped;
+          }
+        } catch {
+          // Fall through to direct Wger API fetch
+        }
+      }
+
+      // 2. Fallback to direct Wger API fetch
       try {
         const res = await this.fetchWithTimeout(url);
 

@@ -1,8 +1,9 @@
 import { useAppTheme } from '../../src/features/theme';
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, ScrollView, Image, ActivityIndicator, Alert, Platform, Pressable } from 'react-native';
+import { View, StyleSheet, ScrollView, ActivityIndicator, Alert, Platform, Pressable } from 'react-native';
+import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ScreenContainer, Text, Button, Card, useBottomContentInset, SyncStatusChip } from '../../src/components/ui';
+import { ScreenContainer, Text, Button, Card, useBottomContentInset, SyncStatusChip, Icon } from '../../src/components/ui';
 import * as FileSystem from 'expo-file-system/legacy';
 import {
   exerciseRepository,
@@ -105,6 +106,7 @@ export default function ExerciseDetailScreen() {
   const [photoSyncStatus, setPhotoSyncStatus] = useState<PhotoSyncStatusInfo>({ state: 'local_only' });
   const fileInputRef = useRef<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [detailImageError, setDetailImageError] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -468,15 +470,18 @@ export default function ExerciseDetailScreen() {
         </View>
 
         {/* Exercise Demonstration Image & Attribution */}
-        {displayImageUri ? (
+        {displayImageUri && !detailImageError ? (
           <View style={styles.mediaWrapper}>
             <View style={styles.imageContainer}>
               <Image
                 source={{ uri: displayImageUri }}
                 style={styles.exerciseImage}
-                resizeMode="contain"
+                contentFit="contain"
+                transition={150}
+                cachePolicy="disk"
+                recyclingKey={displayImageUri}
+                onError={() => setDetailImageError(true)}
                 testID="exercise-detail-image"
-                {...(Platform.OS === 'web' ? ({ decoding: 'async' } as any) : {})}
               />
             </View>
             {approvedCuratedDemo ? (
@@ -486,6 +491,15 @@ export default function ExerciseDetailScreen() {
                 </Text>
               </View>
             ) : null}
+          </View>
+        ) : displayImageUri && detailImageError ? (
+          <View style={styles.mediaWrapper}>
+            <View style={styles.imageContainer} testID="exercise-detail-placeholder">
+              <Icon name="workout" size={44} color={colors.textMuted} />
+              <Text variant="caption" color="muted" style={{ marginTop: 8 }}>
+                Demonstration image unavailable
+              </Text>
+            </View>
           </View>
         ) : null}
 

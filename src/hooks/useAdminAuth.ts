@@ -5,7 +5,8 @@ import { useAuthStore } from '../features/auth';
 export type AdminRole = 'super_admin' | 'admin' | 'coach' | 'support' | 'content_manager' | 'developer' | 'none';
 
 export function useAdminAuth() {
-  const { user, status } = useAuthStore();
+  const status = useAuthStore((state) => state.status);
+  const userId = useAuthStore((state) => state.user?.id ?? null);
   const [role, setRole] = useState<AdminRole>('none');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -25,7 +26,7 @@ export function useAdminAuth() {
         return; // wait for auth to finish
       }
 
-      if (!user) {
+      if (!userId) {
         if (isMounted) {
           setRole('none');
           setIsLoading(false);
@@ -38,7 +39,7 @@ export function useAdminAuth() {
         const { data, error } = await supabase
           .from('admin_roles')
           .select('role')
-          .eq('user_id', user.id)
+          .eq('user_id', userId)
           .single();
 
         if (error) {
@@ -71,7 +72,7 @@ export function useAdminAuth() {
       isMounted = false;
       clearTimeout(timeoutId);
     };
-  }, [user, status]);
+  }, [userId, status]);
 
   const hasAdminAccess = ['super_admin', 'admin', 'coach', 'support', 'content_manager', 'developer'].includes(role);
   

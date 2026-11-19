@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import {
   Exercise,
   ExerciseCategory,
@@ -5,7 +6,42 @@ import {
   ExerciseImage,
   ExerciseMuscle,
 } from '../../types';
-import { WgerExerciseInfoItem, WgerImage, WgerMuscle } from './wgerTypes';
+
+/**
+ * Zod schema for runtime validation of untrusted Wger API payloads.
+ */
+export const wgerItemSchema = z
+  .object({
+    id: z.union([z.number(), z.string()]).refine((val) => String(val).trim().length > 0, {
+      message: 'missing or empty id',
+    }),
+    translations: z
+      .array(
+        z
+          .object({
+            id: z.union([z.number(), z.string()]).optional(),
+            language: z.number().optional(),
+            name: z.string().optional(),
+            description: z.string().optional(),
+            description_source: z.string().optional(),
+          })
+          .passthrough()
+      )
+      .optional()
+      .nullable(),
+    category: z
+      .union([
+        z.object({ id: z.union([z.number(), z.string()]).optional(), name: z.string().optional() }).passthrough(),
+        z.string(),
+      ])
+      .optional()
+      .nullable(),
+    muscles: z.array(z.any()).optional().nullable(),
+    muscles_secondary: z.array(z.any()).optional().nullable(),
+    equipment: z.array(z.any()).optional().nullable(),
+    images: z.array(z.any()).optional().nullable(),
+  })
+  .passthrough();
 
 /**
  * Strips HTML tags and unescapes common HTML entities to produce clean text.
@@ -84,16 +120,16 @@ function mapImage(img: any): ExerciseImage | null {
 
 /**
  * Maps a single Wger exerciseinfo item into a provider-agnostic BeBig Exercise model.
+ * Validates untrusted remote payloads using Zod schema.
  */
-export function mapWgerToExercise(item: any): Exercise {
-  if (!item || typeof item !== 'object') {
-    throw new Error('Invalid Wger item: expected an object');
+export function mapWgerToExercise(rawItem: unknown): Exercise {
+  const parseResult = wgerItemSchema.safeParse(rawItem);
+  if (!parseResult.success) {
+    const errorDetails = parseResult.error.issues.map((i) => i.message).join(', ');
+    throw new Error(`Invalid Wger item: ${errorDetails}`);
   }
 
-  if (item.id == null || String(item.id).trim() === '') {
-    throw new Error('Invalid Wger item: missing or empty id');
-  }
-
+  const item = parseResult.data as any;
   const itemId = String(item.id).trim();
   const translations = Array.isArray(item.translations) ? item.translations : [];
   // English translation is language ID 2 in Wger
@@ -135,6 +171,63 @@ export function mapWgerToExercise(item: any): Exercise {
     id: `wger_${itemId}`,
     name,
     description,
+    category,
+    categoryName,
+    primaryMuscles,
+    secondaryMuscles,
+    equipment,
+    images,
+    sourceProvider: 'wger',
+    sourceExerciseId: itemId,
+    isCustom: false,
+  };
+}
+export interface WgerCatalogRecord {
+  id: string;
+  wger_id: number;
+  name: string;
+  description?: string;
+  category: string;
+  primary_muscles?: string[];
+  secondary_muscles?: string[];
+  equipment?: string[];
+  image_url?: string | null;
+  license_name?: string;
+  license_author?: string;
+  attribution_text?: string;
+  is_active?: boolean;
+  synced_at?: string;
+}
+
+export function mapWgerCatalogRecordToExercise(record: Partial<WgerCatalogRecord>): Exercise | null {
+  if (!record || record.wger_id == null || !record.name) return null;
+  const itemId = String(record.wger_id);
+  const { category, categoryName } = normalizeCategory(record.category);
+
+  const primaryMuscles: ExerciseMuscle[] = (Array.isArray(record.primary_muscles) ? record.primary_muscles : []).map(
+    (mName, idx) => ({ id: String(idx + 1), name: String(mName) })
+  );
+  const secondaryMuscles: ExerciseMuscle[] = (Array.isArray(record.secondary_muscles) ? record.secondary_muscles : []).map(
+    (mName, idx) => ({ id: String(idx + 1), name: String(mName) })
+  );
+  const equipment: ExerciseEquipment[] = (Array.isArray(record.equipment) ? record.equipment : []).map(
+    (eqName, idx) => ({ id: String(idx + 1), name: String(eqName) })
+  );
+  const images: ExerciseImage[] = record.image_url
+    ? [
+        {
+          id: `wger_img_${itemId}`,
+          url: record.image_url,
+          thumbnailUrl: record.image_url,
+          isMain: true,
+        },
+      ]
+    : [];
+
+  return {
+    id: `wger_${itemId}`,
+    name: record.name,
+    description: record.description || '',
     category,
     categoryName,
     primaryMuscles,

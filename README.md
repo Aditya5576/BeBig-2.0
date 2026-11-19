@@ -7,7 +7,7 @@
 <p align="center">A local-first workout tracker for lifters who want fast logging, useful history, and reliable synchronization across web and mobile.</p>
 
 <p align="center">
-  <a href="https://be-big-2-0.vercel.app"><img src="https://img.shields.io/badge/Production-v2.5.2-16a34a?style=flat-square&logo=vercel" alt="Production v2.5.2" /></a>
+  <a href="https://be-big-2-0.vercel.app"><img src="https://img.shields.io/badge/Production-v2.6.0-16a34a?style=flat-square&logo=vercel" alt="Production v2.6.0" /></a>
   <img src="https://img.shields.io/badge/Expo-SDK%2057-000020?style=flat-square&logo=expo" alt="Expo SDK 57" />
   <img src="https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript" alt="Strict TypeScript" />
   <img src="https://img.shields.io/badge/license-proprietary-lightgrey?style=flat-square" alt="Proprietary license" />
@@ -17,7 +17,7 @@
 
 BeBig is a cross-platform training log built with Expo, React Native, React Native Web, TypeScript, Zustand, and Supabase.
 
-The current production release is **v2.5.2**.
+The current production release is **v2.6.0**.
 
 Typical workflow:
 
@@ -31,8 +31,8 @@ Typical workflow:
 ## Production
 
 - Web/PWA: https://be-big-2-0.vercel.app
-- Release tag: v2.5.2
-- Service Worker cache: `bebig-pwa-v2.5.2` (Network-First JS bundles + shell-only caching)
+- Release tag: v2.6.0
+- Service Worker cache: `bebig-pwa-v2.6.0` (Network-First JS bundles + shell-only caching)
 - Current static export: 45 routes
 
 ## Core capabilities

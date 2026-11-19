@@ -1,6 +1,7 @@
 import { useAppTheme } from '../src/features/theme';
 import React, { useState, useCallback, useMemo } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, Alert, Image, Platform } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable, Alert, Platform } from 'react-native';
+import { Image } from 'expo-image';
 import { useRouter, useFocusEffect as routerFocusEffect } from 'expo-router';
 import { ScreenContainer, ScreenScrollView, Text, Button, Card, Icon, BrandLogoBadge } from '../src/components/ui';
 import { useOnboardingStore } from '../src/features/onboarding';
@@ -319,6 +320,10 @@ export default function HomeScreen() {
                 <Image
                   source={{ uri: profileAvatarUrl }}
                   style={styles.profileAvatar}
+                  contentFit="cover"
+                  transition={150}
+                  cachePolicy="disk"
+                  recyclingKey={profileAvatarUrl}
                   onError={() => setAvatarLoadError(true)}
                   testID="home-avatar-image"
                 />
