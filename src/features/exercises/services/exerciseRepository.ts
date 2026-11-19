@@ -15,6 +15,10 @@ import { getCurrentUserScope, UserScope } from '../../auth/utils/userScope';
 import { syncMetadataStore, syncLifecycleManager } from '../../../services/sync';
 import { filterAndRankExercises } from '../utils/exerciseSearch';
 import { filterCatalogueForIndianGym } from '../data/gymEquipmentFilter';
+import {
+  globalExerciseCatalogService,
+  GLOBAL_EXERCISE_ID_PREFIX,
+} from './globalExerciseCatalogService';
 
 async function withTimeout<T>(promise: Promise<T>, ms: number = 4000): Promise<T> {
   let timer: any;
@@ -294,7 +298,27 @@ export class ExerciseRepository {
     }
     }
 
-    // 3. Merge custom, foundational seed exercises, and provider exercises
+    // 2b. Fetch active curated global exercises (text-only metadata, never overwrites custom exercises)
+    let globalCatalogMatches: Exercise[] = [];
+    if (isFirstPage && options.source !== 'custom') {
+      try {
+        const activeGlobal = await globalExerciseCatalogService.getActiveGlobalExercises();
+        if (hasQuery) {
+          globalCatalogMatches = filterAndRankExercises(activeGlobal, rawQuery, options.category);
+        } else {
+          globalCatalogMatches = activeGlobal.filter((ex) => {
+            if (options.category && options.category !== 'all' && ex.category !== options.category) {
+              return false;
+            }
+            return true;
+          });
+        }
+      } catch {
+        globalCatalogMatches = [];
+      }
+    }
+
+    // 3. Merge custom, curated global, foundational seed exercises, and provider exercises
     const isUnfilteredFirstPage =
       isFirstPage &&
       !hasQuery &&
@@ -302,8 +326,18 @@ export class ExerciseRepository {
       options.source !== 'custom';
 
     const combinedMap = new Map<string, Exercise>();
+    const customNamesLower = new Set<string>();
     if (isFirstPage) {
-      customMatches.forEach((e) => combinedMap.set(e.id, e));
+      customMatches.forEach((e) => {
+        combinedMap.set(e.id, e);
+        customNamesLower.add(e.name.trim().toLowerCase());
+      });
+      globalCatalogMatches.forEach((e) => {
+        // Strictly never overwrite a user's custom exercise by ID or exact name
+        if (!combinedMap.has(e.id) && !customNamesLower.has(e.name.trim().toLowerCase())) {
+          combinedMap.set(e.id, e);
+        }
+      });
     }
     if (isUnfilteredFirstPage) {
       SEED_EXERCISES.forEach((seed) => {
@@ -329,13 +363,25 @@ export class ExerciseRepository {
       isSearchActive: hasQuery,
     }).filtered;
 
+    // Ensure active curated global exercises are never dropped by regional equipment filters
+    const finalIds = new Set(finalExercises.map((e) => e.id));
+    for (const gEx of globalCatalogMatches) {
+      if (
+        !finalIds.has(gEx.id) &&
+        !customNamesLower.has(gEx.name.trim().toLowerCase())
+      ) {
+        finalExercises.push(gEx);
+        finalIds.add(gEx.id);
+      }
+    }
+
     const seedCount = isUnfilteredFirstPage ? SEED_EXERCISES.length : 0;
 
     return {
       exercises: finalExercises,
       totalCount: hasQuery
         ? finalExercises.length
-        : totalCount + customMatches.length + seedCount,
+        : totalCount + customMatches.length + globalCatalogMatches.length + seedCount,
       hasMore,
       nextOffset,
     };
@@ -364,10 +410,24 @@ export class ExerciseRepository {
       return null;
     }
 
+    // Check curated global exercise catalog before external provider
+    if (id.startsWith(GLOBAL_EXERCISE_ID_PREFIX)) {
+      const globalMatch = await globalExerciseCatalogService.getGlobalExerciseById(id);
+      if (globalMatch) {
+        return globalMatch;
+      }
+    }
+
     // Check local exercise cache first
     const cached = await exerciseCacheStorage.getCachedExerciseById(id, scope);
     if (cached) {
       return cached;
+    }
+
+    // Also allow lookup by raw global exercise UUID if not cached
+    const globalFallback = await globalExerciseCatalogService.getGlobalExerciseById(id);
+    if (globalFallback) {
+      return globalFallback;
     }
 
     // Fall back to external provider with timeout
@@ -391,6 +451,10 @@ export class ExerciseRepository {
     const scopeMap = this.getScopeMemoryMap(scope, false);
     if (scopeMap?.has(id)) {
       return scopeMap.get(id) || null;
+    }
+    const globalSync = globalExerciseCatalogService.getCachedGlobalExerciseByIdSync(id);
+    if (globalSync) {
+      return globalSync;
     }
     return exerciseCacheStorage.getCachedExerciseByIdSync(id, scope);
   }

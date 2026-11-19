@@ -8,6 +8,7 @@ import { useAuthStore, resolveAuthenticatedUserRoute } from '../src/features/aut
 import { WebAlertModal, ReleaseNotesModal, StartupSplash } from '../src/components/ui';
 import { BottomNavBar } from '../src/components/navigation';
 import { initErrorMonitoring, wrapRootLayout, setUserContext } from '../src/services/monitoring/errorMonitoring';
+import { errorTelemetryService } from '../src/features/admin/services/errorTelemetryService';
 import { useThemeStore, useWebThemeSync, useAppTheme } from '../src/features/theme';
 import { useFonts } from 'expo-font';
 import { PlusJakartaSans_600SemiBold } from '@expo-google-fonts/plus-jakarta-sans/600SemiBold';
@@ -34,6 +35,7 @@ function useProtectedRoute() {
   // 1. Kick off monitoring, theme, & auth initialization on root mount
   useEffect(() => {
     initErrorMonitoring();
+    errorTelemetryService.installGlobalErrorHandlers();
     useThemeStore.getState().initializeTheme();
     if (useAuthStore.getState().status === 'initializing') {
       void useAuthStore.getState().initializeAuth();

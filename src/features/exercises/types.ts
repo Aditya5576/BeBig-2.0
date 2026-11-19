@@ -41,6 +41,7 @@ export interface Exercise {
   primaryMuscles: ExerciseMuscle[];
   secondaryMuscles: ExerciseMuscle[];
   equipment: ExerciseEquipment[];
+  instructions?: string[];
   images: ExerciseImage[];
   sourceProvider: ExerciseSourceProvider;
   sourceExerciseId?: string;

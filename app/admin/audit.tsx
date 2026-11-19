@@ -1,3 +1,6 @@
 import React from 'react';
-import { AdminPlaceholderScreen } from '../../src/components/admin/AdminPlaceholderScreen';
-export default function AuditScreen() { return <AdminPlaceholderScreen title="Audit Logs" />; }
+import AdminDashboardScreen from './index';
+
+export default function AuditScreen() {
+  return <AdminDashboardScreen initialTab="diagnostics" />;
+}

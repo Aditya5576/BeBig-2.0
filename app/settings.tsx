@@ -26,6 +26,7 @@ import { workoutRepository } from '../src/features/workout/services/workoutRepos
 import { templateRepository } from '../src/features/templates/services/templateRepository';
 import type { ExportFormat } from '../src/features/export';
 import { workoutNotificationService } from '../src/features/workout';
+import { useAdminAccess } from '../src/features/admin';
 
 function extractErrorMessage(err: unknown, fallback: string): string {
   if (err instanceof Error && err.message) {
@@ -211,6 +212,7 @@ export default function SettingsScreen() {
   const signOut = useAuthStore((state) => state.signOut);
   const exitGuestMode = useAuthStore((state) => state.exitGuestMode);
   const guestSession = useAuthStore((state) => state.guestSession);
+  const { isAdmin } = useAdminAccess();
 
   // Personal information state
   const [displayName, setDisplayName] = useState<string>('');
@@ -1549,6 +1551,17 @@ export default function SettingsScreen() {
             style={styles.logoutButton}
           />
 
+          {isAdmin && !isGuest ? (
+            <Button
+              testID="settings-admin-panel-button"
+              title="Admin Control Panel"
+              onPress={() => router.push('/admin')}
+              variant="ghost"
+              size="sm"
+              style={styles.adminEntryButton}
+            />
+          ) : null}
+
           {/* Account Deletion (AUD-006) */}
           <View style={styles.deletionNoticeBox} testID="account-deletion-notice">
             <Text variant="caption" color="muted" style={styles.deletionTitle}>
@@ -2461,5 +2474,10 @@ const createStyles = (colors: SettingsThemeColors) => StyleSheet.create({
   deleteModalConfirmBtn: {
     flex: 1.5,
     backgroundColor: '#EF4444',
+  },
+  adminEntryButton: {
+    marginTop: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
   },
 });

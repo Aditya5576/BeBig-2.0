@@ -6,11 +6,12 @@
  */
 
 import React, { Component, ErrorInfo, ReactNode } from 'react';
-import { View, StyleSheet, Pressable } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { Text } from './Text';
 import { Button } from './Button';
 import { Icon } from './Icon';
 import { spacing, radii } from '../../constants/theme';
+import { errorTelemetryService } from '../../features/admin/services/errorTelemetryService';
 
 export interface ErrorBoundaryProps {
   children: ReactNode;
@@ -43,6 +44,16 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    try {
+      errorTelemetryService.captureError({
+        error,
+        severity: 'crash',
+        componentStack: errorInfo.componentStack ?? undefined,
+      });
+    } catch {
+      // Telemetry failures must never disrupt fallback UI rendering
+    }
+
     if (this.props.onError) {
       try {
         this.props.onError(error, errorInfo);

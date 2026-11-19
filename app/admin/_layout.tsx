@@ -9,11 +9,22 @@ import {
   ScrollView,
   Platform,
 } from 'react-native';
-import { Slot, useRouter, usePathname, Redirect } from 'expo-router';
+import {
+  Slot,
+  useRouter,
+  usePathname,
+  useLocalSearchParams as routerUseLocalSearchParams,
+  Redirect,
+} from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useAdminAuth } from '../../src/hooks/useAdminAuth';
+import { useAdminAccess } from '../../src/features/admin';
 import { useAuthStore } from '../../src/features/auth';
 import { spacing, radii, typography } from '../../src/constants/theme';
+
+const useSafeLocalSearchParams =
+  typeof routerUseLocalSearchParams === 'function'
+    ? routerUseLocalSearchParams
+    : () => ({} as Record<string, string | string[] | undefined>);
 
 export default function AdminLayout() {
   const { colors } = useAppTheme();
@@ -21,34 +32,45 @@ export default function AdminLayout() {
 
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSafeLocalSearchParams();
+  const activeTabParam = typeof searchParams?.tab === 'string' ? searchParams.tab : undefined;
 
-  const { status } = useAuthStore();
-  const { isLoading, hasAdminAccess, role } = useAdminAuth();
+  const status = useAuthStore((state) => state.status);
+  const isGuest = useAuthStore((state) => state.isGuest);
+  const { isLoading, isAdmin, role } = useAdminAccess();
 
-  // 1. Unauthenticated or not initialized loading state
+  // 1. Auth or admin RBAC check still initializing
   if (status === 'initializing' || isLoading) {
     return (
-      <View style={styles.centerContainer}>
+      <View style={styles.centerContainer} testID="admin-guard-loading">
         <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
-  // 2. Unauthenticated -> redirect to login/welcome
+  // 2. Unauthenticated -> redirect immediately to login/welcome
   if (status === 'unauthenticated') {
     return <Redirect href="/onboarding/welcome" />;
   }
 
-  // 3. Authenticated but unauthorized screen
-  if (!hasAdminAccess) {
+  // 3. Guest or non-admin user -> block immediately with Access Restricted screen
+  if (isGuest || status !== 'authenticated' || !isAdmin) {
     return (
-      <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
+      <SafeAreaView
+        style={styles.container}
+        edges={['top', 'left', 'right', 'bottom']}
+        testID="admin-access-restricted"
+      >
         <View style={styles.centerContainer}>
-          <Text style={styles.errorTitle}>Unauthorized Access</Text>
+          <Text style={styles.errorTitle}>Access Restricted</Text>
           <Text style={styles.errorSubtext}>
-            You do not have permission to access the BeBig Admin Panel.
+            Admin privileges are required to view the BeBig Control Panel.
           </Text>
-          <Pressable style={styles.homeButton} onPress={() => router.replace('/home')}>
+          <Pressable
+            testID="admin-return-home-button"
+            style={styles.homeButton}
+            onPress={() => router.replace('/home')}
+          >
             <Text style={styles.homeButtonText}>Return Home</Text>
           </Pressable>
         </View>
@@ -56,22 +78,28 @@ export default function AdminLayout() {
     );
   }
 
-  // 4. Navigation Links Definition
-  const links = [
-    { name: 'Dashboard', path: '/admin' },
-    { name: 'Users', path: '/admin/users' },
-    { name: 'Coaches', path: '/admin/coaches' },
-    { name: 'Exercises', path: '/admin/exercises' },
-    { name: 'Templates', path: '/admin/templates' },
-    { name: 'Analytics', path: '/admin/analytics' },
-    { name: 'Monitoring', path: '/admin/monitoring' },
-    { name: 'Cloud Health', path: '/admin/cloud-health' },
-    { name: 'Feature Flags', path: '/admin/feature-flags' },
-    { name: 'Admins & Roles', path: '/admin/roles' },
-    { name: 'Audit Logs', path: '/admin/audit' },
-    { name: 'Developer Tools', path: '/admin/dev-tools' },
-    { name: 'Settings', path: '/admin/settings' },
+  // 4. Unified 6-Module Admin Navigation Links (zero placeholder links)
+  const links: { name: string; path: string; matchTab?: string }[] = [
+    { name: 'Overview & Health', path: '/admin', matchTab: 'overview' },
+    { name: 'Diagnostics Terminal', path: '/admin/monitoring', matchTab: 'diagnostics' },
+    { name: 'Announcements', path: '/admin?tab=announcements', matchTab: 'announcements' },
+    { name: 'Users', path: '/admin?tab=users', matchTab: 'users' },
+    { name: 'Trainer Templates', path: '/admin/templates', matchTab: 'templates' },
+    { name: 'Exercise Catalog', path: '/admin/exercises', matchTab: 'catalog' },
   ];
+
+  const isNavLinkActive = (link: { name: string; path: string; matchTab?: string }): boolean => {
+    if (link.path.includes('?tab=')) {
+      return pathname === '/admin' && activeTabParam === link.matchTab;
+    }
+    if (link.path === '/admin') {
+      return (
+        (pathname === '/admin' || pathname === '/admin/dashboard') &&
+        (!activeTabParam || activeTabParam === 'overview')
+      );
+    }
+    return pathname === link.path || pathname.startsWith(`${link.path}/`);
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
@@ -124,9 +152,7 @@ export default function AdminLayout() {
           contentContainerStyle={styles.mobileNavContent}
         >
           {links.map((link) => {
-            const isActive =
-              pathname === link.path ||
-              (link.path !== '/admin' && pathname.startsWith(link.path));
+            const isActive = isNavLinkActive(link);
             return (
               <Pressable
                 key={link.name}
@@ -162,9 +188,7 @@ export default function AdminLayout() {
         >
           <ScrollView showsVerticalScrollIndicator={false}>
             {links.map((link) => {
-              const isActive =
-                pathname === link.path ||
-                (link.path !== '/admin' && pathname.startsWith(link.path));
+              const isActive = isNavLinkActive(link);
               return (
                 <Pressable
                   key={link.name}
@@ -200,7 +224,7 @@ export default function AdminLayout() {
   );
 }
 
-const createStyles = (colors: any) => StyleSheet.create({
+const createStyles = (colors: ReturnType<typeof useAppTheme>['colors']) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,

@@ -5,6 +5,8 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { ScreenContainer, ScreenScrollView, Text, Button, Card, Icon } from '../../src/components/ui';
 import { templateRepository, WorkoutTemplate } from '../../src/features/templates';
 import { workoutRepository, WorkoutSession } from '../../src/features/workout';
+import { useAuthStore } from '../../src/features/auth';
+import { adminService, AssignedWorkoutRecord } from '../../src/features/admin';
 import {
   getTemplateFocus,
   getSuggestedSessionNumber,
@@ -110,9 +112,14 @@ export default function StartWorkoutScreen() {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const router = useRouter();
 
+  const authStatus = useAuthStore((state) => state.status);
+  const authUserId = useAuthStore((state) => state.user?.id ?? null);
+  const isGuest = useAuthStore((state) => state.isGuest);
+
   const [templates, setTemplates] = useState<WorkoutTemplate[]>([]);
   const [completedWorkouts, setCompletedWorkouts] = useState<WorkoutSession[]>([]);
   const [activeWorkout, setActiveWorkout] = useState<WorkoutSession | null>(null);
+  const [assignedWorkouts, setAssignedWorkouts] = useState<AssignedWorkoutRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
 
@@ -134,13 +141,93 @@ export default function StartWorkoutScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+
+    // Non-blocking trainer inbox hydration (strictly zero network calls for guests)
+    const canFetchAssigned = authStatus === 'authenticated' && !isGuest && Boolean(authUserId);
+    if (!canFetchAssigned) {
+      setAssignedWorkouts([]);
+      return;
+    }
+
+    try {
+      const assigned = await adminService.getMyAssignedWorkouts(authUserId);
+      setAssignedWorkouts(assigned);
+    } catch {
+      setAssignedWorkouts([]);
+    }
+  }, [authStatus, isGuest, authUserId]);
 
   useFocusEffect(
     useCallback(() => {
       void loadData();
     }, [loadData]),
   );
+
+  const handleStartAssignedWorkout = async (assignment: AssignedWorkoutRecord) => {
+    // Ephemeral in-memory template — never mutates or saves to user's personal templates
+    const ephemeralTemplate: WorkoutTemplate = {
+      id: `assigned_${assignment.id}`,
+      name: assignment.title,
+      createdAt: assignment.created_at,
+      updatedAt: assignment.created_at,
+      exercises: assignment.exercises.map((ex, idx) => ({
+        exerciseId: ex.exerciseId,
+        exerciseName: ex.exerciseName,
+        categoryName: ex.categoryName,
+        order: idx,
+        sets: ex.sets,
+        targetReps: ex.targetReps,
+        restTime: ex.restTime,
+      })),
+    };
+
+    const currentActive = activeWorkout ?? (await workoutRepository.getActiveWorkout());
+    if (currentActive) {
+      Alert.alert(
+        'Active Workout in Progress',
+        `You already have an active workout ("${currentActive.name}"). Would you like to resume it or discard it first?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Resume Active',
+            onPress: () => router.push('/workout/active' as any),
+          },
+          {
+            text: 'Discard & Start New',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await workoutRepository.discardActiveWorkout();
+                setActiveWorkout(null);
+                await workoutRepository.startWorkoutFromTemplate(
+                  ephemeralTemplate,
+                  undefined,
+                  undefined,
+                  { forceDiscardExisting: true },
+                );
+                void adminService.markAssignedWorkoutStatus(assignment.id, 'started');
+                router.push('/workout/active' as any);
+              } catch (err: any) {
+                Alert.alert('Error', err?.message || 'Failed to start assigned workout.');
+              }
+            },
+          },
+        ],
+      );
+      return;
+    }
+
+    try {
+      setStarting(true);
+      await workoutRepository.startWorkoutFromTemplate(ephemeralTemplate);
+      void adminService.markAssignedWorkoutStatus(assignment.id, 'started');
+      router.push('/workout/active' as any);
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Failed to start assigned workout.');
+    } finally {
+      setStarting(false);
+    }
+  };
 
   const handleStartFromTemplate = async (template: WorkoutTemplate) => {
     const currentActive = activeWorkout ?? (await workoutRepository.getActiveWorkout());
@@ -336,6 +423,67 @@ export default function StartWorkoutScreen() {
                   />
                 </View>
               </Card>
+            )}
+
+            {/* Priority 2: Isolated Trainer-Assigned Workout Inbox (Authenticated only) */}
+            {authStatus === 'authenticated' && !isGuest && assignedWorkouts.length > 0 && (
+              <View style={styles.assignedSection} testID="assigned-by-trainer-section">
+                <View style={styles.assignedHeaderRow}>
+                  <Text variant="label" color="accent" style={styles.assignedSectionLabel}>
+                    ASSIGNED BY TRAINER
+                  </Text>
+                  <Text variant="caption" color="muted">
+                    {assignedWorkouts.length}{' '}
+                    {assignedWorkouts.length === 1 ? 'Workout' : 'Workouts'}
+                  </Text>
+                </View>
+
+                {assignedWorkouts.map((assignment) => (
+                  <Card
+                    key={assignment.id}
+                    style={styles.assignedCard}
+                    testID={`assigned-workout-card-${assignment.id}`}
+                  >
+                    <View style={styles.assignedCardTop}>
+                      <View style={styles.assignedBadge}>
+                        <Text variant="caption" style={styles.assignedBadgeText}>
+                          COACH PLAN
+                        </Text>
+                      </View>
+                      <Text variant="caption" color="muted">
+                        {assignment.exercises.length}{' '}
+                        {assignment.exercises.length === 1 ? 'Exercise' : 'Exercises'}
+                      </Text>
+                    </View>
+
+                    <Text variant="titleMedium" color="primary" style={styles.assignedTitle}>
+                      {assignment.title}
+                    </Text>
+
+                    {assignment.trainer_note ? (
+                      <Text variant="caption" color="secondary" style={styles.assignedNote}>
+                        {assignment.trainer_note}
+                      </Text>
+                    ) : null}
+
+                    <Text variant="caption" color="muted" numberOfLines={2}>
+                      {assignment.exercises.map((e) => e.exerciseName).join(' • ')}
+                    </Text>
+
+                    <Button
+                      testID={`start-assigned-workout-${assignment.id}`}
+                      title="Start Assigned Workout"
+                      onPress={() => {
+                        void handleStartAssignedWorkout(assignment);
+                      }}
+                      variant="primary"
+                      size="sm"
+                      loading={starting}
+                      style={styles.startAssignedButton}
+                    />
+                  </Card>
+                ))}
+              </View>
             )}
 
             {/* Quick Action: Start Blank Workout */}
@@ -849,5 +997,54 @@ const createStyles = (colors: any) =>
       minWidth: 72,
       minHeight: 38,
       flexShrink: 0,
+    },
+    assignedSection: {
+      gap: spacing.sm,
+    },
+    assignedHeaderRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 2,
+    },
+    assignedSectionLabel: {
+      letterSpacing: 0.8,
+    },
+    assignedCard: {
+      padding: spacing.md,
+      borderRadius: radii.md,
+      borderWidth: 1,
+      borderColor: colors.primary,
+      backgroundColor: colors.surface,
+      gap: spacing.xs + 2,
+    },
+    assignedCardTop: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+    },
+    assignedBadge: {
+      backgroundColor: 'rgba(56, 189, 248, 0.14)',
+      borderWidth: 1,
+      borderColor: 'rgba(56, 189, 248, 0.4)',
+      borderRadius: radii.sm,
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+    },
+    assignedBadgeText: {
+      fontSize: 10,
+      fontWeight: '700',
+      color: colors.primary,
+      letterSpacing: 0.6,
+    },
+    assignedTitle: {
+      fontWeight: '700',
+    },
+    assignedNote: {
+      lineHeight: 18,
+    },
+    startAssignedButton: {
+      marginTop: spacing.xs,
+      alignSelf: 'flex-start',
     },
   });

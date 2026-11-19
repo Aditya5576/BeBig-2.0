@@ -14,6 +14,7 @@ import {
 } from '../src/features/workout';
 import { templateRepository, WorkoutTemplate } from '../src/features/templates';
 import { profileService, getInitials } from '../src/features/profile';
+import { adminService, AppAnnouncement } from '../src/features/admin';
 import { guestStorage } from '../src/lib/storage';
 import { spacing, radii } from '../src/constants/theme';
 import { env } from '../src/config/env';
@@ -34,7 +35,6 @@ export default function HomeScreen() {
   const router = useRouter();
 
   const user = useAuthStore((state) => state.user);
-  const isGuest = useAuthStore((state) => state.isGuest);
   const daysPerWeek = useOnboardingStore((state) => state.daysPerWeek);
 
   const [completedWorkouts, setCompletedWorkouts] = useState<WorkoutSession[]>([]);
@@ -43,6 +43,8 @@ export default function HomeScreen() {
   const [profileDisplayName, setProfileDisplayName] = useState<string | null>(null);
   const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(null);
   const [avatarLoadError, setAvatarLoadError] = useState(false);
+  const [activeAnnouncements, setActiveAnnouncements] = useState<AppAnnouncement[]>([]);
+  const [dismissedAnnouncementIds, setDismissedAnnouncementIds] = useState<string[]>([]);
 
   const loadDashboardData = useCallback(async () => {
     try {
@@ -100,6 +102,19 @@ export default function HomeScreen() {
       setCompletedWorkouts(workoutsResult.status === 'fulfilled' ? workoutsResult.value : []);
       setActiveWorkout(activeResult.status === 'fulfilled' ? activeResult.value : null);
       setTemplates(templatesResult.status === 'fulfilled' ? templatesResult.value : []);
+
+      // Non-blocking hydration of active announcements so local dashboard renders immediately
+      void Promise.allSettled([
+        adminService.getActiveAnnouncements(),
+        adminService.getDismissedAnnouncementIds(),
+      ]).then(([announcementsResult, dismissedResult]) => {
+        setActiveAnnouncements(
+          announcementsResult.status === 'fulfilled' ? announcementsResult.value : [],
+        );
+        setDismissedAnnouncementIds(
+          dismissedResult.status === 'fulfilled' ? dismissedResult.value : [],
+        );
+      });
     } catch {
       setCompletedWorkouts([]);
       setActiveWorkout(null);
@@ -119,6 +134,21 @@ export default function HomeScreen() {
   }, [completedWorkouts, daysPerWeek, templates]);
 
   const greeting = useMemo(() => getGreeting(), []);
+
+  const visibleAnnouncement = useMemo(() => {
+    return (
+      activeAnnouncements.find(
+        (ann) => ann.is_active && !dismissedAnnouncementIds.includes(ann.id),
+      ) ?? null
+    );
+  }, [activeAnnouncements, dismissedAnnouncementIds]);
+
+  const handleDismissAnnouncement = useCallback((announcementId: string) => {
+    setDismissedAnnouncementIds((prev) =>
+      prev.includes(announcementId) ? prev : [announcementId, ...prev],
+    );
+    void adminService.dismissAnnouncement(announcementId);
+  }, []);
 
   const handleStartTemplate = async (template: WorkoutTemplate) => {
     const currentActive = activeWorkout ?? (await workoutRepository.getActiveWorkout());
@@ -293,6 +323,56 @@ export default function HomeScreen() {
             </Pressable>
           </View>
         </View>
+
+        {/* 1b. Active Admin Announcement Banner (zero shift when inactive or dismissed) */}
+        {visibleAnnouncement ? (
+          <View
+            testID="home-announcement-banner"
+            style={[
+              styles.announcementBanner,
+              visibleAnnouncement.type === 'maintenance'
+                ? styles.announcementMaintenance
+                : visibleAnnouncement.type === 'release'
+                  ? styles.announcementRelease
+                  : styles.announcementInfo,
+            ]}
+          >
+            <View style={styles.announcementContent}>
+              <View style={styles.announcementTopRow}>
+                <Text
+                  variant="caption"
+                  style={[
+                    styles.announcementTypeTag,
+                    visibleAnnouncement.type === 'maintenance'
+                      ? { color: '#F59E0B' }
+                      : visibleAnnouncement.type === 'release'
+                        ? { color: colors.secondaryAccent }
+                        : { color: colors.primary },
+                  ]}
+                >
+                  {visibleAnnouncement.type.toUpperCase()}
+                </Text>
+                <Pressable
+                  testID="home-announcement-dismiss"
+                  onPress={() => handleDismissAnnouncement(visibleAnnouncement.id)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Dismiss announcement"
+                >
+                  <Text variant="caption" color="muted" style={styles.announcementDismissText}>
+                    Dismiss
+                  </Text>
+                </Pressable>
+              </View>
+              <Text variant="bodyBold" color="primary" style={styles.announcementTitle}>
+                {visibleAnnouncement.title}
+              </Text>
+              <Text variant="caption" color="secondary" style={styles.announcementBody}>
+                {visibleAnnouncement.body}
+              </Text>
+            </View>
+          </View>
+        ) : null}
 
         {/* 2. Personal Progress: Compact & Clean */}
         <View style={styles.progressSection}>
@@ -1048,5 +1128,48 @@ const createStyles = (colors: any) =>
     appFooterText: {
       fontSize: 11,
       letterSpacing: 0.2,
+    },
+    announcementBanner: {
+      borderRadius: radii.md,
+      borderWidth: 1,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm + 2,
+    },
+    announcementInfo: {
+      backgroundColor: 'rgba(56, 189, 248, 0.08)',
+      borderColor: 'rgba(56, 189, 248, 0.32)',
+    },
+    announcementRelease: {
+      backgroundColor: 'rgba(0, 229, 153, 0.08)',
+      borderColor: 'rgba(0, 229, 153, 0.32)',
+    },
+    announcementMaintenance: {
+      backgroundColor: 'rgba(245, 158, 11, 0.1)',
+      borderColor: 'rgba(245, 158, 11, 0.38)',
+    },
+    announcementContent: {
+      gap: 3,
+    },
+    announcementTopRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+    },
+    announcementTypeTag: {
+      fontSize: 10,
+      fontWeight: '700',
+      letterSpacing: 0.7,
+    },
+    announcementDismissText: {
+      fontSize: 11,
+      fontWeight: '600',
+    },
+    announcementTitle: {
+      fontSize: 14,
+      fontWeight: '700',
+    },
+    announcementBody: {
+      fontSize: 12,
+      lineHeight: 17,
     },
   });

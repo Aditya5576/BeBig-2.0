@@ -1,3 +1,6 @@
 import React from 'react';
-import { AdminPlaceholderScreen } from '../../src/components/admin/AdminPlaceholderScreen';
-export default function RolesScreen() { return <AdminPlaceholderScreen title="Admins & Roles" />; }
+import AdminDashboardScreen from './index';
+
+export default function RolesScreen() {
+  return <AdminDashboardScreen initialTab="users" />;
+}

@@ -1,3 +1,6 @@
 import React from 'react';
-import { AdminPlaceholderScreen } from '../../src/components/admin/AdminPlaceholderScreen';
-export default function FeatureFlagsScreen() { return <AdminPlaceholderScreen title="Feature Flags" />; }
+import { Redirect } from 'expo-router';
+
+export default function FeatureFlagsScreen() {
+  return <Redirect href="/admin" />;
+}

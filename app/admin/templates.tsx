@@ -1,3 +1,6 @@
 import React from 'react';
-import { AdminPlaceholderScreen } from '../../src/components/admin/AdminPlaceholderScreen';
-export default function TemplatesScreen() { return <AdminPlaceholderScreen title="Templates Management" />; }
+import AdminDashboardScreen from './index';
+
+export default function TemplatesScreen() {
+  return <AdminDashboardScreen initialTab="templates" />;
+}

@@ -1,3 +1,6 @@
 import React from 'react';
-import { AdminPlaceholderScreen } from '../../src/components/admin/AdminPlaceholderScreen';
-export default function CloudHealthScreen() { return <AdminPlaceholderScreen title="Cloud & Sync Health" />; }
+import AdminDashboardScreen from './index';
+
+export default function CloudHealthScreen() {
+  return <AdminDashboardScreen initialTab="overview" />;
+}

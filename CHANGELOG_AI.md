@@ -432,3 +432,82 @@
 - `https://be-big-2-0.vercel.app/` -> HTTP `200`
 - `https://be-big-2-0.vercel.app/sw.js` -> HTTP `200`, `Cache-Control: no-cache, no-store, must-revalidate`, serving `bebig-pwa-v2.4.4` with `if (isJsBundle)` Network-First JS handler
 - `https://be-big-2-0.vercel.app/workout/active` -> HTTP `200`
+
+
+
+## [Admin Milestone 1] — 2026-11-18 — RBAC Guard, Overview & App Health, Sanitized Error Diagnostics Terminal & App Announcements (Local Verification Only)
+
+### Result
+- **Additive SQL Migration (`supabase/migrations/20261118_admin_panel_m1.sql` — Local Only, Not Applied Remotely)**: Added `public.profiles.is_admin BOOLEAN NOT NULL DEFAULT FALSE` with a `BEFORE INSERT OR UPDATE` anti-escalation trigger (`prevent_profiles_is_admin_escalation`), zero-arg `SECURITY DEFINER` `public.is_current_user_admin()` helper (compatible with `profiles.is_admin` and existing `admin_roles`), `public.app_error_logs` + `public.app_announcements` tables with strict RLS policies, and `public.get_admin_overview_metrics()` `SECURITY DEFINER` RPC exposing aggregate KPIs only.
+- **Sanitized Client Error Telemetry (`src/features/admin/services/errorTelemetryService.ts`, `src/components/ui/ErrorBoundary.tsx`, `app/_layout.tsx`)**: Implemented a bounded 50-entry `platformStorage` ring buffer with PII/secret redaction (JWTs, Bearer tokens, API keys, passwords, emails), 5-second dedup throttling on best-effort Supabase flushes, `ErrorBoundary.componentDidCatch` crash capture, and idempotent web global error/rejection handlers.
+- **Fail-Closed Admin Access & 3-Tab Dashboard (`src/features/admin/hooks/useAdminAccess.ts`, `src/features/admin/services/adminService.ts`, `app/admin/_layout.tsx`, `app/admin/index.tsx`, `app/settings.tsx`)**: Hardened `/admin` layout guard to block guests, unauthenticated users, and non-admins (`Access Restricted` / redirect, zero network calls for guests); upgraded `/admin` into a 3-tab dark-mode athletic dashboard (**Overview & Health**, **Diagnostics Terminal** with severity filters, expandable stack traces & Clear Logs, and **Announcements** with live create, Active Banner Preview & Active/Paused toggle); and added an admin-only `Admin Control Panel` button in `app/settings.tsx` with zero explicit `any` casts.
+
+### Verification
+- `npx jest tests/AdminControlPanelM1.test.tsx tests/UIEnhancementsM1.test.tsx tests/UIEnhancementsM2.test.tsx tests/UIEnhancementsM3Typography.test.tsx tests/IOSWebKitExerciseCrashGuard.test.tsx tests/Phase3ResilienceAndHygiene.test.ts --maxWorkers=2 --testTimeout=15000`: **6/6 suites**, **57/57 tests passed** in 13.089s.
+- `npm run typecheck` (`tsc --noEmit`): Passed with **0 errors**.
+- `npm run lint` (`expo lint`): Passed with **0 errors**, **43 warnings** (down from 44; 0 warnings in new/modified files).
+- `npm run build:web` (`node scripts/build-web.js`): Passed with **0 errors**, exporting **45 static routes** to `dist/`.
+
+
+
+## [Admin Milestone 2] — 2026-11-18 — User Directory & Support + Safe Trainer Workout Template Builder & Client Assignment Inbox (Local Verification Only)
+
+### Result
+- **Additive SQL Migration (`supabase/migrations/20261118_admin_panel_m2.sql` — Local Only, Not Applied Remotely)**: Created `public.trainer_workout_templates` (strictly `is_current_user_admin()` RLS), `public.assigned_workouts` (isolated trainer-to-client assignment inbox with `protect_assigned_workout_assignee_columns` trigger restricting non-admin assignees strictly to `status`/`completed_at` updates), and `SECURITY DEFINER` RPC `public.get_admin_user_directory(p_search, p_limit)` returning sanitized user directory rows (`user_id`, `email`, `full_name`, `is_admin`, `created_at`, `total_workouts`, `last_workout_at`).
+- **Admin Service Extensions (`src/features/admin/services/adminService.ts`, `src/features/admin/index.ts`)**: Added `getUserDirectory()`, `listTrainerTemplates()`, `saveTrainerTemplate()`, `deleteTrainerTemplate()`, `assignTemplateToUsers()`, `listAssignedWorkouts()`, `getMyAssignedWorkouts()` (fail-closed zero network calls for guests/unauthenticated users), `markAssignedWorkoutStatus()`, and `sanitizeTrainerExercises()` stripping any image/base64 payloads for WebKit safety.
+- **Expanded 5-Tab Admin Control Panel (`app/admin/index.tsx`, `src/features/admin/components/AdminUsersTab.tsx`, `src/features/admin/components/AdminTrainerTemplatesTab.tsx`)**: Added **Tab 4 — Users** (live search by name/email, workout count, last active date, admin badge, and quick `Assign Workout` shortcut) and **Tab 5 — Trainer Templates** (reusable multi-exercise builder backed by bitmap-free catalog exercise search, editable sets/reps/rest, multi-user assignment selector, and confirmation banner).
+- **Safe Athlete-Side `Assigned by Trainer` Inbox (`app/workout/start.tsx`)**: Added conditional **`Assigned by Trainer`** card section shown exclusively when an authenticated non-guest athlete has active assignments; `Start Assigned Workout` launches an ephemeral in-memory `WorkoutTemplate` behind the existing active-workout guard without mutating any personal routines or history.
+
+### Verification
+- `npx jest tests/AdminControlPanelM2.test.tsx tests/AdminControlPanelM1.test.tsx tests/UIEnhancementsM1.test.tsx tests/UIEnhancementsM2.test.tsx tests/UIEnhancementsM3Typography.test.tsx tests/IOSWebKitExerciseCrashGuard.test.tsx --maxWorkers=2 --testTimeout=15000`: **6/6 suites**, **51/51 tests passed** in 18.191s.
+- `npm run typecheck` (`tsc --noEmit`): Passed with **0 errors**.
+- `npm run lint` (`expo lint`): Passed with **0 errors**, **43 warnings** (0 warnings in new/modified files).
+- `npm run build:web` (`node scripts/build-web.js`): Passed with **0 errors**, exporting **45 static routes** to `dist/`.
+
+
+
+## [Admin Milestone 3] — 2026-11-18 — Global Exercise Catalog Manager (Text-Only, Zero Bitmaps) + Live Athlete Announcement Banner (Local Verification Only)
+
+### Result
+- **Additive SQL Migration (`supabase/migrations/20261118_admin_panel_m3.sql` — Local Only, Not Applied Remotely)**: Created strictly text/metadata-only `public.global_exercise_catalog` (`name`, `category`, `equipment`, `primary_muscles text[]`, `secondary_muscles text[]`, `instructions text[]`, `is_active boolean` — zero image/bitmap columns) with `updated_at` trigger, index, and `is_current_user_admin()` RLS policies (public `SELECT` restricted to `is_active = TRUE`).
+- **Global Exercise Catalog Service & Non-Overwriting Repository Merge (`src/features/exercises/services/globalExerciseCatalogService.ts`, `src/features/exercises/services/exerciseRepository.ts`, `src/features/exercises/types.ts`)**: Implemented `sanitizeGlobalExerciseInput()` (strictly rejecting/stripping any base64 `data:image/` payloads), `mapGlobalRecordToExercise()` (always emitting `images: []` and `photoPath: null` under `global_<id>`), synchronous memory mirror + `platformStorage` local fallback, and safe merge inside `exerciseRepository` (`getExercises`, `getExerciseById`, `getCachedExerciseByIdSync`) that never overwrites user custom exercises by ID or name.
+- **Tab 6 — Exercise Catalog (`src/features/admin/components/AdminExerciseCatalogTab.tsx`, `app/admin/index.tsx`)**: Added Tab 6 to the Admin Control Panel with search, muscle category filtering, create/edit form (Name, Category pills, Equipment, Primary/Secondary Muscles, step-by-step Form Instructions), `Active`/`Hidden` toggle, and delete.
+- **Dismissible Athlete Home Announcement Banner (`app/home.tsx`, `src/features/admin/services/adminService.ts`)**: Added `getActiveAnnouncements()`, `getDismissedAnnouncementIds()`, and `dismissAnnouncement()` persisted per announcement ID in `platformStorage`, and mounted a compact, zero-image announcement banner (`Info` / `Release` / `Maintenance`) at the top of `app/home.tsx` causing zero layout shift when no active announcement exists.
+
+### Verification
+- `npx jest tests/AdminControlPanelM3.test.tsx tests/AdminControlPanelM2.test.tsx tests/AdminControlPanelM1.test.tsx tests/UIEnhancementsM1.test.tsx tests/UIEnhancementsM2.test.tsx tests/UIEnhancementsM3Typography.test.tsx tests/IOSWebKitExerciseCrashGuard.test.tsx --maxWorkers=2 --testTimeout=15000`: **7/7 suites**, **57/57 tests passed** in 17.848s.
+- `npm run typecheck` (`tsc --noEmit`): Passed with **0 errors**.
+- `npm run lint` (`expo lint`): Passed with **0 errors**, **43 warnings** (0 new warnings).
+- `npm run build:web` (`node scripts/build-web.js`): Passed with **0 errors**, exporting **45 static routes** to `dist/`.
+
+
+
+## [Full-App Screen Audit & Fix] — 2026-11-18 — Pre-Migration Resilience, Non-Blocking Local-First Hydration, Admin Sub-Route Wiring & Full-App Smoke Suite (Local Verification Only)
+
+### Result
+- **Supabase Pre-Migration & Offline Resilience (`src/lib/supabase/resilience.ts`, `adminService.ts`, `globalExerciseCatalogService.ts`, `errorTelemetryService.ts`)**: Added shared `isDeviceOffline()`, `withSafeTimeout()` (`2500ms`), `isMissingSchemaError()` (`PGRST205`/`PGRST204`/`PGRST202`/`42P01`/`42703`/`404`), 5-minute session-scoped missing-schema backoff, and 60-second in-memory TTL caching on `global_exercise_catalog` and `app_announcements` so screens never hang on stalled networks and never spam HTTP 404s before M1–M3 migrations are applied.
+- **Non-Blocking Local-First Rendering (`app/home.tsx`, `app/workout/start.tsx`)**: Decoupled remote announcement hydration on Home and trainer-assigned inbox hydration on Start Workout from local workout/template loading spinners so local routines and active session banners render immediately even offline or on slow mobile connections; removed unused `isGuest` warning in `app/home.tsx`.
+- **Live Admin Sub-Routes & Unmount Safety (`app/admin/index.tsx`, `app/admin/monitoring.tsx`, `app/admin/templates.tsx`, `app/admin/exercises.tsx`)**: Added `isMountedRef` guard and `initialTab` prop to `AdminDashboardScreen` and replaced legacy `AdminPlaceholderScreen` stubs on `/admin/monitoring`, `/admin/templates`, and `/admin/exercises` with direct mounts of the live Diagnostics, Trainer Templates, and Exercise Catalog panels.
+- **Full-App Screen Health Smoke Suite (`tests/AllScreensHealthSmoke.test.tsx`)**: Added automated smoke verification rendering all primary screens across both Guest/Offline and Authenticated modes (with simulated unmigrated remote DB) plus direct resilience helper tests.
+
+### Verification
+- `npx jest tests/AllScreensHealthSmoke.test.tsx tests/AdminControlPanelM1.test.tsx tests/AdminControlPanelM2.test.tsx tests/AdminControlPanelM3.test.tsx tests/UIEnhancementsM1.test.tsx tests/UIEnhancementsM2.test.tsx tests/UIEnhancementsM3Typography.test.tsx --maxWorkers=2 --testTimeout=15000`: **7/7 suites**, **45/45 tests passed** in 15.715s.
+- `npx jest tests/HomeScreen.test.tsx tests/StartWorkoutPhase3.test.tsx tests/ExerciseLibrary.test.tsx tests/WorkoutHistory.test.tsx tests/SettingsAndProfile.test.tsx tests/OnboardingAndAuthFlow.test.tsx tests/ProfileBlackScreenRegression.test.tsx tests/MobileWebUI.test.tsx tests/TypographySystem.test.tsx --maxWorkers=2 --testTimeout=15000`: **9/9 suites**, **96/96 tests passed** in 18.043s.
+- `npm run typecheck` (`tsc --noEmit`): Passed with **0 errors**.
+- `npm run lint` (`expo lint`): Passed with **0 errors**, **42 warnings** (down from 43; 0 warnings in new/modified files).
+- `npm run build:web` (`node scripts/build-web.js`): Passed with **0 errors**, exporting **45 static routes** to `dist/`.
+
+
+
+## [Admin Placeholder Cleanup] — 2026-11-18 — Zero "Under Construction" Screens & Unified 6-Module Admin Navigation (Local Verification Only)
+
+### Result
+- **Unified 6-Module Admin Navigation (`app/admin/_layout.tsx`, `app/admin/index.tsx`)**: Replaced the 13 legacy placeholder links in the Admin desktop sidebar and mobile horizontal bar with direct links to the 6 real Admin Control Panel modules (**Overview & Health** `/admin`, **Diagnostics Terminal** `/admin/monitoring`, **Announcements** `/admin?tab=announcements`, **Users** `/admin?tab=users`, **Trainer Templates** `/admin/templates`, **Exercise Catalog** `/admin/exercises`), with unconditional `?tab=` query syncing in `app/admin/index.tsx`.
+- **Eliminated All `"This section is under construction"` Routes**: Wired `app/admin/analytics.tsx` and `app/admin/cloud-health.tsx` to `<AdminDashboardScreen initialTab="overview" />`, `app/admin/coaches.tsx` to `<AdminDashboardScreen initialTab="templates" />`, `app/admin/audit.tsx` and `app/admin/dev-tools.tsx` to `<AdminDashboardScreen initialTab="diagnostics" />`, `app/admin/roles.tsx` to `<AdminDashboardScreen initialTab="users" />`, and converted `app/admin/feature-flags.tsx`, `app/admin/settings.tsx`, `app/admin/[...slug].tsx`, and `src/components/admin/AdminPlaceholderScreen.tsx` to clean `<Redirect href="/admin" />`.
+- **Automated Regression Guard (`tests/AllScreensHealthSmoke.test.tsx`)**: Added runtime smoke assertions across all 13 `app/admin/*` routes plus a static repo-wide scan verifying zero `"under construction"` occurrences remain in `app/` or `src/` (excluding paused `coach/`).
+
+### Verification
+- `npx jest tests/AllScreensHealthSmoke.test.tsx tests/AdminControlPanelM1.test.tsx tests/AdminControlPanelM2.test.tsx tests/AdminControlPanelM3.test.tsx --maxWorkers=2 --testTimeout=15000`: **4/4 suites**, **32/32 tests passed** in 16.03s.
+- `npm run typecheck` (`tsc --noEmit`): Passed with **0 errors**.
+- `npm run lint` (`expo lint`): Passed with **0 errors**, **42 warnings** (0 warnings in new/modified files).
+- `npm run build:web` (`node scripts/build-web.js`): Passed with **0 errors**, exporting **45 static routes** to `dist/`.

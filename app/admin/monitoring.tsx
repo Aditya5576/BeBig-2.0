@@ -1,3 +1,6 @@
 import React from 'react';
-import { AdminPlaceholderScreen } from '../../src/components/admin/AdminPlaceholderScreen';
-export default function MonitoringScreen() { return <AdminPlaceholderScreen title="Sentry / Error Monitoring" />; }
+import AdminDashboardScreen from './index';
+
+export default function MonitoringScreen() {
+  return <AdminDashboardScreen initialTab="diagnostics" />;
+}
