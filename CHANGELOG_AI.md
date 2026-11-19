@@ -511,3 +511,32 @@
 - `npm run typecheck` (`tsc --noEmit`): Passed with **0 errors**.
 - `npm run lint` (`expo lint`): Passed with **0 errors**, **42 warnings** (0 warnings in new/modified files).
 - `npm run build:web` (`node scripts/build-web.js`): Passed with **0 errors**, exporting **45 static routes** to `dist/`.
+
+
+
+## [Release v2.5.0] — 2026-11-19 — Production Deployment Verification (Admin Control Panel, Active Workout UI & Athletic Typography)
+
+### Deployment Summary
+- **Release Commit**: `a6084b3` (`feat(release): ship v2.5.0 Admin Control Panel, Active Workout UI polish, and athletic typography`)
+- **Annotated Git Tag**: `v2.5.0` pushed to `origin/main`
+- **Vercel Production Deployment**: `https://be-big-2-0.vercel.app/` — Status `Ready`
+- **Supabase Backend**: Applied 3 additive Admin migrations to `gkkvxfroxthvbiecramm` in exact order:
+  1. `supabase/migrations/20261118_admin_panel_m1.sql` (`public.profiles.is_admin`, anti-escalation trigger, `is_current_user_admin()`, `app_error_logs`, `app_announcements`, `get_admin_overview_metrics` RPC)
+  2. `supabase/migrations/20261118_admin_panel_m2.sql` (`trainer_workout_templates`, `assigned_workouts`, assignee update trigger, `get_admin_user_directory` RPC)
+  3. `supabase/migrations/20261118_admin_panel_m3.sql` (`global_exercise_catalog` metadata-only table, updated-at trigger, public read/admin write RLS)
+  - All migrations tracked in `supabase_migrations.schema_migrations` (`20261118130000`, `20261118130500`, `20261118131000`).
+
+### Live Verification
+- `https://be-big-2-0.vercel.app/` -> HTTP `200`
+- `https://be-big-2-0.vercel.app/sw.js` -> HTTP `200`, serving `bebig-pwa-v2.5.0` with Network-First JS bundle strategy
+- All 45 static routes built and exported cleanly in `dist/`.
+- 14/14 Jest suites (101/101 tests) passing 100%.
+- TypeScript: 0 errors; ESLint: 0 errors.
+
+### Supabase Admin Privilege Grant
+To grant administrative privileges to any user account:
+```sql
+UPDATE public.profiles SET is_admin = true WHERE id = '<YOUR_USER_UUID>';
+```
+*(Optionally also insert into `admin_roles`: `INSERT INTO public.admin_roles (user_id, role) VALUES ('<YOUR_USER_UUID>', 'super_admin') ON CONFLICT (user_id) DO UPDATE SET role = 'super_admin';`)*
+
