@@ -3,6 +3,19 @@
 - Refined PR typography and history UI.
 - Stabilized Cinematic Splash Screen with BeBig Barbell Crest.
 
+## [Release v2.6.0] — 2026-11-19 — Production Deployment: Server-Side Wger Catalog, expo-image Caching, Zod Validation & CI Hardening
+
+### Summary
+- Applied remote migration `20261119_wger_exercise_catalog.sql` creating `public.wger_exercise_catalog` with RLS.
+- Deployed Edge Function `sync-wger-catalog` (`ACTIVE`, v1, `verify_jwt: false`) with canonical open-source licensing allowlist (`CC-BY-SA 4/3`, `CC-BY 4/3`, `CC0`).
+- Triggered authenticated initial sync populating 20 verified exercises into `public.wger_exercise_catalog`.
+- Upgraded media caching to `expo-image` (`~57.0.5`) across exercise detail, thumbnails, and profile avatars with memory & disk caching.
+- Enforced Zod schemas on external Wger API payloads and storage metadata.
+- Bumped release version to `2.6.0` (`package.json`, `app.json`, `public/sw.js` `bebig-pwa-v2.6.0`).
+- Passed full verification suite: 11/11 Jest suites (137/137 tests), TypeScript typecheck (0 errors), Expo lint (0 errors), 45 static web routes bundled.
+- Staged, committed `e596a04`, tagged `v2.6.0`, and pushed to `origin/main`.
+- Verified live Vercel production deployment `be-big-2-0-db9zk45ch-aditya-works.vercel.app` (`● Ready`, HTTP 200, `/sw.js` serving `bebig-pwa-v2.6.0`).
+
 ## [Tier 2 Server-Side Catalog & expo-image] — 2026-11-19 — Server-Side Wger Ingestion, Strict License Allowlist, expo-image Disk Caching & WebKit Memory Guards
 
 ### Problem

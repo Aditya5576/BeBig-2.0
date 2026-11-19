@@ -4,6 +4,8 @@
 
 - **URL**: https://be-big-2-0.vercel.app
 - **Live Version**: `v2.6.0` (`package.json`, `app.json`, `/sw.js` `bebig-pwa-v2.6.0`)
+- **Live Release Commit**: `e596a04` (tag `v2.6.0`)
+- **Vercel Production Deployment**: `be-big-2-0-db9zk45ch-aditya-works.vercel.app` (`● Ready`, 4m build, 45 static routes, `/sw.js` serving `bebig-pwa-v2.6.0`)
 - **Previous Verified Releases**: `v2.5.2` (`96849ee`), `v2.5.1` (`2d74de3`), `v2.5.0` (`68c7c38`), `v2.4.4` (`6be31bb`), `v2.4.3` (`2f88fd2`), `v2.4.2` (`0afb94b`)
 - **Supabase Production Project**: `BeBig 2.0` (`gkkvxfroxthvbiecramm`, `ap-northeast-1`)
   - Applied SQL Migrations:
