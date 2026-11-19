@@ -22,6 +22,7 @@
  */
 
 import React from 'react';
+import * as ReactNative from 'react-native';
 import { render, fireEvent, waitFor, cleanup, act } from '@testing-library/react-native';
 
 const mockPush = jest.fn();
@@ -205,6 +206,105 @@ describe('Admin Control Panel — Milestone 1', () => {
       const { findByTestId, queryByTestId } = await render(<AdminLayout />);
       expect(await findByTestId('admin-slot-content')).toBeTruthy();
       expect(queryByTestId('admin-access-restricted')).toBeNull();
+    });
+  });
+
+  describe('1b. Mobile / iPhone Responsive Layout & Single Navigation (`app/admin/_layout.tsx`)', () => {
+    beforeEach(() => {
+      jest.spyOn(adminService, 'checkAdminAccess').mockResolvedValue({
+        isAdmin: true,
+        role: 'super_admin',
+      });
+      useAuthStore.setState({
+        status: 'authenticated',
+        user: { id: 'user_super_admin', email: 'owner@bebig.app', provider: 'email' },
+        isGuest: false,
+      });
+    });
+
+    it('on mobile width (< 768px, e.g. 375px), renders mobile horizontal nav bar, hides desktop sidebar, and renders Slot with full-width layout', async () => {
+      const dimSpy = jest.spyOn(ReactNative.Dimensions, 'get').mockReturnValue({
+        width: 375,
+        height: 812,
+        scale: 3,
+        fontScale: 1,
+      });
+      const useWinDimModule = require('react-native/Libraries/Utilities/useWindowDimensions');
+      const winDimSpy = jest.spyOn(useWinDimModule, 'default').mockReturnValue({
+        width: 375,
+        height: 812,
+        scale: 3,
+        fontScale: 1,
+      });
+
+      const { findByTestId, queryByTestId } = await render(<AdminLayout />);
+      expect(await findByTestId('admin-mobile-nav')).toBeTruthy();
+      expect(queryByTestId('admin-desktop-sidebar')).toBeNull();
+      expect(await findByTestId('admin-slot-content')).toBeTruthy();
+
+      dimSpy.mockRestore();
+      winDimSpy.mockRestore();
+    });
+
+    it('on desktop width (>= 768px, e.g. 1024px), renders desktop sidebar, hides mobile horizontal nav bar, and provides row layout', async () => {
+      const dimSpy = jest.spyOn(ReactNative.Dimensions, 'get').mockReturnValue({
+        width: 1024,
+        height: 768,
+        scale: 1,
+        fontScale: 1,
+      });
+      const useWinDimModule = require('react-native/Libraries/Utilities/useWindowDimensions');
+      const winDimSpy = jest.spyOn(useWinDimModule, 'default').mockReturnValue({
+        width: 1024,
+        height: 768,
+        scale: 1,
+        fontScale: 1,
+      });
+
+      const { findByTestId, queryByTestId } = await render(<AdminLayout />);
+      expect(await findByTestId('admin-desktop-sidebar')).toBeTruthy();
+      expect(queryByTestId('admin-mobile-nav')).toBeNull();
+      expect(await findByTestId('admin-slot-content')).toBeTruthy();
+
+      dimSpy.mockRestore();
+      winDimSpy.mockRestore();
+    });
+
+    it('when AdminDashboardScreen is mounted with hideTabBar=true (or inside AdminLayout), hides redundant inner tab stack giving active panel full breathing room', async () => {
+      jest.spyOn(adminService, 'getOverviewMetrics').mockResolvedValue({
+        metrics: {
+          total_users: 100,
+          workouts_today: 10,
+          workouts_this_week: 50,
+          total_completed_workouts: 400,
+          recent_errors_24h: 2,
+          generated_at: '2026-11-19T00:00:00.000Z',
+        },
+        source: 'live',
+      });
+      jest.spyOn(adminService, 'getPwaHealthSnapshot').mockResolvedValue({
+        appVersion: '2.5.0',
+        displayVersion: 'v2.5.0 · prod',
+        platform: 'web',
+        userAgent: 'Mozilla/5.0',
+        serviceWorkerStatus: 'Active',
+        isOnline: true,
+        checkedAt: '2026-11-19T00:00:00.000Z',
+      });
+      jest.spyOn(adminService, 'getErrorLogs').mockResolvedValue([]);
+      jest.spyOn(adminService, 'getAnnouncements').mockResolvedValue([]);
+      jest.spyOn(adminService, 'getUserDirectory').mockResolvedValue({ users: [], source: 'live' });
+      jest.spyOn(adminService, 'listTrainerTemplates').mockResolvedValue([]);
+      jest.spyOn(adminService, 'listAssignedWorkouts').mockResolvedValue([]);
+      jest.spyOn(adminService, 'listGlobalExercises').mockResolvedValue([]);
+
+      const { findByTestId, queryByTestId } = await render(
+        <AdminDashboardScreen hideTabBar={true} />,
+      );
+      expect(await findByTestId('admin-panel-overview')).toBeTruthy();
+      expect(queryByTestId('admin-tab-overview')).toBeNull();
+      expect(queryByTestId('admin-tab-diagnostics')).toBeNull();
+      expect(queryByTestId('admin-tab-announcements')).toBeNull();
     });
   });
 

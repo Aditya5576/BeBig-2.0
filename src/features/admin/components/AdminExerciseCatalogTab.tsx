@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useAppTheme } from '../../theme';
 import {
   FONT_FAMILIES,
@@ -13,6 +13,11 @@ import type {
   GlobalExerciseRecord,
   SaveGlobalExerciseInput,
 } from '../../exercises/services/globalExerciseCatalogService';
+import {
+  base64ToUint8Array,
+  downscaleWebImageToMaxEdge,
+} from '../../exercises/storage/exercisePhotoStorage';
+import { supabase, isSupabaseConfigured } from '../../../lib/supabase';
 
 const CATEGORY_OPTIONS: { id: ExerciseCategory; label: string }[] = [
   { id: 'chest', label: 'Chest' },
@@ -61,7 +66,7 @@ export function AdminExerciseCatalogTab({
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState<'all' | ExerciseCategory>('all');
 
-  // Form state (strictly text/metadata-only, zero bitmap/image fields)
+  // Form state
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [category, setCategory] = useState<ExerciseCategory>('chest');
@@ -69,6 +74,8 @@ export function AdminExerciseCatalogTab({
   const [primaryMusclesText, setPrimaryMusclesText] = useState('');
   const [secondaryMusclesText, setSecondaryMusclesText] = useState('');
   const [instructionsText, setInstructionsText] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [busyRowIds, setBusyRowIds] = useState<Record<string, boolean>>({});
@@ -97,6 +104,7 @@ export function AdminExerciseCatalogTab({
     setPrimaryMusclesText('');
     setSecondaryMusclesText('');
     setInstructionsText('');
+    setImageUrl('');
     setFormError(null);
   }, []);
 
@@ -108,7 +116,81 @@ export function AdminExerciseCatalogTab({
     setPrimaryMusclesText(item.primary_muscles.join(', '));
     setSecondaryMusclesText(item.secondary_muscles.join(', '));
     setInstructionsText(item.instructions.join('\n'));
+    setImageUrl(item.image_url ?? item.imageUrl ?? '');
     setFormError(null);
+  }, []);
+
+  const handlePickAndUploadImage = useCallback(async () => {
+    if (typeof document === 'undefined') {
+      setFormError('Photo upload is only supported in web environments.');
+      return;
+    }
+
+    if (!isSupabaseConfigured()) {
+      setFormError('Supabase storage is not configured.');
+      return;
+    }
+
+    const inputEl = document.createElement('input');
+    inputEl.type = 'file';
+    inputEl.accept = 'image/jpeg,image/png,image/webp';
+    inputEl.style.display = 'none';
+    document.body.appendChild(inputEl);
+
+    inputEl.onchange = async () => {
+      const file = inputEl.files?.[0];
+      try {
+        if (inputEl.parentNode) {
+          inputEl.parentNode.removeChild(inputEl);
+        }
+      } catch {
+        // Ignored
+      }
+      if (!file) return;
+
+      setUploadingImage(true);
+      setFormError(null);
+      try {
+        const downscaled = await downscaleWebImageToMaxEdge(file, 400, 0.78);
+        let uploadBody: any = file;
+        let mimeType = file.type || 'image/jpeg';
+
+        if (downscaled) {
+          const rawBase64 = downscaled.base64;
+          const u8 = base64ToUint8Array(rawBase64);
+          uploadBody = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength);
+          mimeType = downscaled.mimeType;
+        }
+
+        const ext = mimeType.includes('png') ? 'png' : mimeType.includes('webp') ? 'webp' : 'jpg';
+        const fileName = `ex_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('exercise-images')
+          .upload(fileName, uploadBody, {
+            contentType: mimeType,
+            upsert: true,
+          });
+
+        if (uploadError) {
+          throw new Error(uploadError.message || 'Storage upload failed.');
+        }
+
+        const { data: publicData } = supabase.storage
+          .from('exercise-images')
+          .getPublicUrl(fileName);
+
+        if (publicData?.publicUrl) {
+          setImageUrl(publicData.publicUrl);
+        }
+      } catch (err: any) {
+        setFormError(err?.message || 'Failed to upload and compress image.');
+      } finally {
+        setUploadingImage(false);
+      }
+    };
+
+    inputEl.click();
   }, []);
 
   const handleSubmit = useCallback(async () => {
@@ -122,6 +204,20 @@ export function AdminExerciseCatalogTab({
       return;
     }
 
+    const trimmedImg = imageUrl.trim();
+    if (trimmedImg) {
+      if (trimmedImg.startsWith('data:image/')) {
+        setFormError(
+          'Raw base64 data:image strings are not permitted. Please provide an HTTPS URL or use photo upload.',
+        );
+        return;
+      }
+      if (!trimmedImg.startsWith('https://')) {
+        setFormError('Exercise image must be a secure HTTPS URL (https://...).');
+        return;
+      }
+    }
+
     setFormError(null);
     setIsSaving(true);
     try {
@@ -133,6 +229,7 @@ export function AdminExerciseCatalogTab({
         primary_muscles: primaryList,
         secondary_muscles: splitCommaList(secondaryMusclesText),
         instructions: splitInstructionLines(instructionsText),
+        ...(trimmedImg ? { image_url: trimmedImg } : {}),
         createdBy: adminUserId,
       });
       resetForm();
@@ -148,6 +245,7 @@ export function AdminExerciseCatalogTab({
     primaryMusclesText,
     secondaryMusclesText,
     instructionsText,
+    imageUrl,
     editingId,
     adminUserId,
     onSaveExercise,
@@ -261,6 +359,59 @@ export function AdminExerciseCatalogTab({
           numberOfLines={3}
           maxLength={2000}
         />
+
+        {/* Exercise Image (HTTPS URL or Photo Upload) */}
+        <View style={styles.imageInputSection}>
+          <Text style={styles.inputLabel}>Exercise Image (HTTPS URL or Photo Upload)</Text>
+          <View style={styles.imageInputRow}>
+            <TextInput
+              testID="global-ex-image-input"
+              style={[styles.textInput, styles.imageTextInput]}
+              placeholder="https://images.example.com/squat.jpg"
+              placeholderTextColor={colors.textMuted}
+              value={imageUrl}
+              onChangeText={(val) => {
+                setImageUrl(val);
+                setFormError(null);
+              }}
+              autoCapitalize="none"
+              autoCorrect={false}
+              maxLength={2048}
+            />
+            <Pressable
+              testID="global-ex-upload-button"
+              style={[styles.uploadButton, uploadingImage && styles.buttonDisabled]}
+              disabled={uploadingImage}
+              onPress={() => {
+                void handlePickAndUploadImage();
+              }}
+            >
+              <Text style={styles.uploadButtonText}>
+                {uploadingImage ? 'Uploading...' : 'Upload Photo'}
+              </Text>
+            </Pressable>
+          </View>
+          {imageUrl && imageUrl.trim().startsWith('https://') ? (
+            <View style={styles.imagePreviewRow} testID="global-ex-image-preview">
+              <Image
+                source={{ uri: imageUrl.trim() }}
+                style={styles.thumbnailPreview}
+                resizeMode="cover"
+              />
+              <View style={styles.imagePreviewDetails}>
+                <Text style={styles.imagePreviewUrl} numberOfLines={1}>
+                  {imageUrl.trim()}
+                </Text>
+                <Pressable
+                  testID="global-ex-clear-image-button"
+                  onPress={() => setImageUrl('')}
+                >
+                  <Text style={styles.clearImageText}>Remove Image</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : null}
+        </View>
 
         {formError ? (
           <Text style={styles.errorText} testID="global-ex-form-error">
@@ -423,6 +574,7 @@ const createStyles = (colors: ReturnType<typeof useAppTheme>['colors']) =>
   StyleSheet.create({
     container: {
       gap: spacing.md,
+      width: '100%',
     },
     card: {
       backgroundColor: colors.surface,
@@ -431,6 +583,7 @@ const createStyles = (colors: ReturnType<typeof useAppTheme>['colors']) =>
       borderRadius: radii.md,
       padding: spacing.md,
       gap: spacing.sm,
+      width: '100%',
     },
     sectionTitle: {
       ...typography.titleMedium,
@@ -451,10 +604,12 @@ const createStyles = (colors: ReturnType<typeof useAppTheme>['colors']) =>
       paddingVertical: spacing.sm,
       color: colors.textPrimary,
       ...typography.body,
+      width: '100%',
     },
     textArea: {
       minHeight: 80,
       textAlignVertical: 'top',
+      width: '100%',
     },
     chipRow: {
       flexDirection: 'row',
@@ -591,5 +746,75 @@ const createStyles = (colors: ReturnType<typeof useAppTheme>['colors']) =>
       ...typography.caption,
       fontFamily: FONT_FAMILIES.bodySemiBold,
       color: colors.error,
+    },
+    imageInputSection: {
+      gap: spacing.xs,
+      width: '100%',
+    },
+    inputLabel: {
+      ...typography.caption,
+      fontFamily: FONT_FAMILIES.bodySemiBold,
+      color: colors.textSecondary,
+    },
+    imageInputRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.sm,
+      alignItems: 'center',
+      width: '100%',
+    },
+    imageTextInput: {
+      flex: 1,
+      minWidth: 200,
+    },
+    uploadButton: {
+      backgroundColor: colors.surfaceSubtle,
+      borderWidth: 1,
+      borderColor: colors.primary,
+      borderRadius: radii.sm,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm + 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    uploadButtonText: {
+      ...typography.caption,
+      fontFamily: FONT_FAMILIES.bodySemiBold,
+      color: colors.primary,
+    },
+    imagePreviewRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      backgroundColor: colors.surfaceSubtle,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: radii.sm,
+      padding: spacing.sm,
+      marginTop: 2,
+      width: '100%',
+    },
+    thumbnailPreview: {
+      width: 56,
+      height: 56,
+      borderRadius: radii.sm,
+      backgroundColor: colors.background,
+    },
+    imagePreviewDetails: {
+      flex: 1,
+      gap: 4,
+    },
+    imagePreviewUrl: {
+      ...typography.caption,
+      color: colors.textSecondary,
+      fontSize: 11,
+    },
+    clearImageText: {
+      ...typography.caption,
+      color: colors.error,
+      fontFamily: FONT_FAMILIES.bodySemiBold,
+    },
+    buttonDisabled: {
+      opacity: 0.5,
     },
   });

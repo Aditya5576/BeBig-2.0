@@ -865,10 +865,10 @@ describe('iOS WebKit Exercise Crash Guard & SPA Stability', () => {
       }
     });
 
-    it('bumps public/sw.js to bebig-pwa-v2.5.0 with Network-First JS strategy and auto-reload in _layout.tsx', () => {
+    it('bumps public/sw.js to bebig-pwa-v2.5.1 with Network-First JS strategy and auto-reload in _layout.tsx', () => {
       const swPath = path.resolve(__dirname, '../public/sw.js');
       const swContent = fs.readFileSync(swPath, 'utf8');
-      expect(swContent).toContain("const CACHE_NAME = 'bebig-pwa-v2.5.0';");
+      expect(swContent).toContain("const CACHE_NAME = 'bebig-pwa-v2.5.1';");
       expect(swContent).toContain("url.pathname.startsWith('/_expo/static/js/')");
       // Network-First for JS bundles: fetch(request) precedes caches.match(request) in JS block
       const jsIdx = swContent.indexOf('if (isJsBundle)');

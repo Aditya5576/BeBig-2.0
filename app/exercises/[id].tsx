@@ -111,7 +111,7 @@ export default function ExerciseDetailScreen() {
 
     async function loadExercise() {
       if (!id) return;
-      if (!exerciseRepository.getCachedExerciseByIdSync(id)) {
+      if (!exercise) {
         setLoading(true);
       }
       setError(null);
@@ -417,6 +417,9 @@ export default function ExerciseDetailScreen() {
     customPhotoUri ||
     approvedCuratedDemo?.demonstrationUri ||
     approvedCuratedDemo?.thumbnailUri ||
+    (exercise.photoPath && (exercise.photoPath.startsWith('https://') || exercise.photoPath.startsWith('http://'))
+      ? exercise.photoPath
+      : null) ||
     rawProviderImage?.url ||
     null;
 

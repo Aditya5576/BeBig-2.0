@@ -540,3 +540,108 @@ UPDATE public.profiles SET is_admin = true WHERE id = '<YOUR_USER_UUID>';
 ```
 *(Optionally also insert into `admin_roles`: `INSERT INTO public.admin_roles (user_id, role) VALUES ('<YOUR_USER_UUID>', 'super_admin') ON CONFLICT (user_id) DO UPDATE SET role = 'super_admin';`)*
 
+
+
+## [Admin Mobile Responsive Fix] — 2026-11-19 — Responsive Viewport Layout, Single-Navigation Elimination & Full-Width Form Ergonomics (Local Verification Only)
+
+### Problem
+1. **Double/Triple Navigation Squeezing on Mobile**: On mobile viewports (`< 768px`, e.g. iPhone 375px–430px), both the desktop sidebar (`width: 190`) and the top horizontal pill bar were rendered simultaneously in `app/admin/_layout.tsx`. In addition, `app/admin/index.tsx` rendered an inner 6-button segmented tab bar, consuming excessive vertical and horizontal screen real estate and squeezing the main workspace down to ~150px.
+2. **Fixed-Width Form & Card Overflow**: Multi-column metric inputs (sets, reps, weight, RPE), search bars, KPI cards, and textareas in `AdminUsersTab`, `AdminTrainerTemplatesTab`, `AdminExerciseCatalogTab`, and `AdminDashboardScreen` lacked `flexWrap: 'wrap'` and `width: '100%'`, resulting in horizontal clipping and poor tap ergonomics on smaller handheld screens.
+
+### Root Cause
+1. `app/admin/_layout.tsx` lacked viewport dimension awareness and mounted both navigation components unconditionally.
+2. `AdminDashboardScreen` had no layout context to know whether it was already rendered inside a layout providing navigation, unconditionally rendering its own inner tab switcher.
+3. Form containers and input rows in Admin tabs were styled with desktop-first fixed widths and inflexible row layouts.
+
+### Changes
+1. **Responsive Viewport Navigation (`app/admin/_layout.tsx`)**:
+   - Integrated `useWindowDimensions()` with standard tablet/desktop breakpoint (`isDesktop = width >= 768`).
+   - Dynamic workspace layout: `flexDirection: isDesktop ? 'row' : 'column'`, `minWidth: 0`, and adaptive padding (`isDesktop ? spacing.lg : spacing.md`).
+   - Strict conditional mounting: the desktop sidebar (`testID="admin-desktop-sidebar"`) mounts strictly when `isDesktop` is true; the mobile horizontal pill bar (`testID="admin-mobile-nav"`) mounts strictly when `isDesktop` is false.
+   - Exported `AdminLayoutContext` and `useAdminLayoutContext()` hook, wrapping the layout children with `{ inAdminLayout: true, isDesktop }`.
+2. **Eliminated Redundant Inner Tab Bar (`app/admin/index.tsx`)**:
+   - Added `hideTabBar?: boolean` to `AdminDashboardScreenProps` and consumed `useAdminLayoutContext()`.
+   - When rendered inside `_layout.tsx` (`inAdminLayout: true`) or passed `hideTabBar=true`, the inner 6-button segmented tab bar is omitted, leaving a clean single navigation bar. When rendered standalone (in unit tests or isolated embeds), the tab bar remains functional.
+   - Refactored KPI card grid (`flexBasis: 140, minWidth: 130, gap: spacing.sm`) and ensured full-width form cards, text inputs, textareas, and diagnostics toolbars.
+3. **Full-Width Mobile Form Ergonomics (`src/features/admin/components/`)**:
+   - `AdminUsersTab.tsx`: Added `width: '100%'` across search cards, inputs, user cards, and container; reduced `userInfoCol` minWidth from 200 to 160.
+   - `AdminTrainerTemplatesTab.tsx`: Added `width: '100%'` across cards, inputs, and textareas; added `flexWrap: 'wrap'` and `width: '100%'` to `exerciseInputsRow` and `minWidth: 65` to `metricInputCol`.
+   - `AdminExerciseCatalogTab.tsx`: Added `width: '100%'` across search cards, inputs, cards, and textareas.
+4. **Automated Responsive Viewport Tests (`tests/AdminControlPanelM1.test.tsx`)**:
+   - Added tests verifying mobile viewport (`width: 375`): `admin-mobile-nav` renders, `admin-desktop-sidebar` is null, slot content renders.
+   - Added tests verifying desktop viewport (`width: 1024`): `admin-desktop-sidebar` renders, `admin-mobile-nav` is null, slot content renders.
+   - Added test verifying `AdminDashboardScreen` with `hideTabBar=true` renders clean overview with 0 duplicate tab bar elements.
+
+### Verification
+- `npx jest tests/AllScreensHealthSmoke.test.tsx tests/AdminControlPanelM1.test.tsx tests/AdminControlPanelM2.test.tsx tests/AdminControlPanelM3.test.tsx --maxWorkers=2 --testTimeout=15000`: **4/4 suites**, **35/35 tests passed** in 9.62s.
+- `npm run typecheck` (`tsc --noEmit`): Passed with **0 errors**.
+- `npm run lint` (`expo lint`): Passed with **0 errors**, **43 warnings** (0 warnings in modified files).
+- `npm run build:web` (`node scripts/build-web.js`): Passed with **0 errors**, exporting **45 static routes** to `dist/`.
+
+
+
+## [Admin Milestone 4] — 2026-11-19 — Admin Delete User, Guaranteed Athlete Display Names & iOS WebKit-Safe Global Exercise Images (Local Verification Only)
+
+### Problem
+1. **Lack of Admin Account Deletion**: Administrators could not safely remove test athlete accounts or inactive user data from the admin panel, requiring direct SQL operations.
+2. **Anonymous / Blank Display Names**: When user accounts were registered without explicit metadata or display names in `profiles`, the user directory displayed blank titles or ambiguous default strings.
+3. **WebKit Memory Spikes & Unvalidated Image Payloads**: Adding images to global exercises risked iOS Safari/WebKit GPU memory pressure and crash loops if raw base64 data URIs were pasted or if multiple image bitmaps were loaded into bulk virtualized exercise lists.
+
+### Root Cause
+1. No dedicated `SECURITY DEFINER` RPC existed to allow an active administrator to safely cascade and delete an athlete account from `auth.users` without permitting self-deletion or privilege escalation against other admins.
+2. `get_admin_user_directory` lacked a comprehensive `COALESCE` chain resolving against `full_name`, `display_name`, and user metadata with capitalized email prefix fallbacks.
+3. `global_exercise_catalog` schema and client validation had not yet incorporated secure HTTPS storage URLs with client-side canvas downscaling.
+
+### Changes
+1. **Additive SQL Migration (`supabase/migrations/20261119_admin_panel_m4.sql` — Applied to remote Supabase `gkkvxfroxthvbiecramm`)**:
+   - Added `full_name` column to `public.profiles`.
+   - Created `SECURITY DEFINER` RPC `public.admin_delete_user(p_target_user_id UUID)` that enforces `public.is_current_user_admin()`, blocks self-deletion (`p_target_user_id = auth.uid()`), blocks deleting other admin accounts (`is_admin = true`), cleans up dependent records (`assigned_workouts`, `trainer_workout_templates`, `app_error_logs`, `app_announcements`, `profiles`), and deletes from `auth.users`.
+   - Updated `public.get_admin_user_directory(p_search, p_limit)` with guaranteed `full_name` resolution via `COALESCE` chain falling back to formatted email prefixes (`initcap(split_part(COALESCE(u.email, 'athlete'), '@', 1))`) and full_name search.
+   - Added `image_url TEXT NULL` column to `public.global_exercise_catalog`.
+   - Created public `exercise-images` Supabase Storage bucket with 2MB file limit and RLS policies (public read, admin-only insert/update/delete). Zero destructive table drop operations.
+2. **Guaranteed Display Names & Two-Step User Deletion (`authService.ts`, `adminService.ts`, `AdminUsersTab.tsx`, `app/admin/index.tsx`)**:
+   - `authService.signUpWithEmail`: Automatically formats and passes `full_name` metadata from capitalized email prefix upon registration when no custom name is supplied.
+   - `adminService.deleteUserAccount`: Gated RPC invocation for `admin_delete_user` with graceful offline fallback.
+   - `AdminUsersTab.tsx`: Two-step deletion UX (`Delete User` -> `Confirm Delete` / `Cancel`) on non-admin athlete cards (hidden/blocked for admin accounts and current administrator). Updates user list immediately upon deletion with error banner fallback.
+3. **iOS WebKit-Safe Global Exercise Images (`globalExerciseCatalogService.ts`, `AdminExerciseCatalogTab.tsx`, `ExerciseDetailModal.tsx`, `app/exercises/[id].tsx`)**:
+   - `globalExerciseCatalogService`: Added `image_url` / `imageUrl` to records and sanitization; enforces HTTPS protocol, strictly rejects raw `data:image/` base64 strings and oversized payloads; maps `image_url` to `photoPath` while preserving `images: []` for bulk lists (WebKit safety invariant).
+   - `AdminExerciseCatalogTab.tsx`: Added Exercise Image input section with direct HTTPS URL input, upload button with offscreen HTMLCanvas downscaling (`max 400px`, JPEG `0.78` quality) storing to `exercise-images` bucket, live thumbnail preview, and removal button.
+   - `ExerciseDetailModal.tsx` & `app/exercises/[id].tsx`: Cleanly resolves and renders `exercise.photoPath` when starting with `https://`.
+4. **Verification Suite (`tests/AdminControlPanelM4.test.tsx`)**:
+   - Unit tests covering guaranteed display names, two-step deletion UX, admin account delete protection, HTTPS image URL validation, WebKit base64 rejection, single-exercise detail image rendering, and SQL migration safety invariants.
+
+### Verification
+- `npx jest tests/AdminControlPanelM4.test.tsx tests/AdminControlPanelM3.test.tsx tests/AdminControlPanelM2.test.tsx tests/AdminControlPanelM1.test.tsx tests/AllScreensHealthSmoke.test.tsx tests/IOSWebKitExerciseCrashGuard.test.tsx --maxWorkers=2 --testTimeout=15000`: **6/6 suites**, **64/64 tests passed** in 20.65s.
+- `npm run typecheck` (`tsc --noEmit`): Passed with **0 errors**.
+- `npm run lint` (`expo lint`): Passed with **0 errors**, **43 warnings** (0 warnings in modified files).
+- `npm run build:web` (`node scripts/build-web.js`): Passed with **0 errors**, exporting **45 static routes** to `dist/`.
+
+
+
+## [Release v2.5.1] — 2026-11-19 — Production Deployment of Mobile Admin Responsive Layout, User Deletion, Display Names & Exercise Images
+
+### Scope Delivered
+1. **Remote Supabase Migration (`20261119_admin_panel_m4.sql`)**:
+   - Applied cleanly to remote production project `gkkvxfroxthvbiecramm` via Supabase CLI and verified in `supabase_migrations.schema_migrations`.
+   - Verified existence of `admin_delete_user` RPC, `full_name` column on `public.profiles`, `image_url` on `public.global_exercise_catalog`, and `exercise-images` public storage bucket.
+2. **Admin Mobile & iPhone Ergonomics**:
+   - Single clean navigation on mobile (`isDesktop = width >= 768`); eliminates double/triple stacked navigation bars.
+   - Responsive multi-column metric inputs and wrap containers in Admin tabs.
+3. **Admin User Account Deletion & Guaranteed Athlete Display Names**:
+   - Two-step deletion dialog with protection against self-deletion and deleting other administrators.
+   - Automatic `full_name` resolution and fallback across signup, directory retrieval, and profile storage.
+4. **iOS WebKit-Safe Global Exercise Images**:
+   - Enforced HTTPS-only URLs and rejected base64 data URIs.
+   - Offscreen HTMLCanvas downscaling (`400px`, `0.78` quality) uploading to Supabase Storage.
+   - Preserved `images: []` in bulk lists to guard against iOS WebKit GPU crash loops.
+5. **Version Bumps**:
+   - Bumped to `2.5.1` across `package.json`, `app.json`, `public/sw.js` (`bebig-pwa-v2.5.1`), `README.md`, `AI_BRAIN.md`, and test assertions.
+
+### Verification Gate
+- `npm run typecheck`: Passed (0 errors).
+- `npm run lint`: Passed (0 errors, 43 warnings — 0 in touched files).
+- `npx jest`: 6/6 test suites passed (64/64 tests green).
+- `npm run build:web`: Passed (0 errors, 45 static routes exported to `dist/`).
+- Scope boundary check: 0 lines diff in `app/+html.tsx`, `app/coach`, `src/features/coach`, `supabase/functions/coach-v2`, `workoutNotificationService.ts`. Zero secrets or backup files staged.
+
+

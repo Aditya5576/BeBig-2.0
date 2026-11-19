@@ -8,6 +8,7 @@ import {
   Pressable,
   ScrollView,
   Platform,
+  useWindowDimensions,
 } from 'react-native';
 import {
   Slot,
@@ -21,6 +22,20 @@ import { useAdminAccess } from '../../src/features/admin';
 import { useAuthStore } from '../../src/features/auth';
 import { spacing, radii, typography } from '../../src/constants/theme';
 
+export interface AdminLayoutContextType {
+  inAdminLayout: boolean;
+  isDesktop: boolean;
+}
+
+export const AdminLayoutContext = React.createContext<AdminLayoutContextType>({
+  inAdminLayout: false,
+  isDesktop: true,
+});
+
+export function useAdminLayoutContext() {
+  return React.useContext(AdminLayoutContext);
+}
+
 const useSafeLocalSearchParams =
   typeof routerUseLocalSearchParams === 'function'
     ? routerUseLocalSearchParams
@@ -29,6 +44,8 @@ const useSafeLocalSearchParams =
 export default function AdminLayout() {
   const { colors } = useAppTheme();
   const styles = createStyles(colors);
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 768;
 
   const router = useRouter();
   const pathname = usePathname();
@@ -102,125 +119,142 @@ export default function AdminLayout() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-      {/* CSS Media Query Rules for RNW SSR & Static Export compatibility */}
-      {Platform.OS === 'web' ? (
-        <style
-          dangerouslySetInnerHTML={{
-            __html: `
-              @media (max-width: 767px) {
-                .admin-desktop-sidebar { display: none !important; width: 0 !important; }
-                .admin-mobile-nav { display: flex !important; }
-                .admin-workspace { flex-direction: column !important; }
-                .admin-main-content { width: 100% !important; max-width: 100% !important; padding: 16px !important; box-sizing: border-box !important; }
-              }
-              @media (min-width: 768px) {
-                .admin-desktop-sidebar { display: flex !important; width: 220px !important; flex-shrink: 0 !important; }
-                .admin-mobile-nav { display: none !important; }
-                .admin-workspace { flex-direction: row !important; }
-                .admin-main-content { flex: 1 !important; padding: 24px !important; }
-              }
-            `,
-          }}
-        />
-      ) : null}
+    <AdminLayoutContext.Provider value={{ inAdminLayout: true, isDesktop }}>
+      <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+        {/* CSS Media Query Rules for RNW SSR & Static Export compatibility */}
+        {Platform.OS === 'web' ? (
+          <style
+            dangerouslySetInnerHTML={{
+              __html: `
+                @media (max-width: 767px) {
+                  .admin-desktop-sidebar { display: none !important; width: 0 !important; }
+                  .admin-mobile-nav { display: flex !important; }
+                  .admin-workspace { flex-direction: column !important; }
+                  .admin-main-content { width: 100% !important; max-width: 100% !important; padding: 16px !important; box-sizing: border-box !important; }
+                }
+                @media (min-width: 768px) {
+                  .admin-desktop-sidebar { display: flex !important; width: 220px !important; flex-shrink: 0 !important; }
+                  .admin-mobile-nav { display: none !important; }
+                  .admin-workspace { flex-direction: row !important; }
+                  .admin-main-content { flex: 1 !important; padding: 24px !important; }
+                }
+              `,
+            }}
+          />
+        ) : null}
 
-      {/* 1. Header Bar */}
-      <View style={styles.header}>
-        <View style={styles.headerTitleGroup}>
-          <Text style={styles.brandTitle}>BeBig Admin</Text>
-          <View style={styles.roleBadge}>
-            <Text style={styles.roleBadgeText}>{role.toUpperCase()}</Text>
+        {/* 1. Header Bar */}
+        <View style={styles.header}>
+          <View style={styles.headerTitleGroup}>
+            <Text style={styles.brandTitle}>BeBig Admin</Text>
+            <View style={styles.roleBadge}>
+              <Text style={styles.roleBadgeText}>{role.toUpperCase()}</Text>
+            </View>
+          </View>
+          <Pressable
+            testID="admin-exit-button"
+            style={styles.exitButton}
+            onPress={() => router.replace('/home')}
+          >
+            <Text style={styles.exitButtonText}>Exit to App</Text>
+          </Pressable>
+        </View>
+
+        {/* 2. Mobile Horizontal Navigation Bar (Only on width < 768) */}
+        {!isDesktop ? (
+          <View
+            testID="admin-mobile-nav"
+            style={styles.mobileNavContainer}
+            {...({ dataSet: { class: 'admin-mobile-nav' } } as any)}
+          >
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.mobileNavContent}
+            >
+              {links.map((link) => {
+                const isActive = isNavLinkActive(link);
+                return (
+                  <Pressable
+                    key={link.name}
+                    testID={`admin-nav-${link.matchTab}`}
+                    style={[
+                      styles.mobileNavItem,
+                      isActive && styles.mobileNavItemActive,
+                    ]}
+                    onPress={() => router.push(link.path as any)}
+                  >
+                    <Text
+                      style={[
+                        styles.mobileNavText,
+                        isActive && styles.mobileNavTextActive,
+                      ]}
+                    >
+                      {link.name}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        ) : null}
+
+        {/* 3. Main Workspace Container */}
+        <View
+          style={[
+            styles.workspace,
+            { flexDirection: isDesktop ? 'row' : 'column' },
+          ]}
+          {...({ dataSet: { class: 'admin-workspace' } } as any)}
+        >
+          {/* Desktop Sidebar Navigation (Only on width >= 768) */}
+          {isDesktop ? (
+            <View
+              testID="admin-desktop-sidebar"
+              style={styles.sidebar}
+              {...({ dataSet: { class: 'admin-desktop-sidebar' } } as any)}
+            >
+              <ScrollView showsVerticalScrollIndicator={false}>
+                {links.map((link) => {
+                  const isActive = isNavLinkActive(link);
+                  return (
+                    <Pressable
+                      key={link.name}
+                      testID={`admin-sidebar-nav-${link.matchTab}`}
+                      style={[
+                        styles.sidebarItem,
+                        isActive && styles.sidebarItemActive,
+                      ]}
+                      onPress={() => router.push(link.path as any)}
+                    >
+                      <Text
+                        style={[
+                          styles.sidebarText,
+                          isActive && styles.sidebarTextActive,
+                        ]}
+                      >
+                        {link.name}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          ) : null}
+
+          {/* Content Area (100% width on mobile) */}
+          <View
+            style={[
+              styles.mainContent,
+              { padding: isDesktop ? spacing.lg : spacing.md },
+            ]}
+            {...({ dataSet: { class: 'admin-main-content' } } as any)}
+          >
+            <Slot />
           </View>
         </View>
-        <Pressable
-          style={styles.exitButton}
-          onPress={() => router.replace('/home')}
-        >
-          <Text style={styles.exitButtonText}>Exit to App</Text>
-        </Pressable>
-      </View>
-
-      {/* 2. Mobile Horizontal Navigation Bar */}
-      <View
-        style={styles.mobileNavContainer}
-        {...({ dataSet: { class: 'admin-mobile-nav' } } as any)}
-      >
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.mobileNavContent}
-        >
-          {links.map((link) => {
-            const isActive = isNavLinkActive(link);
-            return (
-              <Pressable
-                key={link.name}
-                style={[
-                  styles.mobileNavItem,
-                  isActive && styles.mobileNavItemActive,
-                ]}
-                onPress={() => router.push(link.path as any)}
-              >
-                <Text
-                  style={[
-                    styles.mobileNavText,
-                    isActive && styles.mobileNavTextActive,
-                  ]}
-                >
-                  {link.name}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-      </View>
-
-      {/* 3. Main Workspace Container */}
-      <View
-        style={styles.workspace}
-        {...({ dataSet: { class: 'admin-workspace' } } as any)}
-      >
-        {/* Desktop Sidebar Navigation */}
-        <View
-          style={styles.sidebar}
-          {...({ dataSet: { class: 'admin-desktop-sidebar' } } as any)}
-        >
-          <ScrollView showsVerticalScrollIndicator={false}>
-            {links.map((link) => {
-              const isActive = isNavLinkActive(link);
-              return (
-                <Pressable
-                  key={link.name}
-                  style={[
-                    styles.sidebarItem,
-                    isActive && styles.sidebarItemActive,
-                  ]}
-                  onPress={() => router.push(link.path as any)}
-                >
-                  <Text
-                    style={[
-                      styles.sidebarText,
-                      isActive && styles.sidebarTextActive,
-                    ]}
-                  >
-                    {link.name}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-        </View>
-
-        {/* Content Area */}
-        <View
-          style={styles.mainContent}
-          {...({ dataSet: { class: 'admin-main-content' } } as any)}
-        >
-          <Slot />
-        </View>
-      </View>
-    </SafeAreaView>
+      </SafeAreaView>
+    </AdminLayoutContext.Provider>
   );
 }
 
@@ -342,14 +376,15 @@ const createStyles = (colors: ReturnType<typeof useAppTheme>['colors']) => Style
   },
   workspace: {
     flex: 1,
-    flexDirection: 'row',
     width: '100%',
+    minWidth: 0,
   },
   sidebar: {
     width: 220,
     backgroundColor: colors.surface,
     borderRightWidth: 1,
     borderRightColor: colors.border,
+    flexShrink: 0,
   },
   sidebarItem: {
     paddingHorizontal: spacing.md,
@@ -372,10 +407,10 @@ const createStyles = (colors: ReturnType<typeof useAppTheme>['colors']) => Style
   },
   mainContent: {
     flex: 1,
-    padding: spacing.lg,
     backgroundColor: colors.background,
     width: '100%',
     maxWidth: '100%',
+    minWidth: 0,
   },
 });
 

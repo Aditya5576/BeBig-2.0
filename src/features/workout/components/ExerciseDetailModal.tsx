@@ -147,6 +147,9 @@ export function ExerciseDetailModal({
     ? customPhotoUri ||
       approvedCuratedDemo?.demonstrationUri ||
       approvedCuratedDemo?.thumbnailUri ||
+      (exercise?.photoPath && (exercise.photoPath.startsWith('https://') || exercise.photoPath.startsWith('http://'))
+        ? exercise.photoPath
+        : null) ||
       rawProviderImage?.url ||
       null
     : null;

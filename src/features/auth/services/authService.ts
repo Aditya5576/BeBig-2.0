@@ -6,7 +6,7 @@ import { AuthResult, AuthSession, AuthUser } from '../types';
 import { getAuthRedirectUrl } from '../utils/redirect';
 
 export interface IAuthService {
-  signUpWithEmail: (email: string, password: string) => Promise<AuthResult>;
+  signUpWithEmail: (email: string, password: string, fullName?: string) => Promise<AuthResult>;
   signInWithEmail: (email: string, password: string) => Promise<AuthResult>;
   signInWithApple: () => Promise<AuthResult>;
   signInWithGoogle: () => Promise<AuthResult>;
@@ -58,7 +58,11 @@ export const authService: IAuthService = {
     return getAuthRedirectUrl();
   },
 
-  signUpWithEmail: async (email: string, password: string): Promise<AuthResult> => {
+  signUpWithEmail: async (
+    email: string,
+    password: string,
+    fullName?: string,
+  ): Promise<AuthResult> => {
     if (!isSupabaseConfigured()) {
       return {
         success: false,
@@ -77,11 +81,19 @@ export const authService: IAuthService = {
     try {
       const redirectUrl = getAuthRedirectUrl();
 
+      const prefix = sanitizedEmail.split('@')[0] || 'athlete';
+      const formattedDefault = prefix.charAt(0).toUpperCase() + prefix.slice(1);
+      const resolvedFullName =
+        fullName && fullName.trim().length > 0 ? fullName.trim() : formattedDefault;
+
       const { data, error } = await supabase.auth.signUp({
         email: sanitizedEmail,
         password,
         options: {
           emailRedirectTo: redirectUrl,
+          data: {
+            full_name: resolvedFullName,
+          },
         },
       });
 

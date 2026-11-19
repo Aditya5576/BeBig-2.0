@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useAppTheme } from '../../theme';
 import {
@@ -16,6 +16,8 @@ export interface AdminUsersTabProps {
   searchQuery: string;
   onChangeSearch: (query: string) => void;
   onQuickAssignUser: (user: AdminDirectoryUser) => void;
+  onDeleteUser?: (userId: string) => Promise<{ success: boolean; error?: string }>;
+  currentAdminUserId?: string | null;
 }
 
 function formatShortDate(iso: string | null): string {
@@ -35,9 +37,15 @@ export function AdminUsersTab({
   searchQuery,
   onChangeSearch,
   onQuickAssignUser,
+  onDeleteUser,
+  currentAdminUserId,
 }: AdminUsersTabProps) {
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+
+  const [confirmingUserId, setConfirmingUserId] = useState<string | null>(null);
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const filteredUsers = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -55,6 +63,12 @@ export function AdminUsersTab({
       {notice ? (
         <View style={styles.noticeBanner} testID="admin-users-notice">
           <Text style={styles.noticeBannerText}>{notice}</Text>
+        </View>
+      ) : null}
+
+      {deleteError ? (
+        <View style={styles.errorBanner} testID="admin-users-delete-error">
+          <Text style={styles.errorBannerText}>{deleteError}</Text>
         </View>
       ) : null}
 
@@ -112,13 +126,71 @@ export function AdminUsersTab({
                 </View>
               </View>
 
-              <Pressable
-                testID={`admin-user-assign-${user.user_id}`}
-                style={styles.assignShortcutButton}
-                onPress={() => onQuickAssignUser(user)}
-              >
-                <Text style={styles.assignShortcutText}>Assign Workout</Text>
-              </Pressable>
+              <View style={styles.cardActionsCol}>
+                <Pressable
+                  testID={`admin-user-assign-${user.user_id}`}
+                  style={styles.assignShortcutButton}
+                  onPress={() => onQuickAssignUser(user)}
+                >
+                  <Text style={styles.assignShortcutText}>Assign Workout</Text>
+                </Pressable>
+
+                {!user.is_admin && user.user_id !== currentAdminUserId && onDeleteUser ? (
+                  confirmingUserId === user.user_id ? (
+                    <View style={styles.confirmDeleteRow}>
+                      <Pressable
+                        testID={`admin-user-confirm-delete-${user.user_id}`}
+                        style={[
+                          styles.deleteConfirmButton,
+                          deletingUserId === user.user_id && styles.buttonDisabled,
+                        ]}
+                        disabled={deletingUserId === user.user_id}
+                        onPress={async () => {
+                          setDeletingUserId(user.user_id);
+                          setDeleteError(null);
+                          try {
+                            const res = await onDeleteUser(user.user_id);
+                            if (res && !res.success) {
+                              setDeleteError(res.error || 'Failed to delete athlete account.');
+                            } else {
+                              setConfirmingUserId(null);
+                            }
+                          } catch (err: any) {
+                            setDeleteError(err?.message || 'Error deleting account.');
+                          } finally {
+                            setDeletingUserId(null);
+                          }
+                        }}
+                      >
+                        <Text style={styles.deleteConfirmText}>
+                          {deletingUserId === user.user_id ? 'Deleting...' : 'Confirm Delete'}
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        testID={`admin-user-cancel-delete-${user.user_id}`}
+                        style={styles.deleteCancelButton}
+                        onPress={() => {
+                          setConfirmingUserId(null);
+                          setDeleteError(null);
+                        }}
+                      >
+                        <Text style={styles.deleteCancelText}>Cancel</Text>
+                      </Pressable>
+                    </View>
+                  ) : (
+                    <Pressable
+                      testID={`admin-user-delete-${user.user_id}`}
+                      style={styles.deleteUserButton}
+                      onPress={() => {
+                        setConfirmingUserId(user.user_id);
+                        setDeleteError(null);
+                      }}
+                    >
+                      <Text style={styles.deleteUserText}>Delete User</Text>
+                    </Pressable>
+                  )
+                ) : null}
+              </View>
             </View>
           ))}
         </View>
@@ -131,6 +203,7 @@ const createStyles = (colors: ReturnType<typeof useAppTheme>['colors']) =>
   StyleSheet.create({
     container: {
       gap: spacing.md,
+      width: '100%',
     },
     noticeBanner: {
       backgroundColor: colors.surfaceSubtle,
@@ -140,10 +213,24 @@ const createStyles = (colors: ReturnType<typeof useAppTheme>['colors']) =>
       borderLeftColor: colors.primary,
       borderRadius: radii.sm,
       padding: spacing.sm + 2,
+      width: '100%',
     },
     noticeBannerText: {
       ...typography.caption,
       color: colors.textSecondary,
+    },
+    errorBanner: {
+      backgroundColor: 'rgba(239, 68, 68, 0.12)',
+      borderWidth: 1,
+      borderColor: colors.error,
+      borderRadius: radii.sm,
+      padding: spacing.sm + 2,
+      width: '100%',
+    },
+    errorBannerText: {
+      ...typography.caption,
+      color: colors.error,
+      fontFamily: FONT_FAMILIES.bodySemiBold,
     },
     searchCard: {
       backgroundColor: colors.surface,
@@ -152,6 +239,7 @@ const createStyles = (colors: ReturnType<typeof useAppTheme>['colors']) =>
       borderRadius: radii.md,
       padding: spacing.md,
       gap: spacing.sm,
+      width: '100%',
     },
     sectionTitle: {
       ...typography.titleMedium,
@@ -167,6 +255,7 @@ const createStyles = (colors: ReturnType<typeof useAppTheme>['colors']) =>
       paddingVertical: spacing.sm,
       color: colors.textPrimary,
       ...typography.body,
+      width: '100%',
     },
     resultCountText: {
       ...typography.caption,
@@ -180,6 +269,7 @@ const createStyles = (colors: ReturnType<typeof useAppTheme>['colors']) =>
       borderRadius: radii.md,
       padding: spacing.lg,
       alignItems: 'center',
+      width: '100%',
     },
     emptyText: {
       ...typography.bodySmall,
@@ -187,6 +277,7 @@ const createStyles = (colors: ReturnType<typeof useAppTheme>['colors']) =>
     },
     userList: {
       gap: spacing.sm,
+      width: '100%',
     },
     userCard: {
       backgroundColor: colors.surface,
@@ -199,11 +290,18 @@ const createStyles = (colors: ReturnType<typeof useAppTheme>['colors']) =>
       justifyContent: 'space-between',
       alignItems: 'center',
       gap: spacing.sm,
+      width: '100%',
     },
     userInfoCol: {
       flex: 1,
-      minWidth: 200,
+      minWidth: 160,
       gap: 4,
+    },
+    cardActionsCol: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      alignItems: 'center',
+      gap: spacing.xs,
     },
     userNameRow: {
       flexDirection: 'row',
@@ -264,5 +362,49 @@ const createStyles = (colors: ReturnType<typeof useAppTheme>['colors']) =>
       ...typography.caption,
       fontFamily: FONT_FAMILIES.bodySemiBold,
       color: colors.primary,
+    },
+    deleteUserButton: {
+      backgroundColor: 'transparent',
+      borderWidth: 1,
+      borderColor: colors.error,
+      borderRadius: radii.sm,
+      paddingHorizontal: spacing.sm + 2,
+      paddingVertical: 8,
+    },
+    deleteUserText: {
+      ...typography.caption,
+      fontFamily: FONT_FAMILIES.bodySemiBold,
+      color: colors.error,
+    },
+    confirmDeleteRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    deleteConfirmButton: {
+      backgroundColor: colors.error,
+      borderRadius: radii.sm,
+      paddingHorizontal: spacing.sm + 2,
+      paddingVertical: 8,
+    },
+    deleteConfirmText: {
+      ...typography.caption,
+      fontFamily: FONT_FAMILIES.bodyBold,
+      color: '#FFFFFF',
+    },
+    deleteCancelButton: {
+      backgroundColor: colors.surfaceSubtle,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: radii.sm,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 8,
+    },
+    deleteCancelText: {
+      ...typography.caption,
+      color: colors.textSecondary,
+    },
+    buttonDisabled: {
+      opacity: 0.5,
     },
   });

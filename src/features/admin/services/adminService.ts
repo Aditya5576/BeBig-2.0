@@ -753,17 +753,22 @@ export const adminService = {
       const users: AdminDirectoryUser[] = data.map((row) => {
         const rec = row as Record<string, unknown>;
         const total = Number(rec.total_workouts);
+        const emailStr = typeof rec.email === 'string' ? rec.email : '';
+        const fallbackName =
+          emailStr && emailStr.includes('@')
+            ? emailStr.split('@')[0].charAt(0).toUpperCase() + emailStr.split('@')[0].slice(1)
+            : 'Athlete';
         return {
           user_id: String(rec.user_id ?? ''),
-          email: typeof rec.email === 'string' ? rec.email : '',
+          email: emailStr,
           full_name:
             typeof rec.full_name === 'string' && rec.full_name.trim()
               ? rec.full_name.trim()
-              : 'Athlete',
+              : fallbackName,
           is_admin: Boolean(rec.is_admin),
           created_at:
             typeof rec.created_at === 'string' ? rec.created_at : new Date().toISOString(),
-          total_workouts: Number.isFinite(total) ? total : 0,
+          total_workouts: Number.isFinite(total) && total >= 0 ? total : 0,
           last_workout_at:
             typeof rec.last_workout_at === 'string' ? rec.last_workout_at : null,
         };
@@ -778,6 +783,45 @@ export const adminService = {
         users: [],
         source: 'local_fallback',
         notice: 'Unable to reach Supabase user directory right now.',
+      };
+    }
+  },
+
+  /**
+   * Permanently deletes a non-admin athlete account via `admin_delete_user` RPC.
+   * Gated by server-side is_current_user_admin() check and blocks self/admin deletion.
+   */
+  async deleteUserAccount(
+    userId: string,
+  ): Promise<{ success: boolean; error?: string }> {
+    if (!userId || typeof userId !== 'string' || !userId.trim()) {
+      return { success: false, error: 'User ID is required.' };
+    }
+
+    if (!isSupabaseConfigured()) {
+      return {
+        success: false,
+        error: 'Supabase is not configured. User deletion requires a live connection.',
+      };
+    }
+
+    try {
+      const { error } = await supabase.rpc('admin_delete_user', {
+        p_target_user_id: userId.trim(),
+      });
+
+      if (error) {
+        return {
+          success: false,
+          error: error.message || 'Failed to delete user account.',
+        };
+      }
+
+      return { success: true };
+    } catch (err: any) {
+      return {
+        success: false,
+        error: err?.message || 'Unexpected error deleting user account.',
       };
     }
   },

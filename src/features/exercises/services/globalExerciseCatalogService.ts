@@ -34,6 +34,8 @@ export interface GlobalExerciseRecord {
   secondary_muscles: string[];
   instructions: string[];
   is_active: boolean;
+  image_url?: string | null;
+  imageUrl?: string | null;
   source?: 'remote' | 'local';
 }
 
@@ -46,6 +48,8 @@ export interface SaveGlobalExerciseInput {
   secondary_muscles?: string[];
   instructions?: string[];
   is_active?: boolean;
+  image_url?: string | null;
+  imageUrl?: string | null;
   createdBy?: string | null;
 }
 
@@ -128,6 +132,7 @@ export function sanitizeGlobalExerciseInput(input: SaveGlobalExerciseInput): {
   secondary_muscles: string[];
   instructions: string[];
   is_active: boolean;
+  image_url: string | null;
 } {
   const rawName = typeof input.name === 'string' ? input.name : '';
   if (DATA_IMAGE_PATTERN.test(rawName)) {
@@ -154,6 +159,25 @@ export function sanitizeGlobalExerciseInput(input: SaveGlobalExerciseInput): {
   const secondary_muscles = sanitizeStringArray(input.secondary_muscles ?? [], 10, 64);
   const instructions = sanitizeStringArray(input.instructions ?? [], 15, 320);
 
+  const rawImage = input.image_url ?? input.imageUrl;
+  let image_url: string | null = null;
+  if (typeof rawImage === 'string' && rawImage.trim().length > 0) {
+    const trimmed = rawImage.trim();
+    if (DATA_IMAGE_PATTERN.test(trimmed) || trimmed.startsWith('data:image/')) {
+      DATA_IMAGE_PATTERN.lastIndex = 0;
+      throw new Error(
+        'Raw base64 data:image strings are not permitted. Please provide an HTTPS URL or use photo upload.',
+      );
+    }
+    if (!trimmed.startsWith('https://')) {
+      throw new Error('Exercise image must be a secure HTTPS URL (https://...).');
+    }
+    if (trimmed.length > 2048) {
+      throw new Error('Image URL is too long (maximum 2048 characters).');
+    }
+    image_url = trimmed;
+  }
+
   return {
     name,
     category,
@@ -162,6 +186,7 @@ export function sanitizeGlobalExerciseInput(input: SaveGlobalExerciseInput): {
     secondary_muscles,
     instructions,
     is_active: input.is_active !== undefined ? Boolean(input.is_active) : true,
+    image_url,
   };
 }
 
@@ -178,6 +203,13 @@ export function mapGlobalRecordToExercise(record: GlobalExerciseRecord): Exercis
     record.instructions.length > 0
       ? record.instructions.map((step, i) => `${i + 1}. ${step}`).join('\n')
       : `${record.name} targeting ${record.primary_muscles.join(', ')}.`;
+
+  const safeImageUrl =
+    record.image_url && record.image_url.trim().startsWith('https://')
+      ? record.image_url.trim()
+      : record.imageUrl && record.imageUrl.trim().startsWith('https://')
+        ? record.imageUrl.trim()
+        : null;
 
   return {
     id: exerciseId,
@@ -201,7 +233,7 @@ export function mapGlobalRecordToExercise(record: GlobalExerciseRecord): Exercis
     ],
     instructions: [...record.instructions],
     images: [],
-    photoPath: null,
+    photoPath: safeImageUrl,
     sourceProvider: 'system',
     sourceExerciseId: record.id,
     isCustom: false,
@@ -212,6 +244,8 @@ export function mapGlobalRecordToExercise(record: GlobalExerciseRecord): Exercis
 
 function normalizeRemoteRow(row: unknown): GlobalExerciseRecord {
   const rec = (row ?? {}) as Record<string, unknown>;
+  const rawImg = typeof rec.image_url === 'string' ? rec.image_url.trim() : null;
+  const safeImg = rawImg && rawImg.startsWith('https://') ? rawImg : null;
   return {
     id: String(rec.id ?? ''),
     created_at: typeof rec.created_at === 'string' ? rec.created_at : new Date().toISOString(),
@@ -226,6 +260,8 @@ function normalizeRemoteRow(row: unknown): GlobalExerciseRecord {
     secondary_muscles: sanitizeStringArray(rec.secondary_muscles, 10, 64),
     instructions: sanitizeStringArray(rec.instructions, 15, 320),
     is_active: rec.is_active !== false,
+    image_url: safeImg,
+    imageUrl: safeImg,
     source: 'remote',
   };
 }
@@ -276,7 +312,7 @@ export const globalExerciseCatalogService = {
         const { data, error } = await supabase
           .from('global_exercise_catalog')
           .select(
-            'id, created_at, updated_at, created_by, name, category, equipment, primary_muscles, secondary_muscles, instructions, is_active',
+            'id, created_at, updated_at, created_by, name, category, equipment, primary_muscles, secondary_muscles, instructions, is_active, image_url',
           )
           .order('name', { ascending: true })
           .limit(250);
@@ -333,7 +369,7 @@ export const globalExerciseCatalogService = {
           supabase
             .from('global_exercise_catalog')
             .select(
-              'id, created_at, updated_at, created_by, name, category, equipment, primary_muscles, secondary_muscles, instructions, is_active',
+              'id, created_at, updated_at, created_by, name, category, equipment, primary_muscles, secondary_muscles, instructions, is_active, image_url',
             )
             .eq('is_active', true)
             .order('name', { ascending: true })
@@ -420,10 +456,11 @@ export const globalExerciseCatalogService = {
               secondary_muscles: clean.secondary_muscles,
               instructions: clean.instructions,
               is_active: clean.is_active,
+              image_url: clean.image_url,
             })
             .eq('id', input.id)
             .select(
-              'id, created_at, updated_at, created_by, name, category, equipment, primary_muscles, secondary_muscles, instructions, is_active',
+              'id, created_at, updated_at, created_by, name, category, equipment, primary_muscles, secondary_muscles, instructions, is_active, image_url',
             )
             .single();
 
@@ -443,10 +480,11 @@ export const globalExerciseCatalogService = {
               secondary_muscles: clean.secondary_muscles,
               instructions: clean.instructions,
               is_active: clean.is_active,
+              image_url: clean.image_url,
               created_by: input.createdBy ?? null,
             })
             .select(
-              'id, created_at, updated_at, created_by, name, category, equipment, primary_muscles, secondary_muscles, instructions, is_active',
+              'id, created_at, updated_at, created_by, name, category, equipment, primary_muscles, secondary_muscles, instructions, is_active, image_url',
             )
             .single();
 

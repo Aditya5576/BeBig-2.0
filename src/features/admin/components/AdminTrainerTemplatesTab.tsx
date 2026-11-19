@@ -626,6 +626,7 @@ const createStyles = (colors: ReturnType<typeof useAppTheme>['colors']) =>
   StyleSheet.create({
     container: {
       gap: spacing.md,
+      width: '100%',
     },
     card: {
       backgroundColor: colors.surface,
@@ -634,6 +635,7 @@ const createStyles = (colors: ReturnType<typeof useAppTheme>['colors']) =>
       borderRadius: radii.md,
       padding: spacing.md,
       gap: spacing.sm,
+      width: '100%',
     },
     sectionTitle: {
       ...typography.titleMedium,
@@ -660,10 +662,12 @@ const createStyles = (colors: ReturnType<typeof useAppTheme>['colors']) =>
       paddingVertical: spacing.sm,
       color: colors.textPrimary,
       ...typography.body,
+      width: '100%',
     },
     textArea: {
       minHeight: 68,
       textAlignVertical: 'top',
+      width: '100%',
     },
     chipRow: {
       flexDirection: 'row',
@@ -755,10 +759,13 @@ const createStyles = (colors: ReturnType<typeof useAppTheme>['colors']) =>
     },
     exerciseInputsRow: {
       flexDirection: 'row',
+      flexWrap: 'wrap',
       gap: spacing.sm,
+      width: '100%',
     },
     metricInputCol: {
       flex: 1,
+      minWidth: 65,
       gap: 3,
     },
     metricInputLabel: {

@@ -2,7 +2,6 @@ import { Exercise, ExerciseCategory, CreateCustomExerciseInput, UpdateCustomExer
 import { ExerciseFilterOptions, ExerciseListResult, IExerciseProvider } from '../providers/types';
 import { WgerExerciseProvider } from '../providers/wger/WgerExerciseProvider';
 import {
-  clearExerciseMemoryCache,
   customExerciseStorage,
   registerExerciseMemoryCacheCleaner,
   resolveExerciseScopeNamespace,
@@ -814,4 +813,3 @@ export class ExerciseRepository {
 
 export const exerciseRepository = new ExerciseRepository();
 registerExerciseMemoryCacheCleaner(() => exerciseRepository.clearInMemoryState());
-export { clearExerciseMemoryCache };

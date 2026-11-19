@@ -30,6 +30,7 @@ import {
 import { AdminUsersTab } from '../../src/features/admin/components/AdminUsersTab';
 import { AdminTrainerTemplatesTab } from '../../src/features/admin/components/AdminTrainerTemplatesTab';
 import { AdminExerciseCatalogTab } from '../../src/features/admin/components/AdminExerciseCatalogTab';
+import { useAdminLayoutContext } from './_layout';
 import {
   FONT_FAMILIES,
   NUMERIC_TABULAR_STYLE,
@@ -50,6 +51,7 @@ type DiagnosticsSeverityFilter = 'all' | 'crash' | 'warning';
 
 export interface AdminDashboardScreenProps {
   initialTab?: AdminTab;
+  hideTabBar?: boolean;
 }
 
 const MONO_FONT = Platform.select({
@@ -103,9 +105,14 @@ const useSafeLocalSearchParams =
     ? routerUseLocalSearchParams
     : () => ({} as Record<string, string | string[] | undefined>);
 
-export default function AdminDashboardScreen({ initialTab = 'overview' }: AdminDashboardScreenProps = {}) {
+export default function AdminDashboardScreen({
+  initialTab = 'overview',
+  hideTabBar,
+}: AdminDashboardScreenProps = {}) {
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const { inAdminLayout } = useAdminLayoutContext();
+  const shouldHideTabBar = hideTabBar ?? inAdminLayout;
   const userId = useAuthStore((state) => state.user?.id ?? null);
   const searchParams = useSafeLocalSearchParams();
   const routeTab = resolveAdminTab(searchParams?.tab, initialTab);
@@ -288,6 +295,17 @@ export default function AdminDashboardScreen({ initialTab = 'overview' }: AdminD
     setActiveTab('templates');
   }, []);
 
+  const handleDeleteUser = useCallback(async (targetUserId: string) => {
+    const res = await adminService.deleteUserAccount(targetUserId);
+    if (res.success) {
+      setDirectoryResult((prev) => ({
+        ...prev,
+        users: prev.users.filter((u) => u.user_id !== targetUserId),
+      }));
+    }
+    return res;
+  }, []);
+
   const handleSaveTrainerTemplate = useCallback(
     async (input: SaveTrainerTemplateInput): Promise<TrainerWorkoutTemplate> => {
       const saved = await adminService.saveTrainerTemplate(input);
@@ -384,68 +402,70 @@ export default function AdminDashboardScreen({ initialTab = 'overview' }: AdminD
         </View>
       </View>
 
-      {/* 3-Tab Segmented Navigation */}
-      <View style={styles.tabBar} accessibilityRole="tablist">
-        <Pressable
-          testID="admin-tab-overview"
-          style={[styles.tabButton, activeTab === 'overview' && styles.tabButtonActive]}
-          onPress={() => setActiveTab('overview')}
-        >
-          <Text style={[styles.tabLabel, activeTab === 'overview' && styles.tabLabelActive]}>
-            Overview & Health
-          </Text>
-        </Pressable>
+      {/* Inner Segmented Navigation (Only rendered when not embedded inside AdminLayout) */}
+      {!shouldHideTabBar ? (
+        <View style={styles.tabBar} accessibilityRole="tablist">
+          <Pressable
+            testID="admin-tab-overview"
+            style={[styles.tabButton, activeTab === 'overview' && styles.tabButtonActive]}
+            onPress={() => setActiveTab('overview')}
+          >
+            <Text style={[styles.tabLabel, activeTab === 'overview' && styles.tabLabelActive]}>
+              Overview & Health
+            </Text>
+          </Pressable>
 
-        <Pressable
-          testID="admin-tab-diagnostics"
-          style={[styles.tabButton, activeTab === 'diagnostics' && styles.tabButtonActive]}
-          onPress={() => setActiveTab('diagnostics')}
-        >
-          <Text style={[styles.tabLabel, activeTab === 'diagnostics' && styles.tabLabelActive]}>
-            Diagnostics ({errorLogs.length})
-          </Text>
-        </Pressable>
+          <Pressable
+            testID="admin-tab-diagnostics"
+            style={[styles.tabButton, activeTab === 'diagnostics' && styles.tabButtonActive]}
+            onPress={() => setActiveTab('diagnostics')}
+          >
+            <Text style={[styles.tabLabel, activeTab === 'diagnostics' && styles.tabLabelActive]}>
+              Diagnostics ({errorLogs.length})
+            </Text>
+          </Pressable>
 
-        <Pressable
-          testID="admin-tab-announcements"
-          style={[styles.tabButton, activeTab === 'announcements' && styles.tabButtonActive]}
-          onPress={() => setActiveTab('announcements')}
-        >
-          <Text style={[styles.tabLabel, activeTab === 'announcements' && styles.tabLabelActive]}>
-            Announcements ({activeAnnouncements.length})
-          </Text>
-        </Pressable>
+          <Pressable
+            testID="admin-tab-announcements"
+            style={[styles.tabButton, activeTab === 'announcements' && styles.tabButtonActive]}
+            onPress={() => setActiveTab('announcements')}
+          >
+            <Text style={[styles.tabLabel, activeTab === 'announcements' && styles.tabLabelActive]}>
+              Announcements ({activeAnnouncements.length})
+            </Text>
+          </Pressable>
 
-        <Pressable
-          testID="admin-tab-users"
-          style={[styles.tabButton, activeTab === 'users' && styles.tabButtonActive]}
-          onPress={() => setActiveTab('users')}
-        >
-          <Text style={[styles.tabLabel, activeTab === 'users' && styles.tabLabelActive]}>
-            Users ({directoryResult.users.length})
-          </Text>
-        </Pressable>
+          <Pressable
+            testID="admin-tab-users"
+            style={[styles.tabButton, activeTab === 'users' && styles.tabButtonActive]}
+            onPress={() => setActiveTab('users')}
+          >
+            <Text style={[styles.tabLabel, activeTab === 'users' && styles.tabLabelActive]}>
+              Users ({directoryResult.users.length})
+            </Text>
+          </Pressable>
 
-        <Pressable
-          testID="admin-tab-templates"
-          style={[styles.tabButton, activeTab === 'templates' && styles.tabButtonActive]}
-          onPress={() => setActiveTab('templates')}
-        >
-          <Text style={[styles.tabLabel, activeTab === 'templates' && styles.tabLabelActive]}>
-            Trainer Templates ({trainerTemplates.length})
-          </Text>
-        </Pressable>
+          <Pressable
+            testID="admin-tab-templates"
+            style={[styles.tabButton, activeTab === 'templates' && styles.tabButtonActive]}
+            onPress={() => setActiveTab('templates')}
+          >
+            <Text style={[styles.tabLabel, activeTab === 'templates' && styles.tabLabelActive]}>
+              Trainer Templates ({trainerTemplates.length})
+            </Text>
+          </Pressable>
 
-        <Pressable
-          testID="admin-tab-catalog"
-          style={[styles.tabButton, activeTab === 'catalog' && styles.tabButtonActive]}
-          onPress={() => setActiveTab('catalog')}
-        >
-          <Text style={[styles.tabLabel, activeTab === 'catalog' && styles.tabLabelActive]}>
-            Exercise Catalog ({globalExercises.length})
-          </Text>
-        </Pressable>
-      </View>
+          <Pressable
+            testID="admin-tab-catalog"
+            style={[styles.tabButton, activeTab === 'catalog' && styles.tabButtonActive]}
+            onPress={() => setActiveTab('catalog')}
+          >
+            <Text style={[styles.tabLabel, activeTab === 'catalog' && styles.tabLabelActive]}>
+              Exercise Catalog ({globalExercises.length})
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
 
       {isRefreshing && !overviewResult && (
         <View style={styles.loadingCard}>
@@ -883,6 +903,8 @@ export default function AdminDashboardScreen({ initialTab = 'overview' }: AdminD
           searchQuery={userSearchQuery}
           onChangeSearch={setUserSearchQuery}
           onQuickAssignUser={handleQuickAssignUser}
+          onDeleteUser={handleDeleteUser}
+          currentAdminUserId={userId}
         />
       )}
 
@@ -932,7 +954,7 @@ const createStyles = (colors: ReturnType<typeof useAppTheme>['colors']) =>
     },
     headerTextCol: {
       flex: 1,
-      minWidth: 220,
+      minWidth: 160,
     },
     pageTitle: {
       ...typography.h1,
@@ -1039,11 +1061,13 @@ const createStyles = (colors: ReturnType<typeof useAppTheme>['colors']) =>
     kpiGrid: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: spacing.md,
+      gap: spacing.sm,
+      width: '100%',
     },
     kpiCard: {
       flexGrow: 1,
-      minWidth: 155,
+      flexBasis: 140,
+      minWidth: 130,
       backgroundColor: colors.surface,
       borderWidth: 1,
       borderColor: colors.border,
@@ -1316,6 +1340,7 @@ const createStyles = (colors: ReturnType<typeof useAppTheme>['colors']) =>
       borderRadius: radii.md,
       padding: spacing.md,
       gap: spacing.sm,
+      width: '100%',
     },
     textInput: {
       backgroundColor: colors.background,
@@ -1326,10 +1351,12 @@ const createStyles = (colors: ReturnType<typeof useAppTheme>['colors']) =>
       paddingVertical: spacing.sm,
       color: colors.textPrimary,
       ...typography.body,
+      width: '100%',
     },
     textArea: {
       minHeight: 84,
       textAlignVertical: 'top',
+      width: '100%',
     },
     formErrorText: {
       ...typography.caption,
