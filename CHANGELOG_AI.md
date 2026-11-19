@@ -3,6 +3,25 @@
 - Refined PR typography and history UI.
 - Stabilized Cinematic Splash Screen with BeBig Barbell Crest.
 
+## [Release v2.5.2] — 2026-11-19 — Production Deployment & Astra Audit Hardening Release
+
+- **Commit**: `96849ee` (annotated tag `v2.5.2`)
+- **Vercel Production Deployment**: `https://be-big-2-0-2dat8qyqh-aditya-works.vercel.app` (`● Ready`, 3m build, 45 static routes, HTTP `200`)
+- **Live Production URL**: `https://be-big-2-0.vercel.app/` (HTTP `200`)
+- **PWA Service Worker**: `public/sw.js` serving `bebig-pwa-v2.5.2` (HTTP `200`)
+- **Supabase Edge Function**: `delete-account` updated to version 3 (`ACTIVE`, `verify_jwt: true`) on linked project `BeBig 2.0` (`gkkvxfroxthvbiecramm`) with zero-shift pagination recursive cloud storage deletion (`P1-02`).
+- **Core Enhancements**:
+  - `P0-01`: Single-transaction continuous IndexedDB read-merge-write on `bebig_cross_tab_locks` with zero `await` gaps + durable tombstone suppression.
+  - `P0-02`: Monotonic revision & version sequence CAS (`Math.max(revision, version)`).
+  - `P1-01`: Scoped completed-workout erasure on account deletion with verified purge.
+  - `P1-02`: Recursive storage cleanup in `delete-account` Edge Function.
+  - `P2-01`: Patched `shell-quote` vulnerability.
+  - Custom Workout Numeric Keypad (`WorkoutNumericKeypad.tsx`) with kg and reps steppers and RPE selector bar.
+  - Admin Diagnostics Terminal copy-all and copy-row formatted log exporter.
+  - Upgraded home announcement glassmorphic card.
+  - Trainer templates catalog search with assigned workout normalization.
+  - Dedicated "Global" exercise source filter chip.
+
 ## [Milestone 5 & P0-01 Cross-Tab Atomicity] — 2026-11-19 — Custom Numeric Keypad, Diagnostics Terminal Copy, Upgraded Home Banner, Trainer Templates, Global Filter & Robust Concurrency
 
 ### Problem
