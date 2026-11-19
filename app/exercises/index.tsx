@@ -39,7 +39,7 @@ export default function ExerciseListScreen() {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [selectedSource, setSelectedSource] = useState<'all' | 'custom' | 'external'>('all');
+  const [selectedSource, setSelectedSource] = useState<'all' | 'custom' | 'external' | 'global'>('all');
   const [nextOffset, setNextOffset] = useState<number | undefined>(undefined);
   const [hasMore, setHasMore] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -222,7 +222,7 @@ export default function ExerciseListScreen() {
     }
   };
 
-  const handleSourceSelect = (source: 'all' | 'custom' | 'external') => {
+  const handleSourceSelect = (source: 'all' | 'custom' | 'external' | 'global') => {
     setSelectedSource(source);
     setHasMore(false);
     setNextOffset(undefined);
@@ -337,9 +337,16 @@ export default function ExerciseListScreen() {
 
         {/* Source Filter Chips */}
         <View style={styles.sourceRow} testID="source-filter-row">
-          {(['all', 'custom', 'external'] as const).map((src) => {
+          {(['all', 'global', 'custom', 'external'] as const).map((src) => {
             const isActive = selectedSource === src;
-            const label = src === 'all' ? 'All Sources' : src === 'custom' ? 'Custom Only' : 'External Only';
+            const label =
+              src === 'all'
+                ? 'All Sources'
+                : src === 'global'
+                  ? 'Global'
+                  : src === 'custom'
+                    ? 'Custom Only'
+                    : 'External Only';
             return (
               <Pressable
                 key={src}
@@ -539,6 +546,7 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   sourceRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.xs,
     paddingVertical: spacing.xs,
   },

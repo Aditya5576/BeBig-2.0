@@ -87,7 +87,7 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
   const [searchQuery, setSearchQuery] = useState('');
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [selectedSource, setSelectedSource] = useState<'all' | 'custom' | 'external'>('all');
+  const [selectedSource, setSelectedSource] = useState<'all' | 'custom' | 'external' | 'global'>('all');
 
   // Multi-select state: Map of id -> Exercise, and array of IDs preserving selection order
   const [selectedExercisesMap, setSelectedExercisesMap] = useState<Map<string, Exercise>>(new Map());
@@ -153,8 +153,10 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
     const trimmedQuery = deferredSearchQuery.trim();
     return recentExercisesList
       .filter((item) => {
+        const isGlobal = Boolean(item.id && (item.id.startsWith('global_ex_') || item.sourceProvider === 'system'));
         if (selectedSource === 'custom' && !item.isCustom) return false;
-        if (selectedSource === 'external' && item.isCustom) return false;
+        if (selectedSource === 'external' && (item.isCustom || isGlobal)) return false;
+        if (selectedSource === 'global' && !isGlobal) return false;
         if (selectedCategory !== 'all' && item.category !== selectedCategory) return false;
 
         if (trimmedQuery.length > 0) {
@@ -270,7 +272,7 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
     }
   };
 
-  const handleSourceSelect = (src: 'all' | 'custom' | 'external') => {
+  const handleSourceSelect = (src: 'all' | 'custom' | 'external' | 'global') => {
     setSelectedSource(src);
     if (!visible) return;
     const cached = exerciseRepository.getCachedExercises({
@@ -543,9 +545,16 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
 
             {/* Source Filter Chips */}
             <View style={styles.sourceRow} testID="picker-source-filter-row">
-              {(['all', 'custom', 'external'] as const).map((src) => {
+              {(['all', 'global', 'custom', 'external'] as const).map((src) => {
                 const isActive = selectedSource === src;
-                const label = src === 'all' ? 'All' : src === 'custom' ? 'Custom' : 'External';
+                const label =
+                  src === 'all'
+                    ? 'All'
+                    : src === 'global'
+                      ? 'Global'
+                      : src === 'custom'
+                        ? 'Custom'
+                        : 'External';
                 return (
                   <Pressable
                     key={src}

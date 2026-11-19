@@ -10,6 +10,79 @@ import {
 
 const MAX_BODY_BYTES = 4 * 1024; // 4KB
 
+/**
+ * Recursively and paginatedly removes all files and subfolders under a given prefix in a bucket.
+ * Throws on error so that account deletion aborts with HTTP 500 if files cannot be cleanly deleted (P1-02).
+ */
+async function deleteUserStorageFolder(
+  adminClient: any,
+  bucket: string,
+  prefix: string
+): Promise<void> {
+  const PAGE_SIZE = 100;
+  let folderOffset = 0;
+
+  while (true) {
+    const { data: items, error: listError } = await adminClient.storage
+      .from(bucket)
+      .list(prefix, {
+        limit: PAGE_SIZE,
+        offset: folderOffset,
+        sortBy: { column: 'name', order: 'asc' },
+      });
+
+    if (listError) {
+      if (
+        listError.message?.includes('not found') ||
+        (listError as any).statusCode === 404 ||
+        (listError as any).statusCode === '404'
+      ) {
+        return;
+      }
+      throw new Error(`Failed to list storage items in bucket "${bucket}" under "${prefix}": ${listError.message}`);
+    }
+
+    if (!items || items.length === 0) {
+      break;
+    }
+
+    const filesToDelete: string[] = [];
+    const subfolders: string[] = [];
+
+    for (const item of items) {
+      if (item.id === null || !item.id) {
+        subfolders.push(`${prefix}/${item.name}`);
+      } else {
+        filesToDelete.push(`${prefix}/${item.name}`);
+      }
+    }
+
+    if (filesToDelete.length > 0) {
+      const { error: removeError } = await adminClient.storage
+        .from(bucket)
+        .remove(filesToDelete);
+
+      if (removeError) {
+        throw new Error(`Failed to remove files in bucket "${bucket}": ${removeError.message}`);
+      }
+    }
+
+    // Only advance folderOffset by the count of folders that were NOT deleted,
+    // because deleted files shift subsequent entries down to folderOffset (P1-02)!
+    folderOffset += subfolders.length;
+
+    // Recurse into every nested subfolder
+    for (const subfolder of subfolders) {
+      await deleteUserStorageFolder(adminClient, bucket, subfolder);
+    }
+
+    // If total items returned was less than PAGE_SIZE, all entries have been processed
+    if (items.length < PAGE_SIZE) {
+      break;
+    }
+  }
+}
+
 serve(async (req) => {
   const corsHeaders = getCorsHeaders(req);
 
@@ -77,16 +150,19 @@ serve(async (req) => {
 
     const userId = user.id;
 
-    // 6. Storage cleanup: Purge files in 'avatars' and 'exercise-photos' buckets
-    for (const bucket of ['avatars', 'exercise-photos']) {
+    // 6. Storage cleanup: Recursively and paginatedly purge user files across all relevant buckets (P1-02)
+    const storageBuckets = ['avatars', 'exercise-photos', 'exercise-demos'];
+    for (const bucket of storageBuckets) {
       try {
-        const { data: files } = await supabaseAdmin.storage.from(bucket).list(userId);
-        if (files && files.length > 0) {
-          const filePaths = files.map((f: any) => `${userId}/${f.name}`);
-          await supabaseAdmin.storage.from(bucket).remove(filePaths);
-        }
-      } catch (storageErr) {
-        console.warn(`[delete-account] Storage cleanup warning for bucket ${bucket}:`, storageErr);
+        await deleteUserStorageFolder(supabaseAdmin, bucket, userId);
+      } catch (storageErr: any) {
+        console.error(`[delete-account][${correlationId}] Storage cleanup failed for bucket ${bucket}:`, storageErr);
+        return errorResponse(
+          `Failed to delete user media files from ${bucket}: ${storageErr?.message || 'Storage deletion error'}`,
+          500,
+          corsHeaders,
+          correlationId
+        );
       }
     }
 

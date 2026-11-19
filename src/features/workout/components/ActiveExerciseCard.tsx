@@ -43,6 +43,15 @@ export interface ActiveExerciseCardProps {
   onPressExerciseDetail?: (exerciseId: string, exerciseName: string) => void;
   onLayout?: (e: LayoutChangeEvent) => void;
   style?: any;
+  isCustomKeypadActive?: boolean;
+  activeFocusSetId?: string | null;
+  activeFocusField?: 'weight' | 'reps' | 'rir' | null;
+  onFocusField?: (
+    exerciseId: string,
+    setId: string,
+    field: 'weight' | 'reps' | 'rir',
+    currentValue: string
+  ) => void;
 }
 
 const formatShortDate = (dateStr?: string) => {
@@ -73,6 +82,10 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(function A
   onPressExerciseDetail,
   onLayout,
   style,
+  isCustomKeypadActive,
+  activeFocusSetId,
+  activeFocusField,
+  onFocusField,
 }) {
   const { colors } = useAppTheme();
   const styles = createStyles(colors);
@@ -450,6 +463,9 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(function A
             onDeleteSet={onDeleteSet}
             onUpdateSetField={onUpdateSetField}
             onToggleCompleteSet={onToggleCompleteSet}
+            isCustomKeypadActive={isCustomKeypadActive}
+            activeFocusField={activeFocusSetId === set.id ? activeFocusField : null}
+            onFocusField={onFocusField}
           />
         ))}
       </View>

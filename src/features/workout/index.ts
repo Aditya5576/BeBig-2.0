@@ -5,6 +5,7 @@ export * from './utils/analytics';
 export * from './utils/supersetUtils';
 export * from './components/ActiveExerciseCard';
 export * from './components/ActiveSetRow';
+export * from './components/WorkoutNumericKeypad';
 export * from './components/ActiveWorkoutTimer';
 export * from './components/ExerciseDetailModal';
 export * from './services/recentExercisesService';

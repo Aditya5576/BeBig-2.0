@@ -1,33 +1,44 @@
 # BeBig 2.0 — Release State
 
-## Production (Live Verified — `v2.4.3`)
+## Production (Release `v2.5.2`)
 
 - **URL**: https://be-big-2-0.vercel.app
-- **Live Version**: `v2.4.3` (`package.json`, `app.json`, `/sw.js` `bebig-pwa-v2.4.3`)
-- **Live Release Commit**: `2f88fd254578dff1ddebccb50124fc3b825c06e6` (tag `v2.4.3`)
-- **Vercel Production Deployment**: `dpl_G3AZFkELZTWHJQw6gynxWuSTkvFW` (`● Ready`, `2m 50s` build, 45 static routes, `/sw.js` serving `bebig-pwa-v2.4.3` with Network-First JS handler)
-- **Previous Verified Release**: `v2.4.2` (`0afb94bcfc2fcc67d2ac7e04c167c115153e4816`, Vercel `dpl_DBpWdWmqRb1BU1jQXtFoHfdxvKYE`)
+- **Live Version**: `v2.5.2` (`package.json`, `app.json`, `/sw.js` `bebig-pwa-v2.5.2`)
+- **Previous Verified Releases**: `v2.5.1` (`2d74de3`), `v2.5.0` (`68c7c38`), `v2.4.4` (`6be31bb`), `v2.4.3` (`2f88fd2`), `v2.4.2` (`0afb94b`)
 - **Supabase Production Project**: `BeBig 2.0` (`gkkvxfroxthvbiecramm`, `ap-northeast-1`)
-  - Applied `v2.4.3` SQL Migrations: `20261118120000_atomic_super_admin_guard.sql`, `20261118120500_harden_avatars_storage_privacy.sql`
-  - Deployed Edge Functions: `admin-assign-role` (`ACTIVE`, v1, `verify_jwt: true`), `coach-agent` (`ACTIVE`, v14, `verify_jwt: true`), `delete-account` (`ACTIVE`, v2, `verify_jwt: true`), `coach-v2` (paused, untouched at v2)
+  - Applied SQL Migrations:
+    - `20261118120000_atomic_super_admin_guard.sql`
+    - `20261118120500_harden_avatars_storage_privacy.sql`
+    - `20261118_admin_panel_m1.sql` (RBAC guard, `app_error_logs`, `app_announcements`)
+    - `20261118_admin_panel_m2.sql` (`trainer_workout_templates`, `assigned_workouts`)
+    - `20261118_admin_panel_m3.sql` (`global_exercise_catalog`, `get_admin_user_directory`, active announcements banner)
+    - `20261119_admin_panel_m4.sql` (`admin_delete_user` RPC, `profiles.full_name`, `exercise-images` storage bucket)
+  - Deployed Edge Functions: `admin-assign-role` (`ACTIVE`, v1, `verify_jwt: true`), `coach-agent` (`ACTIVE`, v14, `verify_jwt: true`), `delete-account` (`ACTIVE`, v3, `verify_jwt: true`), `coach-v2` (paused, untouched at v2)
 - **Deployment Method**: Automatic Vercel deployment on `main` branch push + explicit Supabase CLI deployments
 
-## Deployed Features in Production (`v2.4.3`)
+## Key Enhancements in `v2.5.2` (Astra Audit Hardening & Milestone 5)
+
+- **`P0-01`**: Single-transaction atomic IndexedDB read-merge-write (`bebig_cross_tab_locks`) with zero await gaps inside transaction callbacks + Web Locks / storage lease contention fallback + deleted tombstone tracking.
+- **`P0-02`**: Unified monotonic sequence CAS (`Math.max(revision, version)`) across `workoutStorage.ts` and `workoutRepository.ts` with explicit conflict return (`{ ok: false, conflict: true, persistedRevision, incomingRevision }`).
+- **`P1-01`**: Complete local erasure of scoped completed workouts (`BASE_COMPLETED_WORKOUTS_KEY`) in `accountDeletionService.ts` with loud failure reporting if any key survives.
+- **`P1-02`**: Zero-shift pagination in recursive cloud storage cleanup (`deleteUserStorageFolder`) across `avatars`, `exercise-photos`, and `exercise-demos` with fail-fast HTTP 500 error abort before auth deletion.
+- **`P2-01`**: Upgraded `shell-quote` to `1.12.0` (`>= 1.11.0`) in `package-lock.json` resolving critical security vulnerability without breaking expo dependencies.
+- **Milestone 5 Features**: Custom workout numeric keypad (`WorkoutNumericKeypad.tsx`) with kg and reps modes, admin diagnostics terminal copy all / copy row, upgraded home announcements banner, trainer templates catalog search with assigned workout normalization, and dedicated "Global" exercise filter.
+- **`P3-02`**: Aligned `Auth.test.tsx` and `DropSetTrackingAndAnalytics.test.tsx` assertions to current production UI behavior.
+- **`P3-03`**: Reconciled release state documentation and eliminated all contradictory legacy sections.
+
+## Deployed Features in Production (`v2.5.2`)
+
+- **Admin Control Panel Full Milestones (M1-M4)**:
+  - Role-Based Access Control (`super_admin` / `admin` via `admin_roles`), system diagnostics terminal, athlete announcements.
+  - User Directory with search, profile inspection, and two-step athlete deletion (`admin_delete_user`).
+  - Trainer Workout Template Builder with client assignment and offline caching.
+  - Global Exercise Catalog with offscreen canvas image downscaling to `exercise-images` bucket.
+  - Responsive layout eliminating double/triple navigation bars on mobile (`width < 768px`).
 - **Two-Layer Live iPhone PWA Crash & SW Auto-Reload Fix (`v2.4.3`)**:
-  - **Layer 1 (JS Bundle Freshness + Automatic SW Recovery)**: Bumped `public/sw.js` cache to `bebig-pwa-v2.4.3`, added **Network-First** caching for `/_expo/static/js/` and `.js` bundles, and wired `reg.update()` + `controllerchange` single-reload recovery (`sessionStorage` guard `bebig_sw_reloaded_v243`) in `app/_layout.tsx`.
-  - **Layer 2 (Zero-Bitmap Picker + Legacy Photo Compaction)**: Stripped `images` and `imageUrl` payloads from `ExercisePickerModal` (`FlatList` & `RECENTLY USED`) via `stripExerciseImagePayloads()` and added non-blocking sequential background compaction (`compactOversizedCustomExercises` / `downscaleDataUrlToMaxEdge`) for legacy oversized (`>150KB`) custom exercise photos on web.
-- **Phase 2B Security Hardening (`AUD-005`, `AUD-010`, `AUD-012`, `AUD-013`, `AUD-019`, `AUD-020`)**:
-  - `AUD-005`: Removed `xlsx@0.18.5`; replaced with zero-dependency pure-TS OOXML writer (`ooxmlWorkbook.ts`) + formula-injection neutralization (`-416KB` export bundle).
-  - `AUD-010`: Shared allowlisted CORS (`Vary: Origin`), `405` guards, bounded JSON caps, and `correlation_id` error redaction across `admin-assign-role`, `coach-agent`, and `delete-account`.
-  - `AUD-012`: Hardened `vercel.json` with HSTS (`max-age=63072000; includeSubDomains`), `Permissions-Policy`, `Cross-Origin-Opener-Policy`, and functional CSP.
-  - `AUD-013`: Shell-only Service Worker navigation caching + `Cache-Control: no-store/private` bypass + `/functions/` & `/storage/` exclusion in `public/sw.js`.
-  - `AUD-019`: Applied `20261118120000_atomic_super_admin_guard.sql` (`protect_last_super_admin_trigger` + `service_role`-only `admin_mutate_role_atomic` RPC).
-  - `AUD-020`: Applied `20261118120500_harden_avatars_storage_privacy.sql` (owner-scoped `SELECT` RLS on `storage.objects`) + web JPEG EXIF stripping (`avatarService.sanitizeWebAvatarImage()`).
-- **Phase 3 Storage Resilience, Hook Hygiene & Input Bounds (`AUD-015`, `AUD-017`, `AUD-018`, `AUD-022`, `AUD-024`, `AUD-026`, `AUD-034`)**:
-  - `AUD-017` / `AUD-018`: Native `SecureStore` >1800B `FileSystem` spillover, structured zero-PII storage error classification, and web `QuotaExceededError` catalog cache eviction + retry.
-  - `AUD-015`: Eliminated all `react-hooks/exhaustive-deps` warnings across active workout, timer, template, exercise detail, and progress screens.
-  - `AUD-024` / `AUD-026`: Centralized `DOMAIN_LIMITS` + `clampText` input bounds and added granular `<ErrorBoundary>` wrappers across `/workout/active`, `/settings`, `/workout/progress/weekly`, and `/workout/progress/prs`.
-- **Carry-Forward Features (`v2.4.2`)**: Self-Service Account Deletion (`AUD-006`), Legal & Terms routes (`AUD-007`), Erase Local Device Data (`AUD-011`), Active-Workout Guest Migration (`AUD-002`), CI Quality Gate (`AUD-004`), Secret & Backup Containment (`AUD-001`), Cross-Platform Web Build (`AUD-009`).
+  - `bebig-pwa-v2.5.2` Service Worker with Network-First JS bundle caching.
+  - Zero-bitmap picker + legacy photo compaction preventing WebKit GPU memory spikes.
+- **Carry-Forward Features**: Self-Service Account Deletion (`AUD-006`), Legal & Terms routes (`AUD-007`), Erase Local Device Data (`AUD-011`), Active-Workout Guest Migration (`AUD-002`), CI Quality Gate (`AUD-004`), Secret & Backup Containment (`AUD-001`), Cross-Platform Web Build (`AUD-009`).
 
 ## Permanent Exclusions & Deferred Boundaries
 

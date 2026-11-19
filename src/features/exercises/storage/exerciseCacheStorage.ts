@@ -17,6 +17,7 @@ import {
   resolveExerciseScopeNamespace,
 } from './customExerciseStorage';
 import { UserScope } from '../../auth/utils/userScope';
+import { globalExerciseCatalogService } from '../services/globalExerciseCatalogService';
 
 const EXERCISE_CATALOG_KEY = 'bebig.exercises.cache.catalog';
 const EXERCISE_CACHE_TIME_KEY = 'bebig.exercises.cache.timestamp';
@@ -517,7 +518,7 @@ class ExerciseCacheStorage {
       query?: string;
       category?: string;
       limit?: number;
-      source?: 'all' | 'custom' | 'external';
+      source?: 'all' | 'custom' | 'external' | 'global';
     } = {},
     scope?: UserScope | null,
   ): Exercise[] {
@@ -537,12 +538,20 @@ class ExerciseCacheStorage {
         pool = scopeMap ? Array.from(scopeMap.values()) : [];
       } else if (source === 'external') {
         pool = Array.from(this.memoryCatalog.values());
+      } else if (source === 'global') {
+        pool = globalExerciseCatalogService.getActiveGlobalExercisesSync();
       } else {
         // 'all': unified index with active user's custom exercises placed first
         const customItems = scopeMap ? Array.from(scopeMap.values()) : [];
+        const globalItems = globalExerciseCatalogService.getActiveGlobalExercisesSync();
         const providerItems = Array.from(this.memoryCatalog.values());
         const mergedMap = new Map<string, Exercise>();
         customItems.forEach((c) => mergedMap.set(c.id, c));
+        globalItems.forEach((g) => {
+          if (!mergedMap.has(g.id)) {
+            mergedMap.set(g.id, g);
+          }
+        });
         providerItems.forEach((p) => {
           if (!mergedMap.has(p.id)) {
             mergedMap.set(p.id, p);

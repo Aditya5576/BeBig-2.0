@@ -1,6 +1,6 @@
 import { useAppTheme } from '../src/features/theme';
 import React, { useState, useCallback, useMemo } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, Alert, Image } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable, Alert, Image, Platform } from 'react-native';
 import { useRouter, useFocusEffect as routerFocusEffect } from 'expo-router';
 import { ScreenContainer, ScreenScrollView, Text, Button, Card, Icon, BrandLogoBadge } from '../src/components/ui';
 import { useOnboardingStore } from '../src/features/onboarding';
@@ -27,6 +27,13 @@ const useFocusEffect =
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
   });
+
+function formatAnnouncementTimestamp(dateStr?: string): string {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
 
 export default function HomeScreen() {
   const { colors } = useAppTheme();
@@ -337,33 +344,70 @@ export default function HomeScreen() {
                   : styles.announcementInfo,
             ]}
           >
-            <View style={styles.announcementContent}>
-              <View style={styles.announcementTopRow}>
-                <Text
-                  variant="caption"
+            <View style={styles.announcementTopRow}>
+              <View style={styles.announcementBadgeGroup}>
+                <View
                   style={[
-                    styles.announcementTypeTag,
+                    styles.announcementTypePill,
                     visibleAnnouncement.type === 'maintenance'
-                      ? { color: '#F59E0B' }
+                      ? styles.pillMaintenance
                       : visibleAnnouncement.type === 'release'
-                        ? { color: colors.secondaryAccent }
-                        : { color: colors.primary },
+                        ? styles.pillRelease
+                        : styles.pillInfo,
                   ]}
                 >
-                  {visibleAnnouncement.type.toUpperCase()}
-                </Text>
-                <Pressable
-                  testID="home-announcement-dismiss"
-                  onPress={() => handleDismissAnnouncement(visibleAnnouncement.id)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  accessibilityRole="button"
-                  accessibilityLabel="Dismiss announcement"
-                >
-                  <Text variant="caption" color="muted" style={styles.announcementDismissText}>
-                    Dismiss
+                  <Icon
+                    name={
+                      visibleAnnouncement.type === 'maintenance'
+                        ? 'settings'
+                        : visibleAnnouncement.type === 'release'
+                          ? 'bolt'
+                          : 'clock'
+                    }
+                    size={11}
+                    color={
+                      visibleAnnouncement.type === 'maintenance'
+                        ? '#F59E0B'
+                        : visibleAnnouncement.type === 'release'
+                          ? colors.secondaryAccent
+                          : colors.primary
+                    }
+                  />
+                  <Text
+                    variant="caption"
+                    style={[
+                      styles.announcementTypeTag,
+                      visibleAnnouncement.type === 'maintenance'
+                        ? { color: '#F59E0B' }
+                        : visibleAnnouncement.type === 'release'
+                          ? { color: colors.secondaryAccent }
+                          : { color: colors.primary },
+                    ]}
+                  >
+                    {visibleAnnouncement.type.toUpperCase()}
                   </Text>
-                </Pressable>
+                </View>
+
+                {visibleAnnouncement.created_at ? (
+                  <Text variant="caption" color="muted" style={styles.announcementTimestamp}>
+                    {formatAnnouncementTimestamp(visibleAnnouncement.created_at)}
+                  </Text>
+                ) : null}
               </View>
+
+              <Pressable
+                testID="home-announcement-dismiss"
+                onPress={() => handleDismissAnnouncement(visibleAnnouncement.id)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                style={styles.announcementDismissBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Dismiss announcement"
+              >
+                <Icon name="x" size={14} color={colors.textMuted} />
+              </Pressable>
+            </View>
+
+            <View style={styles.announcementBodyWrap}>
               <Text variant="bodyBold" color="primary" style={styles.announcementTitle}>
                 {visibleAnnouncement.title}
               </Text>
@@ -1133,43 +1177,81 @@ const createStyles = (colors: any) =>
       borderRadius: radii.md,
       borderWidth: 1,
       paddingHorizontal: spacing.md,
-      paddingVertical: spacing.sm + 2,
+      paddingVertical: spacing.md - 2,
+      gap: 6,
+      ...Platform.select({
+        web: {
+          backdropFilter: 'blur(12px)',
+        },
+      }),
     },
     announcementInfo: {
       backgroundColor: 'rgba(56, 189, 248, 0.08)',
-      borderColor: 'rgba(56, 189, 248, 0.32)',
+      borderColor: 'rgba(56, 189, 248, 0.35)',
     },
     announcementRelease: {
       backgroundColor: 'rgba(0, 229, 153, 0.08)',
-      borderColor: 'rgba(0, 229, 153, 0.32)',
+      borderColor: 'rgba(0, 229, 153, 0.35)',
     },
     announcementMaintenance: {
-      backgroundColor: 'rgba(245, 158, 11, 0.1)',
+      backgroundColor: 'rgba(245, 158, 11, 0.09)',
       borderColor: 'rgba(245, 158, 11, 0.38)',
-    },
-    announcementContent: {
-      gap: 3,
     },
     announcementTopRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
     },
+    announcementBadgeGroup: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      flexWrap: 'wrap',
+    },
+    announcementTypePill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: radii.full ?? 999,
+      borderWidth: 1,
+    },
+    pillInfo: {
+      backgroundColor: 'rgba(56, 189, 248, 0.12)',
+      borderColor: 'rgba(56, 189, 248, 0.4)',
+    },
+    pillRelease: {
+      backgroundColor: 'rgba(0, 229, 153, 0.12)',
+      borderColor: 'rgba(0, 229, 153, 0.4)',
+    },
+    pillMaintenance: {
+      backgroundColor: 'rgba(245, 158, 11, 0.12)',
+      borderColor: 'rgba(245, 158, 11, 0.45)',
+    },
     announcementTypeTag: {
       fontSize: 10,
       fontWeight: '700',
-      letterSpacing: 0.7,
+      letterSpacing: 0.6,
     },
-    announcementDismissText: {
+    announcementTimestamp: {
       fontSize: 11,
-      fontWeight: '600',
+      fontWeight: '500',
+    },
+    announcementDismissBtn: {
+      padding: 4,
+      borderRadius: radii.xs,
+    },
+    announcementBodyWrap: {
+      gap: 3,
     },
     announcementTitle: {
-      fontSize: 14,
+      fontSize: 15,
       fontWeight: '700',
+      lineHeight: 20,
     },
     announcementBody: {
-      fontSize: 12,
-      lineHeight: 17,
+      fontSize: 13,
+      lineHeight: 18,
     },
   });

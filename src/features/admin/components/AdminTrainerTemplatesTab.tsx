@@ -71,6 +71,8 @@ export function AdminTrainerTemplatesTab({
 
   // Safe bitmap-free catalog exercise search
   const [exerciseSearch, setExerciseSearch] = useState('');
+  const [exerciseCategoryFilter, setExerciseCategoryFilter] = useState('all');
+  const [customExerciseName, setCustomExerciseName] = useState('');
   const [catalogOptions, setCatalogOptions] = useState<SafeCatalogOption[]>(
     DEFAULT_CATALOG_OPTIONS,
   );
@@ -100,46 +102,52 @@ export function AdminTrainerTemplatesTab({
   useEffect(() => {
     let active = true;
     const query = exerciseSearch.trim();
-    if (!query) {
-      setCatalogOptions(DEFAULT_CATALOG_OPTIONS);
-      return;
-    }
-
-    const seedMatches: SafeCatalogOption[] = SEED_EXERCISES.filter(
-      (ex) =>
-        ex.name.toLowerCase().includes(query.toLowerCase()) ||
-        ex.categoryName.toLowerCase().includes(query.toLowerCase()),
-    )
-      .slice(0, 10)
-      .map((ex) => ({ id: ex.id, name: ex.name, categoryName: ex.categoryName }));
-
-    setCatalogOptions(seedMatches);
+    const cat = exerciseCategoryFilter !== 'all' ? exerciseCategoryFilter : undefined;
 
     void (async () => {
       try {
         const res = await exerciseRepository.getExercises({
-          query,
-          limit: 12,
-          source: 'external',
+          query: query || undefined,
+          category: cat,
+          limit: 25,
+          source: 'all',
         });
-        if (!active || !res?.exercises?.length) return;
-        // Strip all image/bitmap fields explicitly (iOS WebKit safety)
-        setCatalogOptions(
-          res.exercises.slice(0, 10).map((ex) => ({
-            id: ex.id,
-            name: ex.name,
-            categoryName: ex.categoryName,
-          })),
-        );
+        if (!active) return;
+        if (res?.exercises?.length) {
+          // Strip bitmap/image payloads
+          setCatalogOptions(
+            res.exercises.slice(0, 25).map((ex) => ({
+              id: ex.id,
+              name: ex.name,
+              categoryName: ex.categoryName,
+            })),
+          );
+        } else {
+          const seedMatches: SafeCatalogOption[] = SEED_EXERCISES.filter((ex) => {
+            const matchesQuery = !query || ex.name.toLowerCase().includes(query.toLowerCase());
+            const matchesCat = !cat || ex.categoryName.toLowerCase() === cat.toLowerCase();
+            return matchesQuery && matchesCat;
+          })
+            .slice(0, 20)
+            .map((ex) => ({ id: ex.id, name: ex.name, categoryName: ex.categoryName }));
+          setCatalogOptions(seedMatches);
+        }
       } catch {
-        // Keep safe local seed matches
+        const seedMatches: SafeCatalogOption[] = SEED_EXERCISES.filter((ex) => {
+          const matchesQuery = !query || ex.name.toLowerCase().includes(query.toLowerCase());
+          const matchesCat = !cat || ex.categoryName.toLowerCase() === cat.toLowerCase();
+          return matchesQuery && matchesCat;
+        })
+          .slice(0, 20)
+          .map((ex) => ({ id: ex.id, name: ex.name, categoryName: ex.categoryName }));
+        setCatalogOptions(seedMatches);
       }
     })();
 
     return () => {
       active = false;
     };
-  }, [exerciseSearch]);
+  }, [exerciseSearch, exerciseCategoryFilter]);
 
   const handleAddExercise = useCallback((option: SafeCatalogOption) => {
     setExercises((prev) => {
@@ -160,6 +168,18 @@ export function AdminTrainerTemplatesTab({
     });
     setBuilderError(null);
   }, []);
+
+  const handleAddCustomExercise = useCallback(() => {
+    const trimmed = customExerciseName.trim();
+    if (!trimmed) return;
+    const id = `custom_tr_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    handleAddExercise({
+      id,
+      name: trimmed,
+      categoryName: 'Custom',
+    });
+    setCustomExerciseName('');
+  }, [customExerciseName, handleAddExercise]);
 
   const handleUpdateExerciseField = useCallback(
     (
@@ -330,8 +350,8 @@ export function AdminTrainerTemplatesTab({
         />
 
         {/* Safe Bitmap-Free Exercise Picker */}
-        <View style={styles.pickerBox}>
-          <Text style={styles.subHeading}>Add Catalog Exercises</Text>
+        <View style={styles.pickerBox} testID="trainer-exercise-library-picker">
+          <Text style={styles.subHeading}>Search Exercise Library</Text>
           <TextInput
             testID="trainer-exercise-search-input"
             style={styles.textInput}
@@ -340,8 +360,33 @@ export function AdminTrainerTemplatesTab({
             value={exerciseSearch}
             onChangeText={setExerciseSearch}
           />
+
+          {/* Muscle / Category Filter Chips */}
+          <View style={styles.catalogFilterRow}>
+            {['all', 'Chest', 'Back', 'Legs', 'Shoulders', 'Arms', 'Core'].map((cat) => {
+              const isSelected = exerciseCategoryFilter === cat;
+              return (
+                <Pressable
+                  key={cat}
+                  testID={`trainer-category-filter-${cat.toLowerCase()}`}
+                  style={[styles.smallFilterChip, isSelected && styles.smallFilterChipActive]}
+                  onPress={() => setExerciseCategoryFilter(cat)}
+                >
+                  <Text
+                    style={[
+                      styles.smallFilterChipText,
+                      isSelected && styles.smallFilterChipTextActive,
+                    ]}
+                  >
+                    {cat === 'all' ? 'All' : cat}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
           <View style={styles.catalogChipWrap}>
-            {catalogOptions.slice(0, 8).map((opt) => {
+            {catalogOptions.slice(0, 20).map((opt) => {
               const added = exercises.some((e) => e.exerciseId === opt.id);
               return (
                 <Pressable
@@ -361,6 +406,25 @@ export function AdminTrainerTemplatesTab({
                 </Pressable>
               );
             })}
+          </View>
+
+          {/* Optional Custom Exercise Input */}
+          <View style={styles.customAddRow}>
+            <TextInput
+              testID="trainer-custom-exercise-input"
+              style={[styles.textInput, styles.customAddInput]}
+              placeholder="Or type custom exercise name..."
+              placeholderTextColor={colors.textMuted}
+              value={customExerciseName}
+              onChangeText={setCustomExerciseName}
+            />
+            <Pressable
+              testID="trainer-add-custom-btn"
+              style={styles.addCustomBtn}
+              onPress={handleAddCustomExercise}
+            >
+              <Text style={styles.addCustomBtnText}>+ Add Custom</Text>
+            </Pressable>
           </View>
         </View>
 
@@ -701,6 +765,58 @@ const createStyles = (colors: ReturnType<typeof useAppTheme>['colors']) =>
       borderRadius: radii.sm,
       padding: spacing.sm + 2,
       gap: spacing.sm,
+    },
+    catalogFilterRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 6,
+    },
+    smallFilterChip: {
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: radii.xs,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+    },
+    smallFilterChipActive: {
+      borderColor: colors.primary,
+      backgroundColor: 'rgba(0, 229, 153, 0.12)',
+    },
+    smallFilterChipText: {
+      fontSize: 11,
+      fontFamily: FONT_FAMILIES.bodySemiBold,
+      color: colors.textSecondary,
+    },
+    smallFilterChipTextActive: {
+      color: colors.primaryText,
+      fontWeight: '700',
+    },
+    customAddRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      marginTop: 4,
+    },
+    customAddInput: {
+      flex: 1,
+      marginBottom: 0,
+    },
+    addCustomBtn: {
+      paddingHorizontal: spacing.md,
+      paddingVertical: 10,
+      backgroundColor: colors.surfaceElevated,
+      borderRadius: radii.sm,
+      borderWidth: 1,
+      borderColor: colors.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    addCustomBtnText: {
+      ...typography.caption,
+      fontFamily: FONT_FAMILIES.bodySemiBold,
+      color: colors.primary,
+      fontWeight: '700',
     },
     catalogChipWrap: {
       flexDirection: 'row',

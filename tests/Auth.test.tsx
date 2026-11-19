@@ -222,6 +222,9 @@ describe('Milestone 3 — Authentication & Supabase Foundation', () => {
         password: 'securepass',
         options: {
           emailRedirectTo: 'bebig://auth/callback',
+          data: {
+            full_name: 'New',
+          },
         },
       });
     });
@@ -244,6 +247,9 @@ describe('Milestone 3 — Authentication & Supabase Foundation', () => {
         expect.objectContaining({
           options: {
             emailRedirectTo: 'bebig://auth/callback',
+            data: {
+              full_name: 'Confirm',
+            },
           },
         }),
       );

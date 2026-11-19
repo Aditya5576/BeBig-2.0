@@ -70,7 +70,13 @@ export class WorkoutRepository {
 
     const exercises: WorkoutExercise[] = (template.exercises || []).map((tex, exIndex) => {
       // Parse reps from targetReps string, e.g. "8-10" -> 10, "12" -> 12
-      const parsedRepsMatch = tex.targetReps.match(/\d+/g);
+      const targetRepsStr =
+        typeof tex.targetReps === 'string'
+          ? tex.targetReps
+          : typeof tex.targetReps === 'number'
+          ? String(tex.targetReps)
+          : '10';
+      const parsedRepsMatch = targetRepsStr.match(/\d+/g);
       const defaultReps = parsedRepsMatch
         ? parseInt(parsedRepsMatch[parsedRepsMatch.length - 1], 10)
         : 10;
@@ -114,6 +120,7 @@ export class WorkoutRepository {
       startedAt: now,
       updatedAt: now,
       version: 1,
+      revision: 1,
       status: 'active',
       exercises,
       activeRestTimer: null,
@@ -152,6 +159,7 @@ export class WorkoutRepository {
       startedAt: now,
       updatedAt: now,
       version: 1,
+      revision: 1,
       status: 'active',
       exercises: [],
       activeRestTimer: null,
@@ -176,10 +184,13 @@ export class WorkoutRepository {
     if (!workout || workout.status !== 'active') {
       throw new Error('Only active workouts can be updated in draft.');
     }
+    const currentSeq = Math.max(Number(workout.revision ?? 0), Number(workout.version ?? 0));
+    const nextSeq = currentSeq + 1;
     const sessionToSave: WorkoutSession = {
       ...workout,
       updatedAt: new Date().toISOString(),
-      version: typeof workout.version === 'number' ? workout.version + 1 : 1,
+      version: nextSeq,
+      revision: nextSeq,
     };
     await workoutStorage.saveActiveWorkout(sessionToSave, scope);
     return sessionToSave;
@@ -884,11 +895,14 @@ export class WorkoutRepository {
     if (!active) return null;
     const trimmed = newName.trim();
     if (!trimmed) throw new Error('Workout name cannot be empty.');
+    const currentSeq = Math.max(Number(active.revision ?? 0), Number(active.version ?? 0));
+    const nextSeq = currentSeq + 1;
     const updated: WorkoutSession = {
       ...active,
       name: trimmed,
       updatedAt: new Date().toISOString(),
-      version: typeof active.version === 'number' ? active.version + 1 : 1,
+      version: nextSeq,
+      revision: nextSeq,
     };
     await workoutStorage.saveActiveWorkout(updated, resolvedScope);
     return updated;
@@ -1022,11 +1036,14 @@ export class WorkoutRepository {
       await this.discardActiveWorkout(resolvedScope);
     }
 
+    const currentSeq = Math.max(Number(abandoned.revision ?? 0), Number(abandoned.version ?? 0));
+    const nextSeq = currentSeq + 1;
     const restoredSession: WorkoutSession = {
       ...abandoned,
       status: 'active',
       updatedAt: new Date().toISOString(),
-      version: typeof abandoned.version === 'number' ? abandoned.version + 1 : 1,
+      version: nextSeq,
+      revision: nextSeq,
     };
 
     await workoutStorage.saveActiveWorkout(restoredSession, resolvedScope, {

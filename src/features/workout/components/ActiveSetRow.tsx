@@ -27,6 +27,14 @@ export interface ActiveSetRowProps {
     set: WorkoutSet,
     pendingUpdates?: Partial<WorkoutSet>,
   ) => void;
+  isCustomKeypadActive?: boolean;
+  activeFocusField?: 'weight' | 'reps' | 'rir' | null;
+  onFocusField?: (
+    exerciseId: string,
+    setId: string,
+    field: 'weight' | 'reps' | 'rir',
+    currentValue: string
+  ) => void;
 }
 
 export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow({
@@ -40,6 +48,9 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
   onDeleteSet,
   onUpdateSetField,
   onToggleCompleteSet,
+  isCustomKeypadActive,
+  activeFocusField,
+  onFocusField,
 }) {
   const { colors } = useAppTheme();
   const { width: windowWidth } = useWindowDimensions();
@@ -82,6 +93,16 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
       setLocalWeight(set.weight !== undefined && set.weight !== null ? String(set.weight) : '');
       setLocalReps(set.reps !== undefined && set.reps !== null ? String(set.reps) : '');
       setLocalRir(set.rir !== undefined && set.rir !== null ? String(set.rir) : '');
+    } else {
+      if (set.weight !== undefined && set.weight !== null) {
+        setLocalWeight(set.weight === 0 ? '' : String(set.weight));
+      }
+      if (set.reps !== undefined && set.reps !== null) {
+        setLocalReps(set.reps === 0 ? '' : String(set.reps));
+      }
+      if (set.rir !== undefined && set.rir !== null) {
+        setLocalRir(String(set.rir));
+      }
     }
     if (set.notes !== undefined) {
       setLocalNotes(set.notes);
@@ -324,12 +345,18 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
             placeholderTextColor="#64748B"
             keyboardType="decimal-pad"
             selectTextOnFocus
+            showSoftInputOnFocus={!isCustomKeypadActive}
+            inputMode={isCustomKeypadActive ? 'none' : 'decimal'}
+            onFocus={() =>
+              onFocusField?.(exercise.exerciseId, set.id, 'weight', localWeight)
+            }
             onChangeText={handleWeightChange}
             onBlur={commitWeight}
             onSubmitEditing={commitWeight}
             style={[
               styles.metricInput,
               set.completed ? styles.metricInputCompleted : null,
+              activeFocusField === 'weight' && styles.metricInputFocused,
             ]}
           />
         </View>
@@ -343,12 +370,18 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
             placeholderTextColor="#64748B"
             keyboardType="number-pad"
             selectTextOnFocus
+            showSoftInputOnFocus={!isCustomKeypadActive}
+            inputMode={isCustomKeypadActive ? 'none' : 'numeric'}
+            onFocus={() =>
+              onFocusField?.(exercise.exerciseId, set.id, 'reps', localReps)
+            }
             onChangeText={handleRepsChange}
             onBlur={commitReps}
             onSubmitEditing={commitReps}
             style={[
               styles.metricInput,
               set.completed ? styles.metricInputCompleted : null,
+              activeFocusField === 'reps' && styles.metricInputFocused,
             ]}
           />
         </View>
@@ -362,6 +395,11 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
             placeholderTextColor="#64748B"
             keyboardType="decimal-pad"
             selectTextOnFocus
+            showSoftInputOnFocus={!isCustomKeypadActive}
+            inputMode={isCustomKeypadActive ? 'none' : 'decimal'}
+            onFocus={() =>
+              onFocusField?.(exercise.exerciseId, set.id, 'rir', localRir)
+            }
             onChangeText={handleRirChange}
             onBlur={commitRir}
             onSubmitEditing={commitRir}
@@ -369,6 +407,7 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
               styles.metricInput,
               styles.metricInputRir,
               set.completed ? styles.metricInputCompleted : null,
+              activeFocusField === 'rir' && styles.metricInputFocused,
             ]}
           />
         </View>
@@ -791,6 +830,10 @@ const createStyles = (colors: any, isCompact: boolean = false) =>
       backgroundColor: 'rgba(34, 197, 94, 0.06)',
       borderColor: 'rgba(34, 197, 94, 0.25)',
       color: '#F8FAFC',
+    },
+    metricInputFocused: {
+      borderColor: colors.primary,
+      backgroundColor: 'rgba(0, 229, 153, 0.08)',
     },
     metricInputRir: {
       fontSize: isCompact ? 13 : 14,

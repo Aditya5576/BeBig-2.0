@@ -5,7 +5,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { ScreenContainer, ScreenScrollView, Text, Button, Card, Icon } from '../../src/components/ui';
 import { templateRepository, WorkoutTemplate } from '../../src/features/templates';
 import { workoutRepository, WorkoutSession } from '../../src/features/workout';
-import { useAuthStore } from '../../src/features/auth';
+import { useAuthStore, getCurrentUserScope } from '../../src/features/auth';
 import { adminService, AssignedWorkoutRecord } from '../../src/features/admin';
 import {
   getTemplateFocus,
@@ -143,14 +143,19 @@ export default function StartWorkoutScreen() {
     }
 
     // Non-blocking trainer inbox hydration (strictly zero network calls for guests)
-    const canFetchAssigned = authStatus === 'authenticated' && !isGuest && Boolean(authUserId);
+    const currentScope = getCurrentUserScope();
+    const effectiveUserId = authUserId || currentScope?.ownerId;
+    const canFetchAssigned =
+      (authStatus === 'authenticated' || Boolean(currentScope?.ownerId)) &&
+      !isGuest &&
+      Boolean(effectiveUserId);
     if (!canFetchAssigned) {
       setAssignedWorkouts([]);
       return;
     }
 
     try {
-      const assigned = await adminService.getMyAssignedWorkouts(authUserId);
+      const assigned = await adminService.getMyAssignedWorkouts(effectiveUserId);
       setAssignedWorkouts(assigned);
     } catch {
       setAssignedWorkouts([]);
@@ -175,9 +180,9 @@ export default function StartWorkoutScreen() {
         exerciseName: ex.exerciseName,
         categoryName: ex.categoryName,
         order: idx,
-        sets: ex.sets,
-        targetReps: ex.targetReps,
-        restTime: ex.restTime,
+        sets: typeof ex.sets === 'number' && ex.sets > 0 ? ex.sets : 3,
+        targetReps: ex.targetReps ? String(ex.targetReps) : '10',
+        restTime: typeof ex.restTime === 'number' && ex.restTime > 0 ? ex.restTime : 90,
       })),
     };
 
@@ -451,8 +456,8 @@ export default function StartWorkoutScreen() {
                         </Text>
                       </View>
                       <Text variant="caption" color="muted">
-                        {assignment.exercises.length}{' '}
-                        {assignment.exercises.length === 1 ? 'Exercise' : 'Exercises'}
+                        {(assignment.exercises || []).length}{' '}
+                        {(assignment.exercises || []).length === 1 ? 'Exercise' : 'Exercises'}
                       </Text>
                     </View>
 
@@ -467,7 +472,7 @@ export default function StartWorkoutScreen() {
                     ) : null}
 
                     <Text variant="caption" color="muted" numberOfLines={2}>
-                      {assignment.exercises.map((e) => e.exerciseName).join(' • ')}
+                      {(assignment.exercises || []).map((e) => e.exerciseName).join(' • ')}
                     </Text>
 
                     <Button

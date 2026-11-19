@@ -13,7 +13,11 @@ import { getCurrentUserScope, getUserScopedKey, purgeLegacyUnscopedStorage, User
 import { useAuthStore } from '../store/useAuthStore';
 import { syncMetadataStore } from '../../../services/sync/syncMetadataStore';
 import { profileService } from '../../profile/services/profileService';
-import { workoutStorage } from '../../workout/storage/workoutStorage';
+import {
+  workoutStorage,
+  BASE_COMPLETED_WORKOUTS_KEY,
+  BASE_COMPLETED_TOMBSTONES_KEY,
+} from '../../workout/storage/workoutStorage';
 import { clearExerciseMemoryCache } from '../../exercises/storage/customExerciseStorage';
 
 export interface DeleteAccountOptions {
@@ -39,6 +43,9 @@ export async function eraseLocalDeviceData(targetScope?: UserScope | null): Prom
     'bebig.sync.outbox',
     'bebig.active.workout',
     'bebig.completed.workouts',
+    BASE_COMPLETED_WORKOUTS_KEY,
+    BASE_COMPLETED_TOMBSTONES_KEY,
+    'bebig.workout.completed.deleted',
     'bebig.workout.templates',
     'bebig.custom.exercises',
     'bebig.guest.session',
@@ -46,6 +53,10 @@ export async function eraseLocalDeviceData(targetScope?: UserScope | null): Prom
   ];
 
   const baseScopedKeys = [
+    BASE_COMPLETED_WORKOUTS_KEY,
+    BASE_COMPLETED_TOMBSTONES_KEY,
+    'bebig.workout.completed',
+    'bebig.workout.completed.deleted',
     'bebig.workout.sessions',
     'bebig.workout.active',
     'bebig.workout.active.abandoned',
@@ -72,12 +83,43 @@ export async function eraseLocalDeviceData(targetScope?: UserScope | null): Prom
     }
   }
 
+  const failedRemovalKeys: string[] = [];
+
   // 1. Purge all identified keys from persistent platformStorage
   for (const key of keysToPurge) {
     try {
       await platformStorage.removeItem(key);
     } catch {
-      // Best-effort removal
+      failedRemovalKeys.push(key);
+    }
+  }
+
+  // 1b. Retry pass on any non-null read-backs
+  for (const key of keysToPurge) {
+    try {
+      const remaining = await platformStorage.getItem(key);
+      if (remaining !== null) {
+        await platformStorage.removeItem(key);
+      }
+    } catch {
+      if (!failedRemovalKeys.includes(key)) {
+        failedRemovalKeys.push(key);
+      }
+    }
+  }
+
+  // 1c. Final read-back verification: fail loudly if any key survives
+  const survivingKeys: string[] = [];
+  for (const key of keysToPurge) {
+    try {
+      const check = await platformStorage.getItem(key);
+      if (check !== null) {
+        survivingKeys.push(key);
+      }
+    } catch {
+      if (!survivingKeys.includes(key)) {
+        survivingKeys.push(key);
+      }
     }
   }
 
@@ -99,6 +141,14 @@ export async function eraseLocalDeviceData(targetScope?: UserScope | null): Prom
   profileService.clearMemoryCache();
   workoutStorage.clearMemoryCache();
   clearExerciseMemoryCache();
+
+  // Fail loudly if any key could not be purged or survived (P1-01)
+  if (survivingKeys.length > 0 || failedRemovalKeys.length > 0) {
+    const allProblemKeys = Array.from(new Set([...failedRemovalKeys, ...survivingKeys]));
+    throw new Error(
+      `Local device data erasure failed: keys [${allProblemKeys.join(', ')}] could not be completely removed from storage.`
+    );
+  }
 }
 
 /**
@@ -181,7 +231,14 @@ export async function deleteAccountAndCloudData(
     ownerId: user.id,
     ownerType: 'authenticated',
   };
-  await eraseLocalDeviceData(userScope);
+  try {
+    await eraseLocalDeviceData(userScope);
+  } catch (eraseErr: any) {
+    return {
+      success: false,
+      error: `Account cloud data deleted but local storage cleanup failed: ${eraseErr?.message || 'Storage cleanup error'}`,
+    };
+  }
 
   // 4. Cleanly sign out from the client session
   try {

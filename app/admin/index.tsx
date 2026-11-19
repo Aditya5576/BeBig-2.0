@@ -143,6 +143,8 @@ export default function AdminDashboardScreen({
   const [severityFilter, setSeverityFilter] = useState<DiagnosticsSeverityFilter>('all');
   const [expandedLogIds, setExpandedLogIds] = useState<Record<string, boolean>>({});
   const [isClearingLogs, setIsClearingLogs] = useState(false);
+  const [copiedLogId, setCopiedLogId] = useState<string | null>(null);
+  const [copiedAll, setCopiedAll] = useState(false);
 
   // Tab 3: Announcements
   const [announcements, setAnnouncements] = useState<AppAnnouncement[]>([]);
@@ -245,6 +247,47 @@ export default function AdminDashboardScreen({
       setIsClearingLogs(false);
     }
   }, []);
+
+  const copyToClipboard = useCallback(async (text: string) => {
+    try {
+      if (
+        typeof navigator !== 'undefined' &&
+        navigator.clipboard &&
+        typeof navigator.clipboard.writeText === 'function'
+      ) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch {}
+    return false;
+  }, []);
+
+  const handleCopySingleLog = useCallback(
+    async (log: ClientErrorLogEntry) => {
+      const formatted = `[${log.severity.toUpperCase()}] [${log.created_at}] [${log.route || 'unknown'}] [${formatDeviceBadge(log)}] v${log.app_version}\n${log.error_name}: ${log.error_message}${log.stack_trace ? `\n\nStack:\n${log.stack_trace}` : ''}`;
+      await copyToClipboard(formatted);
+      setCopiedLogId(log.id);
+      setTimeout(() => {
+        setCopiedLogId((current) => (current === log.id ? null : current));
+      }, 2000);
+    },
+    [copyToClipboard],
+  );
+
+  const handleCopyAllLogs = useCallback(async () => {
+    if (filteredLogs.length === 0) return;
+    const formatted = filteredLogs
+      .map(
+        (log) =>
+          `[${log.severity.toUpperCase()}] [${log.created_at}] [${log.route || 'unknown'}] [${formatDeviceBadge(log)}] v${log.app_version}\n${log.error_name}: ${log.error_message}${log.stack_trace ? `\n\nStack:\n${log.stack_trace}` : ''}`,
+      )
+      .join('\n\n----------------------------------------\n\n');
+    await copyToClipboard(formatted);
+    setCopiedAll(true);
+    setTimeout(() => {
+      setCopiedAll(false);
+    }, 2000);
+  }, [filteredLogs, copyToClipboard]);
 
   const handleCreateAnnouncement = useCallback(async () => {
     const trimmedTitle = newTitle.trim();
@@ -619,18 +662,41 @@ export default function AdminDashboardScreen({
               })}
             </View>
 
-            <Pressable
-              testID="diag-clear-logs-button"
-              style={styles.clearLogsButton}
-              onPress={() => {
-                void handleClearLogs();
-              }}
-              disabled={isClearingLogs || errorLogs.length === 0}
-            >
-              <Text style={styles.clearLogsButtonText}>
-                {isClearingLogs ? 'Clearing...' : 'Clear Logs'}
-              </Text>
-            </Pressable>
+            <View style={styles.diagActionsRow}>
+              <Pressable
+                testID="diag-copy-all-button"
+                style={[
+                  styles.copyLogsButton,
+                  copiedAll && styles.copyLogsButtonActive,
+                ]}
+                onPress={() => {
+                  void handleCopyAllLogs();
+                }}
+                disabled={filteredLogs.length === 0}
+              >
+                <Text
+                  style={[
+                    styles.copyLogsButtonText,
+                    copiedAll && { color: colors.primary },
+                  ]}
+                >
+                  {copiedAll ? '✓ Copied All!' : 'Copy All'}
+                </Text>
+              </Pressable>
+
+              <Pressable
+                testID="diag-clear-logs-button"
+                style={styles.clearLogsButton}
+                onPress={() => {
+                  void handleClearLogs();
+                }}
+                disabled={isClearingLogs || errorLogs.length === 0}
+              >
+                <Text style={styles.clearLogsButtonText}>
+                  {isClearingLogs ? 'Clearing...' : 'Clear Logs'}
+                </Text>
+              </Pressable>
+            </View>
           </View>
 
           <View style={styles.terminalBox}>
@@ -672,7 +738,7 @@ export default function AdminDashboardScreen({
                               : { color: '#FDE68A' },
                           ]}
                         >
-                          {log.severity.toUpperCase()}
+                          {(log.severity || 'error').toUpperCase()}
                         </Text>
                       </View>
                       <Text style={styles.logTimestamp}>
@@ -681,6 +747,29 @@ export default function AdminDashboardScreen({
                       <Text style={styles.logRoute}>{log.route}</Text>
                       <Text style={styles.logDevice}>{formatDeviceBadge(log)}</Text>
                       <Text style={styles.logVersion}>v{log.app_version}</Text>
+
+                      <Pressable
+                        testID={`diag-copy-log-${log.id}`}
+                        onPress={() => {
+                          void handleCopySingleLog(log);
+                        }}
+                        style={[
+                          styles.copySingleLogBtn,
+                          copiedLogId === log.id && styles.copySingleLogBtnActive,
+                        ]}
+                        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Copy error log ${log.id}`}
+                      >
+                        <Text
+                          style={[
+                            styles.copySingleLogText,
+                            copiedLogId === log.id && { color: colors.primary },
+                          ]}
+                        >
+                          {copiedLogId === log.id ? '✓ Copied!' : 'Copy'}
+                        </Text>
+                      </Pressable>
                     </View>
 
                     <Text style={styles.logMessage}>
@@ -1210,6 +1299,47 @@ const createStyles = (colors: ReturnType<typeof useAppTheme>['colors']) =>
       ...typography.caption,
       fontFamily: FONT_FAMILIES.bodySemiBold,
       color: colors.error,
+    },
+    diagActionsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+    },
+    copyLogsButton: {
+      paddingHorizontal: spacing.md,
+      paddingVertical: 6,
+      borderRadius: radii.sm,
+      borderWidth: 1,
+      borderColor: colors.border ?? '#334155',
+      backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    },
+    copyLogsButtonActive: {
+      borderColor: colors.primary,
+      backgroundColor: 'rgba(0, 229, 153, 0.1)',
+    },
+    copyLogsButtonText: {
+      ...typography.caption,
+      fontFamily: FONT_FAMILIES.bodySemiBold,
+      color: colors.textSecondary,
+    },
+    copySingleLogBtn: {
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      borderRadius: radii.xs,
+      borderWidth: 1,
+      borderColor: colors.border ?? '#334155',
+      backgroundColor: 'rgba(255, 255, 255, 0.04)',
+      marginLeft: 'auto',
+    },
+    copySingleLogBtnActive: {
+      borderColor: colors.primary,
+      backgroundColor: 'rgba(0, 229, 153, 0.12)',
+    },
+    copySingleLogText: {
+      fontSize: 10,
+      fontFamily: FONT_FAMILIES.bodySemiBold,
+      color: colors.textMuted,
+      fontWeight: '600',
     },
     terminalBox: {
       backgroundColor: '#060A12',

@@ -436,6 +436,13 @@ export const globalExerciseCatalogService = {
   },
 
   /**
+   * Synchronous 0ms retrieval of in-memory active global exercises.
+   */
+  getActiveGlobalExercisesSync(): Exercise[] {
+    return [...memoryActiveGlobalExercises];
+  },
+
+  /**
    * Creates or updates a curated global exercise (text/metadata only, zero bitmaps).
    */
   async saveGlobalExercise(input: SaveGlobalExerciseInput): Promise<GlobalExerciseRecord> {

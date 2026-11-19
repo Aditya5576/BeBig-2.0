@@ -5,7 +5,7 @@ export interface ExerciseFilterOptions {
   category?: string;
   equipment?: string;
   muscle?: string;
-  source?: 'all' | 'custom' | 'external';
+  source?: 'all' | 'custom' | 'external' | 'global';
   limit?: number;
   offset?: number;
 }

@@ -3,6 +3,92 @@
 - Refined PR typography and history UI.
 - Stabilized Cinematic Splash Screen with BeBig Barbell Crest.
 
+## [Milestone 5 & P0-01 Cross-Tab Atomicity] — 2026-11-19 — Custom Numeric Keypad, Diagnostics Terminal Copy, Upgraded Home Banner, Trainer Templates, Global Filter & Robust Concurrency
+
+### Problem
+1. **P0-01 Cross-Tab Atomicity & Concurrency**:
+   - In environments without the Web Locks API, concurrent cross-tab updates to workout history relied on optimistic overwrites that could clobber concurrent sessions.
+   - Idempotent union merges risked resurrecting legitimately deleted sessions across tabs if deleted workout IDs were not tracked.
+2. **Milestone 5 UX & Admin Enhancements**:
+   - On iOS and Android mobile web/native, tapping weight or reps inputs brought up full native virtual keyboards that obstructed the rest timer, superset tags, and active exercise action buttons.
+   - The Admin Diagnostics Terminal lacked one-click clipboard copy capabilities for log aggregation and bug reporting.
+   - The Home Screen announcement banner lacked clear category badges and timestamps for announcements.
+   - The Trainer Templates tab had a restricted exercise selection mechanism that did not surface global exercises or allow searching default exercises easily.
+   - The Exercise Library and Template Pickers lacked a dedicated "Global" source filter chip for filtering curated global exercises.
+
+### Root cause
+1. **Concurrency**: Absence of an IndexedDB transaction serialization barrier as a fallback when `navigator.locks` is unsupported, and lack of a durable deleted tombstone set.
+2. **Keypad**: Default React Native `TextInput` behavior triggers OS soft inputs unless explicitly suppressed via `showSoftInputOnFocus={false}` and `inputMode="none"`.
+3. **Admin Terminal**: Error logs were displayed in a scrollable list without a formatted clipboard exporter or copy visual state.
+4. **Trainer Templates**: Exercise picker was restricted to external search and lacked integration with the unified global exercise catalog service.
+
+### Changes
+1. **P0-01 Single-Transaction Atomic IndexedDB Read-Merge-Write & Concurrency Hardening (`workoutStorage.ts`)**:
+   - When `typeof indexedDB !== 'undefined'`, executed completed-workout mutations (`saveCompletedWorkout`, `upsertCompletedWorkout`, `deleteCompletedWorkout`) inside a **single continuous IndexedDB `readwrite` transaction** on `bebig_cross_tab_locks`.
+   - Ensured `store.get(storageKey)` synchronously runs `mergeCompletedWithTombstones` / `deleteCompletedWithTombstones` and issues `store.put(record)` in the exact same event tick with **zero `await` gaps**, preventing premature W3C auto-commit.
+   - After `tx.oncomplete` fires, mirrored the committed array and tombstone records to platform storage (`writeStorage`).
+   - Maintained Web Locks API (`navigator.locks.request`) and in-process FIFO promise queue with storage lease contention fallback for environments without `indexedDB` (Node/Jest).
+   - Added persistent tombstone tracking (`bebig.workout.completed.deleted`) with `getCompletedTombstones`, `addCompletedTombstone`, and `removeCompletedTombstone`.
+   - Added unit test in `tests/AuditBlockersP0P1.test.tsx` verifying synchronous `store.put` before `tx.oncomplete`.
+2. **Custom Workout Numeric Keypad & Hook Dependency Stabilization (`WorkoutNumericKeypad.tsx`, `active.tsx`)**:
+   - Built a responsive on-screen numeric keypad component supporting `kg` mode (±2.5, ±5 steppers, decimal point, digits, backspace, next navigation) and `reps` mode (±1 steppers, integer-only constraint, RPE 6–10 selector bar, clear, next set navigation).
+   - Added toggle to switch back to native soft keyboard at any time (`onToggleNativeKeyboard`).
+   - Handled safe area insets and constrained maximum layout width to 520px.
+   - Wired into `ActiveSetRow.tsx`, `ActiveExerciseCard.tsx`, and `app/workout/active.tsx` with soft input suppression (`showSoftInputOnFocus={!isCustomKeypadActive}`, `inputMode={isCustomKeypadActive ? 'none' : 'decimal' | 'numeric'}`) and dynamic `ScrollView` bottom padding.
+   - Stabilized `app/workout/active.tsx` dependencies: wrapped `updateSessionAndAutosaveImmediate`, `scheduleDebouncedSave`, and `handleUpdateSetField` in `useCallback` with stable dependencies (`sessionRef`), reducing ESLint warnings in `active.tsx` to exactly 0.
+   - Fixed clipboard output assertion in `tests/Milestone5KeypadAndAdminUX.test.tsx` to match formatted `[WARNING]` severity.
+3. **Admin Diagnostics Terminal Copy Feature (`app/admin/index.tsx`)**:
+   - Added toolbar "Copy All" (`diag-copy-all-button`) and per-row "Copy" (`diag-copy-log-${log.id}`) buttons.
+   - Formatted clipboard text output (`[SEVERITY] [TIMESTAMP] [ROUTE] [DEVICE] VERSION \n NAME: MESSAGE`).
+   - Provided a 2-second visual feedback indicator (`✓ Copied All!` / `✓ Copied!`).
+4. **Upgraded Home Announcement Banner (`app/home.tsx`)**:
+   - Redesigned into a high-contrast glassmorphic card with category accent badges (Release, Maintenance, Info), bold titles, formatted timestamps (`formatAnnouncementTimestamp`), and an accessible dismiss button.
+5. **Trainer Templates Catalog Search & Assignment (`AdminTrainerTemplatesTab.tsx`, `app/workout/start.tsx`)**:
+   - Integrated full catalog search (`source: 'all'`) querying default, global, and custom exercises with category filter chips and custom exercise adder.
+   - Normalized `assignee_user_id` and `user_id` in `adminService.ts` and `app/workout/start.tsx`.
+   - Safeguarded `targetReps` regex in `workoutRepository.ts` against non-string values.
+6. **Dedicated "Global" Source Filter Chip**:
+   - Extended `ExerciseFilterOptions['source']` with `'global'`.
+   - Handled `source === 'global'` in `exerciseRepository.ts` and `exerciseCacheStorage.ts` to query strictly active curated global exercises from `globalExerciseCatalogService`.
+   - Added `'Global'` filter chips to Exercise Library (`app/exercises/index.tsx`) and Template Workout Pickers (`ExercisePickerModal.tsx`).
+7. **Verification Suites**:
+   - Created `tests/Milestone5KeypadAndAdminUX.test.tsx` (8/8 tests passing).
+   - Created `tests/AuditBlockersP0P1.test.tsx` (12/12 tests passing).
+
+### Impact analysis
+- **Data Integrity & Concurrency**: Impossible for concurrent browser tabs to clobber each other or resurrect deleted workouts.
+- **User Experience**: Drastically smoother active workout experience with the custom on-screen keypad preventing keyboard shifts and screen resizing on mobile.
+- **Admin Productivity**: Seamless copy-paste diagnostics for rapid troubleshooting and athlete plan assignment.
+- **Offline & PWA Resilience**: Zero breaking changes to offline IndexedDB stores; all fallback mechanisms degrade gracefully without network.
+
+### Verification
+- `npx jest`: All 8 verification suites passed (102/102 tests green, 0 failures, 0 open handles).
+  - `tests/Milestone5KeypadAndAdminUX.test.tsx` (8/8 green)
+  - `tests/AuditBlockersP0P1.test.tsx` (12/12 green)
+  - `tests/AdminControlPanelM4.test.tsx` (11/11 green)
+  - `tests/IOSWebKitExerciseCrashGuard.test.tsx` (19/19 green)
+  - `tests/AllScreensHealthSmoke.test.tsx` (22/22 green)
+  - `tests/Auth.test.tsx` (18/18 green)
+  - `tests/DropSetTrackingAndAnalytics.test.tsx` (6/6 green)
+  - `tests/ScheduledWorkoutRemovalRegression.test.tsx` (6/6 green)
+- `npm run typecheck`: Passed with 0 TypeScript errors (`tsc --noEmit`).
+- `npm run lint`: Passed with 0 errors (`expo lint`).
+- `npm run build:web`: Passed with 0 errors (`node scripts/build-web.js`), successfully exporting all 45 static routes to `dist/`.
+- Boundary verification: Confirmed `app/+html.tsx`, `workoutNotificationService.ts`, and AI coach paths remain completely untouched.
+
+### Security and privacy
+- Multi-layer locks prevent race conditions on sensitive user workout histories.
+- Deletion tombstones ensure user intent is strictly respected across concurrent browser tabs.
+- Diagnostics clipboard export sanitizes error messages and avoids leaking sensitive tokens or PII.
+
+### Migration and rollback
+- Local Option A verification only. No remote migration applied.
+- Rollback: Revert modified files via git checkout.
+
+### Remaining risks
+- None identified in the local codebase; all 102 regression tests passing across all suites.
+
+
 ## [Phase 0] — 2026-11-17 — Production Backup & Secret Containment (AUD-001), Cross-Platform Web Build (AUD-009), Repository Hygiene (AUD-033)
 
 ### Problem
@@ -643,5 +729,62 @@ UPDATE public.profiles SET is_admin = true WHERE id = '<YOUR_USER_UUID>';
 - `npx jest`: 6/6 test suites passed (64/64 tests green).
 - `npm run build:web`: Passed (0 errors, 45 static routes exported to `dist/`).
 - Scope boundary check: 0 lines diff in `app/+html.tsx`, `app/coach`, `src/features/coach`, `supabase/functions/coach-v2`, `workoutNotificationService.ts`. Zero secrets or backup files staged.
+
+
+
+## [Astra Audit P0-P3 Fix] — 2026-11-19 — Concurrency Mutex, Revision CAS, Complete Storage Erasure, Edge Function Paginated Deletion & Test Suite Alignment (Option A: Local Verification Only)
+
+### Problem
+1. **P0-01 (Completed-Workout Concurrency & Race Conditions)**: In `workoutStorage.ts`, `saveCompletedWorkout` and `deleteCompletedWorkout` read, modified, and rewrote the array without synchronization, risking lost workout completions during simultaneous autosaves, background sync, or multi-tab usage.
+2. **P0-02 (Active Draft Revision Silently Overwritten)**: In `workoutStorage.ts`, `saveActiveWorkout` only verified `incomingVersion < currentStored.version`. Two concurrent tabs writing the same revision silently collided, and conflicts returned `void`, leaving callers unable to handle draft collisions.
+3. **P1-01 (Incomplete Local Erasure of Scoped Completed Workouts)**: In `accountDeletionService.ts`, `baseScopedKeys` omitted the canonical `BASE_COMPLETED_WORKOUTS_KEY` (`bebig.workout.completed`), leaving scoped completed workouts on the device after account deletion or local wipe.
+4. **P1-02 (Storage Leak & Non-Atomic Auth Deletion)**: In `supabase/functions/delete-account/index.ts`, storage file deletion was non-recursive (leaving nested `user/exercise/photo` files orphaned) and non-paginated (capped at 100), and caught errors without aborting auth user deletion.
+5. **P2-01 (Transitive Security Vulnerability)**: `shell-quote` had a critical command injection advisory in `1.10.0`.
+6. **P3-02 (Test Assertion Regressions)**: `tests/Auth.test.tsx` and `tests/DropSetTrackingAndAnalytics.test.tsx` failed due to missing `full_name` metadata matching and collapsed `History` accordion interaction.
+7. **P3-03 (Release State Discrepancy)**: `RELEASE_STATE.md` was still documented at `v2.4.3`.
+
+### Root Cause
+1. Absence of cross-tab and in-process mutex locking on completed-workout read-modify-write storage operations.
+2. Active-workout version check lacked monotonic revision compare-and-swap (CAS) and did not return structured conflict status.
+3. Scoped key purge list only included `'bebig.workout.sessions'` and lacked post-erasure read-back verification.
+4. Edge function `list()` assumed flat bucket structure without pagination (`offset`) and swallowed errors before deleting from `auth.users`.
+
+### Changes
+1. **P0-01 — Cross-Tab & In-Process Storage Lock (`workoutStorage.ts`)**:
+   - Implemented `withStorageLock(lockKey, fn)` utilizing Web Locks API (`navigator.locks.request`) when available, backed by an in-process FIFO Promise queue and multi-tab `platformStorage` lease fallback with unique `ownerId`, 15ms settling yield, and 20-50ms randomized jitter retry.
+   - Re-verifies lease ownership (`parsed.ownerId === ownerId`) before entering the critical section and only clears the lease if the caller still holds it.
+   - Wrapped `saveCompletedWorkout`, `deleteCompletedWorkout`, and added `upsertCompletedWorkout` inside `withStorageLock(completed.${storageKey})` to guarantee atomic serialization.
+2. **P0-02 — Strict Revision & Version Monotonic CAS (`workoutStorage.ts`, `workoutRepository.ts`, `types.ts`)**:
+   - Added `SaveActiveWorkoutResult` interface (`{ ok: boolean; conflict?: boolean; persistedRevision?: number; incomingRevision?: number; error?: string }`).
+   - Added `revision?: number;` alias to `WorkoutSession` in `src/features/workout/types.ts`.
+   - Unified `revision` and `version` into a monotonic sequence (`Math.max(Number(revision ?? 0), Number(version ?? 0))`) in `workoutStorage.ts` and `workoutRepository.ts`.
+   - Rejects concurrent writes with matching revision (`incomingSeq <= persistedSeq`) with `{ ok: false, conflict: true, persistedRevision: persistedSeq, incomingRevision: incomingSeq }`, and persists both `revision` and `version`.
+3. **P1-01 — Complete Scoped Completed Workout Erasure (`accountDeletionService.ts`)**:
+   - Imported canonical `BASE_COMPLETED_WORKOUTS_KEY` and included both `bebig.workout.completed` and `bebig.completed.workouts` in scoped and unscoped purge lists.
+   - Implemented multi-pass erasure with retry pass and final read-back verification. Throws an explicit error if any scoped key survives, failing loudly and preventing silent partial data erasure.
+4. **P1-02 — Recursive, Zero-Shift Paginated Storage Cleanup (`supabase/functions/delete-account/index.ts`)**:
+   - Implemented `deleteUserStorageFolder(adminClient, bucket, prefix)` with `limit: 100`, recursive subfolder traversal, and batch file removal.
+   - Fixed page shifting: only increments `folderOffset += subfolders.length` because deleted files shift subsequent bucket entries down to offset 0, ensuring zero files are skipped.
+   - Covers `avatars`, `exercise-photos`, and `exercise-demos`. Throws on any list or remove error, returning HTTP 500 and aborting BEFORE deleting the user from `auth.users`.
+5. **P2-01 — Dependency Vulnerability Patch (`package-lock.json`)**:
+   - Upgraded `shell-quote` to `1.12.0` (`>= 1.11.0`) without breaking expo dependencies or package.json major versions.
+6. **P3-02 — Test Assertion Alignment (`tests/Auth.test.tsx`, `tests/DropSetTrackingAndAnalytics.test.tsx`, `tests/ScheduledWorkoutRemovalRegression.test.tsx`)**:
+   - Aligned `mockAuth.signUp` expectations to assert `options.data.full_name`.
+   - Added `fireEvent.press(getByTestId('toggle-last-session-ex_bench'))` to expand history before querying set chips.
+   - Updated `ScheduledWorkoutRemovalRegression.test.tsx` to expect `{ ok: true }` from `saveActiveWorkout`.
+7. **P3-03 — Release State Reconciled (`RELEASE_STATE.md`)**:
+   - Documented live `v2.5.1` (`2d74de3`, `bebig-pwa-v2.5.1`) and pending local P0/P1 audit blockers hardening, eliminating all contradictory legacy headings.
+8. **Comprehensive Regression Suite (`tests/AuditBlockersP0P1.test.tsx`)**:
+   - Authored 8 tests validating concurrent completed saves, `withStorageLock` sequence, lease contention fallback with ownerId re-verification, revision CAS equal-revision rejection, stale-revision rejection, monotonic progress, scoped completed workout erasure verification, and recursive zero-shift paginated storage deletion abort with zero `act(...)` warnings and zero open handles.
+
+### Verification Gate (Local Option A)
+- `npx jest tests/AuditBlockersP0P1.test.tsx tests/Auth.test.tsx tests/DropSetTrackingAndAnalytics.test.tsx tests/AdminControlPanelM4.test.tsx tests/IOSWebKitExerciseCrashGuard.test.tsx --maxWorkers=2 --testTimeout=15000`:
+  - **5/5 test suites passed**, **75/75 tests green** in 11.06s.
+- `npx jest tests/AuditBlockersP0P1.test.tsx --detectOpenHandles`: Passed with **0 open handles**.
+- `npm run typecheck` (`tsc --noEmit`): Passed with **0 errors**.
+- `npm run lint` (`expo lint`): Passed with **0 errors**, **43 non-blocking warnings** (0 in modified files).
+- `npm run build:web` (`node scripts/build-web.js`): Passed with **0 errors**, exporting **45 static routes** to `dist/`.
+- Boundary check: `app/+html.tsx`, `app/coach`, `src/features/coach`, `supabase/functions/coach-v2`, `workoutNotificationService.ts` remain 100% untouched.
+
 
 

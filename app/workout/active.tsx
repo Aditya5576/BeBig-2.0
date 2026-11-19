@@ -24,6 +24,7 @@ import {
   ActiveExerciseCard,
   ActiveWorkoutTimer,
   ExerciseDetailModal,
+  WorkoutNumericKeypad,
   workoutNotificationService,
   getSupersetDisplayInfo,
 } from '../../src/features/workout';
@@ -106,13 +107,13 @@ export default function ActiveWorkoutScreen() {
     }
   }, [cancelDebouncedSave]);
 
-  const updateSessionAndAutosaveImmediate = async (newSession: WorkoutSession) => {
+  const updateSessionAndAutosaveImmediate = useCallback(async (newSession: WorkoutSession) => {
     setSession(newSession);
     sessionRef.current = newSession;
     await flushActiveWorkout(newSession);
-  };
+  }, [flushActiveWorkout]);
 
-  const scheduleDebouncedSave = (newSession: WorkoutSession) => {
+  const scheduleDebouncedSave = useCallback((newSession: WorkoutSession) => {
     setSession(newSession);
     sessionRef.current = newSession;
 
@@ -131,7 +132,7 @@ export default function ActiveWorkoutScreen() {
         // Silent error during debounced save
       }
     }, 300);
-  };
+  }, [cancelDebouncedSave]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
@@ -458,46 +459,200 @@ export default function ActiveWorkoutScreen() {
   };
 
   // Update set field (weight, reps, rir, notes)
-  const handleUpdateSetField = async (
-    exerciseId: string,
-    setId: string,
-    field: keyof WorkoutSet,
-    value: string,
-  ) => {
+  const handleUpdateSetField = useCallback(
+    async (
+      exerciseId: string,
+      setId: string,
+      field: keyof WorkoutSet,
+      value: string,
+    ) => {
+      const current = sessionRef.current || session;
+      if (!current) return;
+
+      let partial: Partial<WorkoutSet> = {};
+      if (field === 'weight') {
+        const num = parseFloat(value);
+        partial = { weight: isNaN(num) ? 0 : Math.max(0, num) };
+      } else if (field === 'reps') {
+        const num = parseInt(value, 10);
+        partial = { reps: isNaN(num) ? 0 : Math.max(0, num) };
+      } else if (field === 'rir') {
+        const num = parseFloat(value);
+        partial = { rir: isNaN(num) ? 0 : Math.min(10, Math.max(0, num)) };
+      } else if (field === 'notes') {
+        partial = { notes: value };
+      } else if (field === 'setType') {
+        partial = { setType: value as SetType };
+      }
+
+      try {
+        let updated = workoutRepository.updateSet(current, exerciseId, setId, partial);
+        if (field === 'setType') {
+          // If user changed setType to 'drop' while a rest timer is running for this exercise, dismiss it immediately
+          if (value === 'drop' && updated.activeRestTimer && updated.activeRestTimer.exerciseId === exerciseId) {
+            updated = workoutRepository.clearRestTimer(updated);
+          }
+          await updateSessionAndAutosaveImmediate(updated);
+        } else {
+          scheduleDebouncedSave(updated);
+        }
+      } catch {
+        // Silent error during active typing
+      }
+    },
+    [session, updateSessionAndAutosaveImmediate, scheduleDebouncedSave]
+  );
+
+  const [keypadFocus, setKeypadFocus] = useState<{
+    exerciseId: string;
+    setId: string;
+    field: 'weight' | 'reps' | 'rir';
+    value: string;
+  } | null>(null);
+  const [useNativeKeyboard, setUseNativeKeyboard] = useState(false);
+
+  const handleFocusField = useCallback(
+    (
+      exerciseId: string,
+      setId: string,
+      field: 'weight' | 'reps' | 'rir',
+      currentValue: string
+    ) => {
+      if (useNativeKeyboard) return;
+      setKeypadFocus({
+        exerciseId,
+        setId,
+        field,
+        value: currentValue,
+      });
+    },
+    [useNativeKeyboard]
+  );
+
+  const handleKeypadPress = useCallback(
+    (digit: string) => {
+      setKeypadFocus((prev) => {
+        if (!prev) return null;
+        let nextVal = prev.value;
+        if (digit === '.') {
+          if (nextVal.includes('.')) return prev;
+          nextVal = nextVal ? `${nextVal}.` : '0.';
+        } else {
+          nextVal = nextVal === '0' ? digit : `${nextVal}${digit}`;
+        }
+        void handleUpdateSetField(prev.exerciseId, prev.setId, prev.field, nextVal);
+        return { ...prev, value: nextVal };
+      });
+    },
+    [handleUpdateSetField]
+  );
+
+  const handleKeypadBackspace = useCallback(() => {
+    setKeypadFocus((prev) => {
+      if (!prev) return null;
+      const nextVal = prev.value.slice(0, -1);
+      void handleUpdateSetField(prev.exerciseId, prev.setId, prev.field, nextVal);
+      return { ...prev, value: nextVal };
+    });
+  }, [handleUpdateSetField]);
+
+  const handleKeypadClear = useCallback(() => {
+    setKeypadFocus((prev) => {
+      if (!prev) return null;
+      void handleUpdateSetField(prev.exerciseId, prev.setId, prev.field, '');
+      return { ...prev, value: '' };
+    });
+  }, [handleUpdateSetField]);
+
+  const handleKeypadStep = useCallback(
+    (delta: number) => {
+      setKeypadFocus((prev) => {
+        if (!prev) return null;
+        const currentNum = parseFloat(prev.value) || 0;
+        const nextNum = Math.max(0, Math.round((currentNum + delta) * 100) / 100);
+        const nextVal = nextNum === 0 ? '' : String(nextNum);
+        void handleUpdateSetField(prev.exerciseId, prev.setId, prev.field, nextVal);
+        return { ...prev, value: nextVal };
+      });
+    },
+    [handleUpdateSetField]
+  );
+
+  const handleKeypadSelectRpe = useCallback(
+    (rpe: number) => {
+      setKeypadFocus((prev) => {
+        if (!prev) return null;
+        const rir = Math.max(0, Math.min(10, Math.round((10 - rpe) * 10) / 10));
+        void handleUpdateSetField(prev.exerciseId, prev.setId, 'rir', String(rir));
+        return { ...prev, value: String(rpe) };
+      });
+    },
+    [handleUpdateSetField]
+  );
+
+  const handleKeypadNext = useCallback(() => {
+    if (!keypadFocus) return;
     const current = sessionRef.current || session;
     if (!current) return;
+    const currentEx = current.exercises.find((e) => e.exerciseId === keypadFocus.exerciseId);
+    if (!currentEx) return;
+    const currentSetIndex = currentEx.actualSets.findIndex((s) => s.id === keypadFocus.setId);
+    if (currentSetIndex === -1) return;
 
-    let partial: Partial<WorkoutSet> = {};
-    if (field === 'weight') {
-      const num = parseFloat(value);
-      partial = { weight: isNaN(num) ? 0 : Math.max(0, num) };
-    } else if (field === 'reps') {
-      const num = parseInt(value, 10);
-      partial = { reps: isNaN(num) ? 0 : Math.max(0, num) };
-    } else if (field === 'rir') {
-      const num = parseFloat(value);
-      partial = { rir: isNaN(num) ? 0 : Math.min(10, Math.max(0, num)) };
-    } else if (field === 'notes') {
-      partial = { notes: value };
-    } else if (field === 'setType') {
-      partial = { setType: value as SetType };
-    }
-
-    try {
-      let updated = workoutRepository.updateSet(current, exerciseId, setId, partial);
-      if (field === 'setType') {
-        // If user changed setType to 'drop' while a rest timer is running for this exercise, dismiss it immediately
-        if (value === 'drop' && updated.activeRestTimer && updated.activeRestTimer.exerciseId === exerciseId) {
-          updated = workoutRepository.clearRestTimer(updated);
-        }
-        await updateSessionAndAutosaveImmediate(updated);
+    if (keypadFocus.field === 'weight') {
+      const targetSet = currentEx.actualSets[currentSetIndex];
+      setKeypadFocus({
+        exerciseId: keypadFocus.exerciseId,
+        setId: keypadFocus.setId,
+        field: 'reps',
+        value:
+          targetSet.reps !== undefined && targetSet.reps !== null && targetSet.reps > 0
+            ? String(targetSet.reps)
+            : '',
+      });
+    } else {
+      if (currentSetIndex < currentEx.actualSets.length - 1) {
+        const nextSet = currentEx.actualSets[currentSetIndex + 1];
+        setKeypadFocus({
+          exerciseId: keypadFocus.exerciseId,
+          setId: nextSet.id,
+          field: 'weight',
+          value:
+            nextSet.weight !== undefined && nextSet.weight !== null && nextSet.weight > 0
+              ? String(nextSet.weight)
+              : '',
+        });
       } else {
-        scheduleDebouncedSave(updated);
+        const exIndex = current.exercises.findIndex((e) => e.exerciseId === keypadFocus.exerciseId);
+        if (exIndex < current.exercises.length - 1) {
+          const nextEx = current.exercises[exIndex + 1];
+          if (nextEx.actualSets.length > 0) {
+            const nextSet = nextEx.actualSets[0];
+            setKeypadFocus({
+              exerciseId: nextEx.exerciseId,
+              setId: nextSet.id,
+              field: 'weight',
+              value:
+                nextSet.weight !== undefined && nextSet.weight !== null && nextSet.weight > 0
+                  ? String(nextSet.weight)
+                  : '',
+            });
+            return;
+          }
+        }
+        setKeypadFocus(null);
       }
-    } catch {
-      // Silent error during active typing
     }
-  };
+  }, [keypadFocus, session]);
+
+  const handleKeypadDismiss = useCallback(() => {
+    setKeypadFocus(null);
+  }, []);
+
+  const handleToggleNativeKeyboard = useCallback(() => {
+    setUseNativeKeyboard((prev) => !prev);
+    setKeypadFocus(null);
+  }, []);
 
   // Toggle complete set
   const handleToggleCompleteSet = async (
@@ -752,9 +907,12 @@ export default function ActiveWorkoutScreen() {
 
   const baseBottomPadding = 80 + Math.max(insets.bottom, 12);
   const measuredRestHeight = restOverlayHeight > 0 ? restOverlayHeight : 112;
-  const dynamicBottomPadding = !!session?.activeRestTimer
-    ? Math.max(baseBottomPadding, measuredRestHeight + Math.max(insets.bottom, 12) + 24)
-    : baseBottomPadding;
+  const isKeypadOpen = Boolean(keypadFocus) && !useNativeKeyboard;
+  const keypadPadding = isKeypadOpen ? 320 : 0;
+  const dynamicBottomPadding = Math.max(
+    baseBottomPadding + keypadPadding,
+    (session?.activeRestTimer ? measuredRestHeight + Math.max(insets.bottom, 12) + 24 : 0) + keypadPadding
+  );
 
   return (
     <ScreenContainer>
@@ -877,6 +1035,10 @@ export default function ActiveWorkoutScreen() {
                     onUpdateSetField={handleUpdateSetField}
                     onToggleCompleteSet={handleToggleCompleteSet}
                     onPressExerciseDetail={handleOpenExerciseDetail}
+                    isCustomKeypadActive={Boolean(keypadFocus) && !useNativeKeyboard}
+                    activeFocusSetId={keypadFocus?.setId}
+                    activeFocusField={keypadFocus?.field}
+                    onFocusField={handleFocusField}
                     style={{
                       marginBottom: isLinkedWithNext
                         ? 8
@@ -1105,6 +1267,35 @@ export default function ActiveWorkoutScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Custom Workout Numeric Keypad */}
+      {keypadFocus && !useNativeKeyboard && (
+        <WorkoutNumericKeypad
+          visible={Boolean(keypadFocus) && !useNativeKeyboard}
+          mode={keypadFocus.field === 'weight' ? 'kg' : 'reps'}
+          value={keypadFocus.value}
+          rpeValue={keypadFocus.field === 'rir' ? keypadFocus.value : undefined}
+          exerciseName={
+            session?.exercises.find((e) => e.exerciseId === keypadFocus.exerciseId)?.exerciseName
+          }
+          setNumber={
+            (() => {
+              const ex = session?.exercises.find((e) => e.exerciseId === keypadFocus.exerciseId);
+              const s = ex?.actualSets.find((row) => row.id === keypadFocus.setId);
+              return s?.setNumber;
+            })()
+          }
+          useNativeKeyboard={useNativeKeyboard}
+          onKeyPress={handleKeypadPress}
+          onBackspace={handleKeypadBackspace}
+          onClear={handleKeypadClear}
+          onStep={handleKeypadStep}
+          onSelectRpe={keypadFocus.field !== 'weight' ? handleKeypadSelectRpe : undefined}
+          onNext={handleKeypadNext}
+          onDismiss={handleKeypadDismiss}
+          onToggleNativeKeyboard={handleToggleNativeKeyboard}
+        />
+      )}
     </ScreenContainer>
   );
 }

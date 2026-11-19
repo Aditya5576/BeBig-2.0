@@ -145,6 +145,7 @@ export interface AssignedWorkoutRecord {
   template_id: string | null;
   assigned_by: string | null;
   assignee_user_id: string;
+  user_id?: string;
   title: string;
   trainer_note: string;
   exercises: TrainerExerciseSpec[];
@@ -1063,7 +1064,8 @@ export const adminService = {
                 typeof rec.created_at === 'string' ? rec.created_at : new Date().toISOString(),
               template_id: typeof rec.template_id === 'string' ? rec.template_id : template.id,
               assigned_by: typeof rec.assigned_by === 'string' ? rec.assigned_by : null,
-              assignee_user_id: String(rec.assignee_user_id ?? ''),
+              assignee_user_id: String(rec.assignee_user_id ?? rec.user_id ?? ''),
+              user_id: String(rec.assignee_user_id ?? rec.user_id ?? ''),
               title: typeof rec.title === 'string' ? rec.title : template.title,
               trainer_note: typeof rec.trainer_note === 'string' ? rec.trainer_note : trainerNote,
               exercises: sanitizeTrainerExercises(rec.exercises),
@@ -1085,6 +1087,7 @@ export const adminService = {
       template_id: template.id,
       assigned_by: input.assignedBy ?? null,
       assignee_user_id: uid,
+      user_id: uid,
       title: template.title,
       trainer_note: trainerNote,
       exercises: exercisesSnapshot,
@@ -1165,7 +1168,7 @@ export const adminService = {
     const trimmedUserId = userId.trim();
     const localMatches = (await readLocalAssignedWorkouts()).filter(
       (item) =>
-        item.assignee_user_id === trimmedUserId &&
+        (item.assignee_user_id === trimmedUserId || (item as any).user_id === trimmedUserId) &&
         (item.status === 'assigned' || item.status === 'started'),
     );
 
@@ -1203,7 +1206,8 @@ export const adminService = {
                 typeof rec.created_at === 'string' ? rec.created_at : new Date().toISOString(),
               template_id: typeof rec.template_id === 'string' ? rec.template_id : null,
               assigned_by: typeof rec.assigned_by === 'string' ? rec.assigned_by : null,
-              assignee_user_id: String(rec.assignee_user_id ?? trimmedUserId),
+              assignee_user_id: String(rec.assignee_user_id ?? rec.user_id ?? trimmedUserId),
+              user_id: String(rec.assignee_user_id ?? rec.user_id ?? trimmedUserId),
               title: typeof rec.title === 'string' ? rec.title : '',
               trainer_note: typeof rec.trainer_note === 'string' ? rec.trainer_note : '',
               exercises: sanitizeTrainerExercises(rec.exercises),

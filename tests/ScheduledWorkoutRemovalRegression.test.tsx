@@ -76,7 +76,7 @@ describe('M1: Scheduled Workout Removal Regression Verification', () => {
 
   describe('2. Normal Workout Creation & Execution', () => {
     it('starts an empty workout successfully without schedule linkage', async () => {
-      jest.spyOn(workoutStorage, 'saveActiveWorkout').mockResolvedValue(undefined);
+      jest.spyOn(workoutStorage, 'saveActiveWorkout').mockResolvedValue({ ok: true });
 
       const session = await workoutRepository.startEmptyWorkout('Quick Chest Day');
 

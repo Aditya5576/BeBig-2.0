@@ -138,6 +138,35 @@ export class ExerciseRepository {
     const rawQuery = options.query?.trim();
     const hasQuery = Boolean(rawQuery && rawQuery.length > 0);
 
+    // If source is strictly 'global', return only active global catalog exercises
+    if (options.source === 'global') {
+      try {
+        const activeGlobal = await globalExerciseCatalogService.getActiveGlobalExercises();
+        let matches: Exercise[] = [];
+        if (hasQuery) {
+          matches = filterAndRankExercises(activeGlobal, rawQuery, options.category);
+        } else {
+          matches = activeGlobal.filter((ex) => {
+            if (options.category && options.category !== 'all' && ex.category !== options.category) {
+              return false;
+            }
+            return true;
+          });
+        }
+        return {
+          exercises: matches,
+          totalCount: matches.length,
+          hasMore: false,
+        };
+      } catch {
+        return {
+          exercises: [],
+          totalCount: 0,
+          hasMore: false,
+        };
+      }
+    }
+
     // 1. Retrieve local custom exercises (strictly isolated under active/provided user namespace)
     let customMatches: Exercise[] = [];
     if (isFirstPage && (!options.source || options.source === 'all' || options.source === 'custom')) {
@@ -299,7 +328,7 @@ export class ExerciseRepository {
 
     // 2b. Fetch active curated global exercises (text-only metadata, never overwrites custom exercises)
     let globalCatalogMatches: Exercise[] = [];
-    if (isFirstPage && options.source !== 'custom') {
+    if (isFirstPage && options.source !== 'custom' && options.source !== 'external') {
       try {
         const activeGlobal = await globalExerciseCatalogService.getActiveGlobalExercises();
         if (hasQuery) {

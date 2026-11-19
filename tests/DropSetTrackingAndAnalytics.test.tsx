@@ -369,7 +369,7 @@ describe('BeBig 2.0 — Drop Sets & Set Type Tagging with Analytics & PR Protect
         setType: 'drop',
       });
 
-      await workoutStorage.saveActiveWorkout(session);
+      await workoutRepository.updateActiveWorkout(session);
 
       const screen = await render(<ActiveWorkoutScreen />);
 
@@ -411,7 +411,7 @@ describe('BeBig 2.0 — Drop Sets & Set Type Tagging with Analytics & PR Protect
         setType: 'normal',
       });
 
-      await workoutStorage.saveActiveWorkout(session);
+      await workoutRepository.updateActiveWorkout(session);
 
       const screen = await render(<ActiveWorkoutScreen />);
 
@@ -577,6 +577,10 @@ describe('BeBig 2.0 — Drop Sets & Set Type Tagging with Analytics & PR Protect
           onToggleCompleteSet={jest.fn()}
         />,
       );
+
+      // Expand the collapsible History section to reveal last performance set chips
+      const historyToggle = getByTestId('toggle-last-session-ex_bench');
+      await fireEvent.press(historyToggle);
 
       const chip2 = getByTestId('last-time-set-chip-ex_bench-2');
       expect(chip2).toBeTruthy();

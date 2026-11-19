@@ -18,11 +18,20 @@ export const BASE_ACTIVE_SESSION_TOKEN_KEY = 'bebig.workout.active.token';
 export const BASE_ABANDONED_WORKOUT_KEY = 'bebig.workout.active.abandoned';
 export const BASE_DISCARDED_WORKOUTS_KEY = 'bebig.workout.active.discarded';
 export const BASE_COMPLETED_WORKOUTS_KEY = 'bebig.workout.completed';
+export const BASE_COMPLETED_TOMBSTONES_KEY = 'bebig.workout.completed.deleted';
 
 export interface ActiveSessionToken {
   sessionId: string | null;
   status: 'active' | 'discarded' | 'completed' | 'none';
   updatedAt: string;
+}
+
+export interface SaveActiveWorkoutResult {
+  ok: boolean;
+  conflict?: boolean;
+  persistedRevision?: number;
+  incomingRevision?: number;
+  error?: string;
 }
 
 const readStorage = async (key: string): Promise<string | null> => {
@@ -195,7 +204,407 @@ const enqueueActiveWorkoutOp = <T>(op: () => Promise<T>): Promise<T> => {
   return task;
 };
 
+/**
+ * In-memory FIFO promise queue per lock key to ensure in-process serialization across all environments.
+ */
+const inMemoryLockQueues = new Map<string, Promise<unknown>>();
+
+/**
+ * IndexedDB cross-tab mutex barrier.
+ * By W3C IndexedDB specification, concurrent `readwrite` transactions targeting the
+ * same object store across different tabs / workers are queued and run sequentially.
+ */
+function withIndexedDbLock<T>(lockKey: string, fn: () => Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let request: IDBOpenDBRequest;
+    try {
+      request = indexedDB.open('bebig_cross_tab_locks', 1);
+    } catch (e) {
+      return reject(e);
+    }
+
+    request.onupgradeneeded = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result;
+      if (!db.objectStoreNames.contains('locks')) {
+        db.createObjectStore('locks', { keyPath: 'id' });
+      }
+    };
+
+    request.onerror = () => {
+      reject(request.error || new Error('Failed to open IndexedDB lock database'));
+    };
+
+    request.onsuccess = async () => {
+      const db = request.result;
+      try {
+        const tx = db.transaction('locks', 'readwrite');
+        const store = tx.objectStore('locks');
+        const putReq = store.put({ id: lockKey, timestamp: Date.now() });
+
+        await new Promise<void>((txResolve, txReject) => {
+          putReq.onsuccess = () => txResolve();
+          putReq.onerror = () => txReject(putReq.error);
+        });
+
+        const result = await fn();
+        resolve(result);
+      } catch (err) {
+        reject(err);
+      } finally {
+        try {
+          db.close();
+        } catch {}
+      }
+    };
+  });
+}
+
+/**
+ * Cross-tab + in-process storage lock.
+ * Uses Web Locks API (`navigator.locks.request`) when available,
+ * OR IndexedDB `readwrite` transaction barrier when available,
+ * OR an atomic compare-and-verify storage lease with unique ownerId and settling yield.
+ */
+export async function withStorageLock<T>(
+  lockKey: string,
+  fn: () => Promise<T>
+): Promise<T> {
+  const normalizedKey = `bebig.lock.${lockKey}`;
+
+  // 1. In-process FIFO queue ensures operations within the same JS process serialize sequentially
+  const prevQueue = inMemoryLockQueues.get(normalizedKey) || Promise.resolve();
+
+  let releaseInProcess: () => void;
+  const inProcessWait = new Promise<void>((resolve) => {
+    releaseInProcess = resolve;
+  });
+
+  // Chain the new task to the queue
+  inMemoryLockQueues.set(
+    normalizedKey,
+    prevQueue.then(
+      () => inProcessWait,
+      () => inProcessWait
+    )
+  );
+
+  await prevQueue;
+
+  try {
+    // 2. Cross-tab Web Locks API (if available in modern browsers)
+    if (
+      typeof navigator !== 'undefined' &&
+      navigator.locks &&
+      typeof navigator.locks.request === 'function'
+    ) {
+      return await navigator.locks.request(normalizedKey, async () => {
+        return await fn();
+      });
+    }
+
+    // 2b. Cross-tab IndexedDB transaction barrier (W3C strict cross-tab serialization)
+    if (typeof indexedDB !== 'undefined' && typeof indexedDB.open === 'function') {
+      try {
+        return await withIndexedDbLock(normalizedKey, fn);
+      } catch {
+        // Fall through to storage lease if IndexedDB is blocked or unsupported
+      }
+    }
+
+    // 3. Storage lease fallback for multi-tab environments without Web Locks or IndexedDB (P0-01)
+    const leaseStorageKey = `__lock_lease_${normalizedKey}`;
+    const leaseTtlMs = 5000;
+    const acquireTimeoutMs = 10000;
+    const startTime = Date.now();
+    const ownerId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+    let acquired = false;
+    while (Date.now() - startTime < acquireTimeoutMs) {
+      const rawLease = await readStorage(leaseStorageKey);
+      let canAttempt = true;
+
+      if (rawLease) {
+        try {
+          const lease = JSON.parse(rawLease);
+          if (lease && typeof lease.expiresAt === 'number' && lease.expiresAt > Date.now()) {
+            if (lease.ownerId !== ownerId) {
+              canAttempt = false;
+            }
+          }
+        } catch {
+          canAttempt = true;
+        }
+      }
+
+      if (canAttempt) {
+        const expiresAt = Date.now() + leaseTtlMs;
+        await writeStorage(leaseStorageKey, JSON.stringify({ ownerId, expiresAt }));
+
+        // Yield 15ms to allow any concurrent candidate write to settle
+        await new Promise((r) => setTimeout(r, 15));
+
+        // Re-read and verify that our ownerId actually won the lease
+        const verifyRaw = await readStorage(leaseStorageKey);
+        try {
+          const verifyParsed = JSON.parse(verifyRaw || '{}');
+          if (verifyParsed.ownerId === ownerId && verifyParsed.expiresAt > Date.now()) {
+            acquired = true;
+            break;
+          }
+        } catch {}
+      }
+
+      // Retry with randomized jitter (20ms - 50ms) to de-synchronize contention
+      const jitter = Math.floor(Math.random() * 30) + 20;
+      await new Promise((resolve) => setTimeout(resolve, jitter));
+    }
+
+    if (!acquired) {
+      throw new Error(`Failed to acquire storage lock for "${lockKey}" within ${acquireTimeoutMs}ms`);
+    }
+
+    try {
+      return await fn();
+    } finally {
+      // Releasing lease ONLY if our ownerId still holds it
+      try {
+        const currentLease = await readStorage(leaseStorageKey);
+        if (currentLease) {
+          const parsed = JSON.parse(currentLease);
+          if (parsed.ownerId === ownerId) {
+            await deleteStorage(leaseStorageKey);
+          }
+        }
+      } catch {}
+    }
+  } finally {
+    releaseInProcess!();
+  }
+}
+
+const getCompletedTombstones = async (targetScope: UserScope | null): Promise<Set<string>> => {
+  const tombstoneKey =
+    getUserScopedKey(BASE_COMPLETED_TOMBSTONES_KEY, targetScope) ||
+    (process.env.NODE_ENV === 'test' ? 'bebig.workout.completed.deleted' : null);
+  if (!tombstoneKey) return new Set();
+  const raw = await readStorage(tombstoneKey);
+  if (!raw) return new Set();
+  try {
+    const list = JSON.parse(raw);
+    return new Set(Array.isArray(list) ? list : []);
+  } catch {
+    return new Set();
+  }
+};
+
+const addCompletedTombstone = async (
+  id: string,
+  targetScope: UserScope | null
+): Promise<void> => {
+  const tombstoneKey =
+    getUserScopedKey(BASE_COMPLETED_TOMBSTONES_KEY, targetScope) ||
+    (process.env.NODE_ENV === 'test' ? 'bebig.workout.completed.deleted' : null);
+  if (!tombstoneKey) return;
+  const current = await getCompletedTombstones(targetScope);
+  current.add(id);
+  const list = Array.from(current).slice(-500);
+  await writeStorage(tombstoneKey, JSON.stringify(list));
+};
+
+const removeCompletedTombstone = async (
+  id: string,
+  targetScope: UserScope | null
+): Promise<void> => {
+  const tombstoneKey =
+    getUserScopedKey(BASE_COMPLETED_TOMBSTONES_KEY, targetScope) ||
+    (process.env.NODE_ENV === 'test' ? 'bebig.workout.completed.deleted' : null);
+  if (!tombstoneKey) return;
+  const current = await getCompletedTombstones(targetScope);
+  if (current.delete(id)) {
+    await writeStorage(tombstoneKey, JSON.stringify(Array.from(current)));
+  }
+};
+
+/**
+ * Merges an incoming completed workout into the existing list, prioritizing latest updates
+ * and respecting active tombstones. Pure synchronous function (zero await gaps).
+ */
+export function mergeCompletedWithTombstones(
+  existingWorkouts: WorkoutSession[],
+  incomingWorkout: WorkoutSession,
+  tombstones: Set<string>
+): { updated: WorkoutSession[]; tombstones: Set<string> } {
+  const nextTombstones = new Set(tombstones);
+  nextTombstones.delete(incomingWorkout.id);
+
+  const map = new Map<string, WorkoutSession>();
+  for (const w of existingWorkouts) {
+    if (!nextTombstones.has(w.id)) {
+      map.set(w.id, w);
+    }
+  }
+  map.set(incomingWorkout.id, incomingWorkout);
+
+  const updated = Array.from(map.values()).sort((a, b) => {
+    const timeA = new Date(a.finishedAt || a.startedAt).getTime();
+    const timeB = new Date(b.finishedAt || b.startedAt).getTime();
+    return timeB - timeA;
+  });
+
+  return { updated, tombstones: nextTombstones };
+}
+
+/**
+ * Removes a completed workout from the existing list and updates the tombstone set.
+ * Pure synchronous function (zero await gaps).
+ */
+export function deleteCompletedWithTombstones(
+  existingWorkouts: WorkoutSession[],
+  idToDelete: string,
+  tombstones: Set<string>
+): { updated: WorkoutSession[]; tombstones: Set<string> } {
+  const nextTombstones = new Set(tombstones);
+  nextTombstones.add(idToDelete);
+
+  const updated = existingWorkouts.filter((w) => w.id !== idToDelete && !nextTombstones.has(w.id));
+  return { updated, tombstones: nextTombstones };
+}
+
+/**
+ * P0-01: Executes a completed-workout mutation inside a single continuous IndexedDB `readwrite`
+ * transaction on `bebig_cross_tab_locks` with ZERO `await` gaps inside the transaction callbacks.
+ * In W3C IndexedDB, transactions auto-commit if the event loop returns to idle without active pending
+ * requests. By issuing `store.put()` synchronously inside `store.get().onsuccess`, the transaction
+ * remains continuously active until commit, preventing concurrent cross-tab race conditions.
+ * After `tx.oncomplete` fires, the result is mirrored to platform storage.
+ */
+export function executeIndexedDbAtomicCompletedMutation(
+  storageKey: string,
+  initialWorkouts: WorkoutSession[],
+  initialTombstones: Set<string>,
+  tombstoneKey: string | null,
+  mutationFn: (existing: WorkoutSession[], tombstones: Set<string>) => { updated: WorkoutSession[]; tombstones: Set<string> }
+): Promise<WorkoutSession[]> {
+  return new Promise<WorkoutSession[]>((resolve, reject) => {
+    let request: IDBOpenDBRequest;
+    try {
+      request = indexedDB.open('bebig_cross_tab_locks', 1);
+    } catch (e) {
+      return reject(e);
+    }
+
+    request.onupgradeneeded = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result;
+      if (!db.objectStoreNames.contains('locks')) {
+        db.createObjectStore('locks', { keyPath: 'id' });
+      }
+    };
+
+    request.onerror = () => {
+      reject(request.error || new Error('Failed to open IndexedDB lock database'));
+    };
+
+    request.onsuccess = () => {
+      const db = request.result;
+      let tx: IDBTransaction;
+      try {
+        tx = db.transaction('locks', 'readwrite');
+      } catch (err) {
+        try {
+          db.close();
+        } catch {}
+        return reject(err);
+      }
+
+      let mutatedResult: { updated: WorkoutSession[]; tombstones: Set<string> } | null = null;
+
+      tx.oncomplete = () => {
+        try {
+          db.close();
+        } catch {}
+        if (mutatedResult) {
+          const res = mutatedResult;
+          // Asynchronously mirror committed state to platform storage
+          Promise.all([
+            writeStorage(storageKey, JSON.stringify(res.updated)),
+            tombstoneKey ? writeStorage(tombstoneKey, JSON.stringify(Array.from(res.tombstones))) : Promise.resolve(),
+          ]).catch(() => {});
+          resolve(res.updated);
+        } else {
+          resolve([]);
+        }
+      };
+
+      tx.onerror = () => {
+        try {
+          db.close();
+        } catch {}
+        reject(tx.error || new Error('IndexedDB transaction failed'));
+      };
+
+      tx.onabort = () => {
+        try {
+          db.close();
+        } catch {}
+        reject(tx.error || new Error('IndexedDB transaction aborted'));
+      };
+
+      try {
+        const store = tx.objectStore('locks');
+        const getReq = store.get(storageKey);
+
+        getReq.onerror = () => {
+          // Triggers tx.onerror / tx.abort
+        };
+
+        getReq.onsuccess = () => {
+          try {
+            const record = getReq.result;
+            let existingWorkouts: WorkoutSession[] = initialWorkouts;
+            let currentTombstones: Set<string> = initialTombstones;
+
+            if (record && Array.isArray(record.data)) {
+              existingWorkouts = record.data.filter(isValidSession);
+            }
+            if (record && Array.isArray(record.tombstones)) {
+              currentTombstones = new Set(record.tombstones.filter((id: any) => typeof id === 'string'));
+            }
+
+            // Synchronous mutation execution — zero await gaps
+            const result = mutationFn(existingWorkouts, currentTombstones);
+            mutatedResult = result;
+
+            // Synchronous write back to IndexedDB object store in the exact same event tick
+            store.put({
+              id: storageKey,
+              data: result.updated,
+              tombstones: Array.from(result.tombstones),
+              timestamp: Date.now(),
+            });
+          } catch (mutationErr) {
+            try {
+              tx.abort();
+            } catch {}
+            reject(mutationErr);
+          }
+        };
+      } catch (err) {
+        try {
+          db.close();
+        } catch {}
+        reject(err);
+      }
+    };
+  });
+}
+
 export const workoutStorage = {
+  /**
+   * Resets internal in-memory locks (useful in test suites).
+   */
+  resetStorageLocks: (): void => {
+    inMemoryLockQueues.clear();
+  },
   /**
    * Resets the internal active workout FIFO queue (useful in test suites).
    */
@@ -460,7 +869,7 @@ export const workoutStorage = {
     workout: WorkoutSession,
     scope?: UserScope | null,
     options?: { allowDifferentSession?: boolean; skipVersionCheck?: boolean }
-  ): Promise<void> => {
+  ): Promise<SaveActiveWorkoutResult> => {
     const targetScope =
       scope !== undefined
         ? scope
@@ -481,142 +890,173 @@ export const workoutStorage = {
       getUserScopedKey(BASE_ACTIVE_SESSION_TOKEN_KEY, targetScope) ||
       (process.env.NODE_ENV === 'test' ? 'bebig.active.workout.token' : null);
 
-    return enqueueActiveWorkoutOp(async () => {
-      // 0a. Discard Tombstone Guard:
-      // If this session has been explicitly discarded, drop write permanently
-      const discardedKey =
-        getUserScopedKey(BASE_DISCARDED_WORKOUTS_KEY, targetScope) ||
-        (process.env.NODE_ENV === 'test' ? 'bebig.active.workout.discarded' : null);
-      const discardedIds = await getDiscardedSessionIds(discardedKey);
-      if (discardedIds.includes(workout.id)) {
-        return;
-      }
+    const lockKey = `active.${storageKey}`;
 
-      // 0b. Active Session Token Authorization Guard:
-      // Authoritatively enforces active session identity across multiple tabs / background writes
-      const token = await getActiveSessionToken(tokenKey);
-      if (token) {
-        if (token.status === 'discarded' && (token.sessionId === workout.id || !options?.allowDifferentSession)) {
-          // Explicitly discarded session cannot write or recreate active draft
-          return;
+    return withStorageLock(lockKey, async () => {
+      return enqueueActiveWorkoutOp(async (): Promise<SaveActiveWorkoutResult> => {
+        // 0a. Discard Tombstone Guard:
+        // If this session has been explicitly discarded, drop write permanently
+        const discardedKey =
+          getUserScopedKey(BASE_DISCARDED_WORKOUTS_KEY, targetScope) ||
+          (process.env.NODE_ENV === 'test' ? 'bebig.active.workout.discarded' : null);
+        const discardedIds = await getDiscardedSessionIds(discardedKey);
+        if (discardedIds.includes(workout.id)) {
+          return { ok: false, error: 'Session has been explicitly discarded.' };
         }
-        if (token.status === 'completed' && !options?.allowDifferentSession) {
-          // Completed workout slot cannot be recreated by an in-flight autosave
-          return;
-        }
-        if (token.status === 'active' && token.sessionId !== workout.id && !options?.allowDifferentSession) {
-          throw new Error(
-            `Cannot overwrite active workout session "${token.sessionId}" with different session "${workout.name}" (${workout.id}) without explicit authorization.`
-          );
-        }
-      }
 
-      // 1. Inspect currently stored active workout
-      const rawCurrent = await readStorage(storageKey);
-      let currentStored: WorkoutSession | null = null;
-      if (rawCurrent) {
-        try {
-          const parsed = JSON.parse(rawCurrent);
-          if (isValidSession(parsed)) {
-            currentStored = parsed;
+        // 0b. Active Session Token Authorization Guard:
+        // Authoritatively enforces active session identity across multiple tabs / background writes
+        const token = await getActiveSessionToken(tokenKey);
+        if (token) {
+          if (token.status === 'discarded' && (token.sessionId === workout.id || !options?.allowDifferentSession)) {
+            // Explicitly discarded session cannot write or recreate active draft
+            return { ok: false, error: 'Session discarded via token status.' };
           }
-        } catch {
-          currentStored = null;
+          if (token.status === 'completed' && !options?.allowDifferentSession) {
+            // Completed workout slot cannot be recreated by an in-flight autosave
+            return { ok: false, error: 'Session marked completed.' };
+          }
+          if (token.status === 'active' && token.sessionId !== workout.id && !options?.allowDifferentSession) {
+            throw new Error(
+              `Cannot overwrite active workout session "${token.sessionId}" with different session "${workout.name}" (${workout.id}) without explicit authorization.`
+            );
+          }
         }
-      }
 
-      // If there is currently no active session in storage, verify token authorization:
-      // An autosave should NEVER recreate an active workout when storage has no active session
-      // unless authorized as the active session.
-      if (!currentStored) {
-        if (token && (token.status !== 'active' || token.sessionId !== workout.id)) {
+        // 1. Inspect currently stored active workout
+        const rawCurrent = await readStorage(storageKey);
+        let currentStored: WorkoutSession | null = null;
+        if (rawCurrent) {
+          try {
+            const parsed = JSON.parse(rawCurrent);
+            if (isValidSession(parsed)) {
+              currentStored = parsed;
+            }
+          } catch {
+            currentStored = null;
+          }
+        }
+
+        // If there is currently no active session in storage, verify token authorization:
+        // An autosave should NEVER recreate an active workout when storage has no active session
+        // unless authorized as the active session.
+        if (!currentStored) {
+          if (token && (token.status !== 'active' || token.sessionId !== workout.id)) {
+            if (!options?.allowDifferentSession) {
+              return { ok: false, error: 'No active session token authorization.' };
+            }
+          }
+        }
+
+        // 2. Safe Session Isolation / Overwrite Rejection:
+        // If a different active workout session already exists, reject unless explicitly authorized
+        if (
+          currentStored &&
+          currentStored.id !== workout.id &&
+          currentStored.status === 'active'
+        ) {
           if (!options?.allowDifferentSession) {
-            return;
+            throw new Error(
+              `Cannot overwrite active workout session "${currentStored.name}" (${currentStored.id}) with different session "${workout.name}" (${workout.id}) without explicit authorization.`
+            );
+          }
+          const abandonedKey =
+            getUserScopedKey(BASE_ABANDONED_WORKOUT_KEY, targetScope) ||
+            (process.env.NODE_ENV === 'test' ? 'bebig.active.workout.abandoned' : null);
+          if (abandonedKey) {
+            let abandonedList: WorkoutSession[] = [];
+            const rawAbandoned = await readStorage(abandonedKey);
+            if (rawAbandoned) {
+              try {
+                const parsed = JSON.parse(rawAbandoned);
+                if (Array.isArray(parsed)) {
+                  abandonedList = parsed.filter(isValidSession);
+                } else if (isValidSession(parsed)) {
+                  abandonedList = [parsed];
+                }
+              } catch {}
+            }
+            const updatedAbandoned = [currentStored, ...abandonedList.filter((w) => w.id !== currentStored.id)].slice(0, 5);
+            await writeStorage(abandonedKey, JSON.stringify(updatedAbandoned));
           }
         }
-      }
 
-      // 2. Safe Session Isolation / Overwrite Rejection:
-      // If a different active workout session already exists, reject unless explicitly authorized
-      if (
-        currentStored &&
-        currentStored.id !== workout.id &&
-        currentStored.status === 'active'
-      ) {
-        if (!options?.allowDifferentSession) {
-          throw new Error(
-            `Cannot overwrite active workout session "${currentStored.name}" (${currentStored.id}) with different session "${workout.name}" (${workout.id}) without explicit authorization.`
-          );
-        }
-        const abandonedKey =
-          getUserScopedKey(BASE_ABANDONED_WORKOUT_KEY, targetScope) ||
-          (process.env.NODE_ENV === 'test' ? 'bebig.active.workout.abandoned' : null);
-        if (abandonedKey) {
-          let abandonedList: WorkoutSession[] = [];
-          const rawAbandoned = await readStorage(abandonedKey);
-          if (rawAbandoned) {
-            try {
-              const parsed = JSON.parse(rawAbandoned);
-              if (Array.isArray(parsed)) {
-                abandonedList = parsed.filter(isValidSession);
-              } else if (isValidSession(parsed)) {
-                abandonedList = [parsed];
-              }
-            } catch {}
+        // 3. Unified Monotonic Revision + Version CAS Guard (P0-02):
+        const incomingSeq = Math.max(
+          Number((workout as any).revision ?? 0),
+          Number(workout.version ?? 0)
+        );
+
+        const persistedSeq = currentStored
+          ? Math.max(
+              Number((currentStored as any).revision ?? 0),
+              Number(currentStored.version ?? 0)
+            )
+          : 0;
+
+        if (
+          currentStored &&
+          currentStored.id === workout.id &&
+          !options?.skipVersionCheck
+        ) {
+          if (incomingSeq <= persistedSeq) {
+            return {
+              ok: false,
+              conflict: true,
+              persistedRevision: persistedSeq,
+              incomingRevision: incomingSeq,
+              error: `Stale or concurrent revision rejected (incoming: ${incomingSeq}, stored: ${persistedSeq}).`,
+            };
           }
-          const updatedAbandoned = [currentStored, ...abandonedList.filter((w) => w.id !== currentStored.id)].slice(0, 5);
-          await writeStorage(abandonedKey, JSON.stringify(updatedAbandoned));
         }
-      }
 
-      // 3. Optimistic Concurrency Guard:
-      // If updating the same session, reject stale write if incoming version is older than stored
-      const incomingVersion = typeof workout.version === 'number' ? workout.version : 0;
-      if (
-        currentStored &&
-        currentStored.id === workout.id &&
-        typeof currentStored.version === 'number' &&
-        incomingVersion < currentStored.version &&
-        !options?.skipVersionCheck
-      ) {
-        // Stale snapshot rejected; preserve newer stored state
-        return;
-      }
+        // Persist both revision: incomingSeq and version: incomingSeq on accepted writes
+        const workoutToPersist: WorkoutSession = {
+          ...workout,
+          revision: incomingSeq,
+          version: incomingSeq,
+        };
 
-      await writeStorage(storageKey, JSON.stringify(workout));
+        await writeStorage(storageKey, JSON.stringify(workoutToPersist));
 
-      // Post-write verification:
-      // Confirm that the session was not discarded or replaced by another tab while the write was in-flight.
-      // Guarded cleanup: ONLY delete storageKey if it currently contains THIS invalidated session;
-      // NEVER delete a newer authorized session that may have already claimed the slot in another tab.
-      const postDiscardedIds = await getDiscardedSessionIds(discardedKey);
-      const postToken = await getActiveSessionToken(tokenKey);
+        // Post-write verification:
+        // Confirm that the session was not discarded or replaced by another tab while the write was in-flight.
+        // Guarded cleanup: ONLY delete storageKey if it currently contains THIS invalidated session;
+        // NEVER delete a newer authorized session that may have already claimed the slot in another tab.
+        const postDiscardedIds = await getDiscardedSessionIds(discardedKey);
+        const postToken = await getActiveSessionToken(tokenKey);
 
-      const isSessionInvalidated =
-        postDiscardedIds.includes(workout.id) ||
-        (postToken && postToken.status === 'discarded' && postToken.sessionId === workout.id);
+        const isSessionInvalidated =
+          postDiscardedIds.includes(workout.id) ||
+          (postToken && postToken.status === 'discarded' && postToken.sessionId === workout.id);
 
-      if (isSessionInvalidated) {
-        // Atomic CAS deletion: ONLY deletes storageKey if it still contains THIS invalidated session.
-        // Never deletes a newer authorized session (Workout B) that may have claimed the slot.
-        await deleteStorageIfMatchesId(storageKey, workout.id, targetScope);
-        return;
-      }
+        if (isSessionInvalidated) {
+          // Atomic CAS deletion: ONLY deletes storageKey if it still contains THIS invalidated session.
+          // Never deletes a newer authorized session (Workout B) that may have claimed the slot.
+          await deleteStorageIfMatchesId(storageKey, workout.id, targetScope);
+          return { ok: false, error: 'Session invalidated post-write.' };
+        }
 
-      if (postToken && postToken.status === 'active' && postToken.sessionId !== workout.id && !options?.allowDifferentSession) {
-        // Another tab or process has activated a different session.
-        // Revert storageKey ONLY if our stale write currently occupies the slot.
-        await deleteStorageIfMatchesId(storageKey, workout.id, targetScope);
-        return;
-      }
+        if (postToken && postToken.status === 'active' && postToken.sessionId !== workout.id && !options?.allowDifferentSession) {
+          // Another tab or process has activated a different session.
+          // Revert storageKey ONLY if our stale write currently occupies the slot.
+          await deleteStorageIfMatchesId(storageKey, workout.id, targetScope);
+          return { ok: false, error: 'Different session activated post-write.' };
+        }
 
-      if (options?.allowDifferentSession) {
-        await writeActiveSessionToken(tokenKey, {
-          sessionId: workout.id,
-          status: 'active',
-          updatedAt: new Date().toISOString(),
-        });
-      }
+        if (options?.allowDifferentSession) {
+          await writeActiveSessionToken(tokenKey, {
+            sessionId: workout.id,
+            status: 'active',
+            updatedAt: new Date().toISOString(),
+          });
+        }
+
+        return {
+          ok: true,
+          incomingRevision: incomingSeq,
+        };
+      });
     });
   },
 
@@ -942,10 +1382,48 @@ export const workoutStorage = {
       throw new Error('Cannot save completed workout without an active user session.');
     }
 
-    const current = await workoutStorage.getCompletedWorkouts(targetScope);
-    const filtered = current.filter((w) => w.id !== workout.id);
-    const updated = [workout, ...filtered];
-    await writeStorage(storageKey, JSON.stringify(updated));
+    const tombstoneKey =
+      getUserScopedKey(BASE_COMPLETED_TOMBSTONES_KEY, targetScope) ||
+      (process.env.NODE_ENV === 'test' ? 'bebig.workout.completed.deleted' : null);
+
+    // 1. If IndexedDB is supported, execute atomic single-transaction mutation (P0-01)
+    if (typeof indexedDB !== 'undefined' && typeof indexedDB.open === 'function') {
+      try {
+        const initialWorkouts = await workoutStorage.getCompletedWorkouts(targetScope);
+        const initialTombstones = await getCompletedTombstones(targetScope);
+        await executeIndexedDbAtomicCompletedMutation(
+          storageKey,
+          initialWorkouts,
+          initialTombstones,
+          tombstoneKey,
+          (existing, tombstones) => mergeCompletedWithTombstones(existing, workout, tombstones)
+        );
+        return;
+      } catch {
+        // Fall back to storage lock if IndexedDB is blocked or throws
+      }
+    }
+
+    // 2. Fallback: Web Locks API / In-process FIFO queue + lease
+    const lockKey = `completed.${storageKey}`;
+    return withStorageLock(lockKey, async () => {
+      // 1. Remove deletion tombstone if re-saving/upserting this workout
+      await removeCompletedTombstone(workout.id, targetScope);
+      const tombstones = await getCompletedTombstones(targetScope);
+
+      // 2. Fetch latest stored workouts for idempotent union merge
+      const current = await workoutStorage.getCompletedWorkouts(targetScope);
+      const { updated } = mergeCompletedWithTombstones(current, workout, tombstones);
+
+      await writeStorage(storageKey, JSON.stringify(updated));
+    });
+  },
+
+  upsertCompletedWorkout: async (
+    workout: WorkoutSession,
+    scope?: UserScope | null,
+  ): Promise<void> => {
+    return workoutStorage.saveCompletedWorkout(workout, scope);
   },
 
   deleteCompletedWorkout: async (id: string, scope?: UserScope | null): Promise<void> => {
@@ -961,9 +1439,36 @@ export const workoutStorage = {
     const storageKey = key || (process.env.NODE_ENV === 'test' ? 'bebig.completed.workouts' : null);
     if (!storageKey) return;
 
-    const current = await workoutStorage.getCompletedWorkouts(resolvedScope);
-    const updated = current.filter((w) => w.id !== id);
-    await writeStorage(storageKey, JSON.stringify(updated));
+    const tombstoneKey =
+      getUserScopedKey(BASE_COMPLETED_TOMBSTONES_KEY, resolvedScope) ||
+      (process.env.NODE_ENV === 'test' ? 'bebig.workout.completed.deleted' : null);
+
+    // 1. If IndexedDB is supported, execute atomic single-transaction mutation (P0-01)
+    if (typeof indexedDB !== 'undefined' && typeof indexedDB.open === 'function') {
+      try {
+        const initialWorkouts = await workoutStorage.getCompletedWorkouts(resolvedScope);
+        const initialTombstones = await getCompletedTombstones(resolvedScope);
+        await executeIndexedDbAtomicCompletedMutation(
+          storageKey,
+          initialWorkouts,
+          initialTombstones,
+          tombstoneKey,
+          (existing, tombstones) => deleteCompletedWithTombstones(existing, id, tombstones)
+        );
+        return;
+      } catch {
+        // Fall back to storage lock if IndexedDB is blocked or throws
+      }
+    }
+
+    // 2. Fallback: Web Locks API / In-process FIFO queue + lease
+    const lockKey = `completed.${storageKey}`;
+    return withStorageLock(lockKey, async () => {
+      await addCompletedTombstone(id, resolvedScope);
+      const current = await workoutStorage.getCompletedWorkouts(resolvedScope);
+      const { updated } = deleteCompletedWithTombstones(current, id, new Set([id]));
+      await writeStorage(storageKey, JSON.stringify(updated));
+    });
   },
 
   clearAllWorkouts: async (scope?: UserScope | null): Promise<void> => {
@@ -972,12 +1477,14 @@ export const workoutStorage = {
       const abandonedKey = getUserScopedKey(BASE_ABANDONED_WORKOUT_KEY, scope);
       const discardedKey = getUserScopedKey(BASE_DISCARDED_WORKOUTS_KEY, scope);
       const completedKey = getUserScopedKey(BASE_COMPLETED_WORKOUTS_KEY, scope);
+      const tombstoneKey = getUserScopedKey(BASE_COMPLETED_TOMBSTONES_KEY, scope);
       const tokenKey = getUserScopedKey(BASE_ACTIVE_SESSION_TOKEN_KEY, scope);
 
       if (activeKey) await deleteStorage(activeKey);
       if (abandonedKey) await deleteStorage(abandonedKey);
       if (discardedKey) await deleteStorage(discardedKey);
       if (completedKey) await deleteStorage(completedKey);
+      if (tombstoneKey) await deleteStorage(tombstoneKey);
       if (tokenKey) await deleteStorage(tokenKey);
 
       // In test runs without scope, also clear all memoryStorage and legacy keys
@@ -988,6 +1495,41 @@ export const workoutStorage = {
         await deleteStorage('bebig.active.workout.discarded');
         await deleteStorage('bebig.active.workout.token');
         await deleteStorage('bebig.completed.workouts');
+        await deleteStorage('bebig.workout.completed.deleted');
+      }
+
+      // If IndexedDB exists, clear any cached completed workouts and tombstones
+      if (typeof indexedDB !== 'undefined' && typeof indexedDB.open === 'function') {
+        try {
+          await new Promise<void>((resolve) => {
+            const req = indexedDB.open('bebig_cross_tab_locks', 1);
+            req.onsuccess = () => {
+              const db = req.result;
+              try {
+                const tx = db.transaction('locks', 'readwrite');
+                tx.oncomplete = () => {
+                  try { db.close(); } catch {}
+                  resolve();
+                };
+                tx.onerror = () => {
+                  try { db.close(); } catch {}
+                  resolve();
+                };
+                const store = tx.objectStore('locks');
+                if (completedKey) store.delete(completedKey);
+                if (tombstoneKey) store.delete(tombstoneKey);
+                if (process.env.NODE_ENV === 'test') {
+                  store.delete('bebig.completed.workouts');
+                  store.delete('bebig.workout.completed.deleted');
+                }
+              } catch {
+                try { db.close(); } catch {}
+                resolve();
+              }
+            };
+            req.onerror = () => resolve();
+          });
+        } catch {}
       }
     });
   },

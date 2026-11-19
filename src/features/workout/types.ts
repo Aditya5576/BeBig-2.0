@@ -66,4 +66,5 @@ export interface WorkoutSession {
   accumulatedPauseSeconds?: number; // Total seconds spent paused
   updatedAt?: string; // ISO 8601 timestamp of last state change
   version?: number; // Monotonically increasing revision counter for optimistic concurrency guard
+  revision?: number; // Monotonically increasing revision counter (alias for optimistic concurrency guard)
 }
