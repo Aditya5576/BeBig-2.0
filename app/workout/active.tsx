@@ -17,6 +17,7 @@ import { useRouter, useFocusEffect as routerFocusEffect } from 'expo-router';
 import { ScreenContainer, Text, Button, Card, Icon, ErrorBoundary } from '../../src/components/ui';
 import {
   workoutRepository,
+  workoutStorage,
   WorkoutSession,
   WorkoutExercise,
   WorkoutSet,
@@ -74,7 +75,34 @@ export default function ActiveWorkoutScreen() {
   const workoutCompletedRef = useRef(false);
   const scrollViewRef = useRef<ScrollView>(null);
   const currentScrollY = useRef(0);
+  const exerciseListOffsetYRef = useRef(0);
   const cardLayoutsRef = useRef<{ [exerciseId: string]: { y: number; height: number } }>({});
+  const setRowLayoutsRef = useRef<{ [setId: string]: { y: number; height: number } }>({});
+  const [keypadHeight, setKeypadHeight] = useState<number>(0);
+  const [scrollViewportHeight, setScrollViewportHeight] = useState<number>(0);
+
+  const draftTargetRef = useRef<{
+    exerciseId: string;
+    setId: string;
+    field: 'weight' | 'reps' | 'rir';
+  } | null>(null);
+  const draftTextRef = useRef<string>('');
+  const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const editGenerationRef = useRef<number>(0);
+
+  const [keypadFocus, setKeypadFocus] = useState<{
+    exerciseId: string;
+    setId: string;
+    field: 'weight' | 'reps' | 'rir';
+    value: string;
+  } | null>(null);
+  const [useNativeKeyboard, setUseNativeKeyboard] = useState(false);
+  const [draftTarget, setDraftTarget] = useState<{
+    exerciseId: string;
+    setId: string;
+    field: 'weight' | 'reps' | 'rir';
+  } | null>(null);
+  const [draftText, setDraftText] = useState<string>('');
 
   useEffect(() => {
     sessionRef.current = session;
@@ -87,65 +115,210 @@ export default function ActiveWorkoutScreen() {
     }
   }, []);
 
-  const flushActiveWorkout = useCallback(async (targetSession?: WorkoutSession) => {
-    // Do not autosave after the workout has been completed or discarded.
-    // This prevents the unmount cleanup from resurrecting a cleared active draft.
-    if (workoutCompletedRef.current) return;
-    cancelDebouncedSave();
-    const sessionToSave = targetSession || sessionRef.current;
-    if (!sessionToSave) return;
-    try {
-      // Discard tombstone check: prevent resurrecting discarded session
-      const isDiscarded = await workoutRepository.isSessionDiscarded(sessionToSave.id);
-      if (isDiscarded) {
-        workoutCompletedRef.current = true;
-        return;
-      }
-      await workoutRepository.updateActiveWorkout(sessionToSave);
-    } catch {
-      // Background autosave failure caught gracefully
-    }
-  }, [cancelDebouncedSave]);
-
-  const updateSessionAndAutosaveImmediate = useCallback(async (newSession: WorkoutSession) => {
-    setSession(newSession);
-    sessionRef.current = newSession;
-    await flushActiveWorkout(newSession);
-  }, [flushActiveWorkout]);
-
-  const scheduleDebouncedSave = useCallback((newSession: WorkoutSession) => {
-    setSession(newSession);
-    sessionRef.current = newSession;
-
-    // Do not schedule a new debounced save after completion or discard.
-    if (workoutCompletedRef.current) return;
-
-    cancelDebouncedSave();
-
-    debounceTimerRef.current = setTimeout(async () => {
-      debounceTimerRef.current = null;
-      const sessionToSave = sessionRef.current;
+  const flushActiveWorkout = useCallback(
+    async (
+      targetSession?: WorkoutSession,
+      options?: { allowEmptyOverwrites?: boolean; allowExerciseRemoval?: boolean }
+    ) => {
+      // Do not autosave after the workout has been completed or discarded.
+      // This prevents the unmount cleanup from resurrecting a cleared active draft.
+      if (workoutCompletedRef.current) return;
+      cancelDebouncedSave();
+      const sessionToSave = targetSession || sessionRef.current;
       if (!sessionToSave) return;
       try {
-        await workoutRepository.updateActiveWorkout(sessionToSave);
+        // Discard tombstone check: prevent resurrecting discarded session
+        const isDiscarded = await workoutRepository.isSessionDiscarded(sessionToSave.id);
+        if (isDiscarded) {
+          workoutCompletedRef.current = true;
+          return;
+        }
+        const saved = await workoutRepository.updateActiveWorkout(sessionToSave, undefined, options);
+        if (saved && !workoutCompletedRef.current) {
+          const target = draftTargetRef.current;
+          if (target) {
+            const text = draftTextRef.current;
+            let partial: Partial<WorkoutSet> = {};
+            if (target.field === 'weight') {
+              const num = parseFloat(text);
+              partial = { weight: isNaN(num) ? 0 : Math.max(0, num) };
+            } else if (target.field === 'reps') {
+              const num = parseInt(text, 10);
+              partial = { reps: isNaN(num) ? 0 : Math.max(0, num) };
+            } else if (target.field === 'rir') {
+              const num = parseFloat(text);
+              partial = { rir: isNaN(num) ? undefined : Math.min(10, Math.max(0, num)) };
+            }
+            const merged = workoutRepository.updateSet(saved, target.exerciseId, target.setId, partial);
+            sessionRef.current = merged;
+            setSession(merged);
+          } else {
+            sessionRef.current = saved;
+            setSession(saved);
+          }
+        }
       } catch {
-        // Silent error during debounced save
+        // Background autosave failure caught gracefully
       }
-    }, 300);
-  }, [cancelDebouncedSave]);
+    },
+    [cancelDebouncedSave]
+  );
+
+  const updateSessionAndAutosaveImmediate = useCallback(
+    async (
+      newSession: WorkoutSession,
+      options?: { allowEmptyOverwrites?: boolean; allowExerciseRemoval?: boolean }
+    ) => {
+      const nextRev = Math.max(Number(newSession.revision ?? 0), Number(newSession.version ?? 0)) + 1;
+      const sessionWithRev = { ...newSession, revision: nextRev, version: nextRev };
+      setSession(sessionWithRev);
+      sessionRef.current = sessionWithRev;
+      await flushActiveWorkout(sessionWithRev, options);
+    },
+    [flushActiveWorkout]
+  );
+
+  const scheduleDebouncedSave = useCallback(
+    (newSession: WorkoutSession) => {
+      const nextRev = Math.max(Number(newSession.revision ?? 0), Number(newSession.version ?? 0)) + 1;
+      const sessionWithRev = { ...newSession, revision: nextRev, version: nextRev };
+      setSession(sessionWithRev);
+      sessionRef.current = sessionWithRev;
+
+      // Do not schedule a new debounced save after completion or discard.
+      if (workoutCompletedRef.current) return;
+
+      cancelDebouncedSave();
+
+      debounceTimerRef.current = setTimeout(async () => {
+        debounceTimerRef.current = null;
+        const sessionToSave = sessionRef.current;
+        if (!sessionToSave || workoutCompletedRef.current) return;
+        try {
+          const isDiscarded = await workoutRepository.isSessionDiscarded(sessionToSave.id);
+          if (isDiscarded) {
+            workoutCompletedRef.current = true;
+            return;
+          }
+          const saved = await workoutRepository.updateActiveWorkout(sessionToSave);
+          if (saved && !workoutCompletedRef.current) {
+            const target = draftTargetRef.current;
+            if (target) {
+              const text = draftTextRef.current;
+              let partial: Partial<WorkoutSet> = {};
+              if (target.field === 'weight') {
+                const num = parseFloat(text);
+                partial = { weight: isNaN(num) ? 0 : Math.max(0, num) };
+              } else if (target.field === 'reps') {
+                const num = parseInt(text, 10);
+                partial = { reps: isNaN(num) ? 0 : Math.max(0, num) };
+              } else if (target.field === 'rir') {
+                const num = parseFloat(text);
+                partial = { rir: isNaN(num) ? undefined : Math.min(10, Math.max(0, num)) };
+              }
+              const merged = workoutRepository.updateSet(saved, target.exerciseId, target.setId, partial);
+              sessionRef.current = merged;
+              setSession(merged);
+            } else {
+              sessionRef.current = saved;
+              setSession(saved);
+            }
+          }
+        } catch {
+          // Silent error during debounced save
+        }
+      }, 300);
+    },
+    [cancelDebouncedSave]
+  );
+
+  const commitDraftNow = useCallback((): WorkoutSession | null => {
+    if (draftTimerRef.current) {
+      clearTimeout(draftTimerRef.current);
+      draftTimerRef.current = null;
+    }
+    const target = draftTargetRef.current;
+    if (!target) return null;
+    const text = draftTextRef.current;
+    const current = sessionRef.current;
+    if (!current || workoutCompletedRef.current) return null;
+
+    editGenerationRef.current += 1;
+
+    let partial: Partial<WorkoutSet> = {};
+    if (target.field === 'weight') {
+      const num = parseFloat(text);
+      partial = { weight: isNaN(num) ? 0 : Math.max(0, num) };
+    } else if (target.field === 'reps') {
+      const num = parseInt(text, 10);
+      partial = { reps: isNaN(num) ? 0 : Math.max(0, num) };
+    } else if (target.field === 'rir') {
+      const num = parseFloat(text);
+      partial = { rir: isNaN(num) ? undefined : Math.min(10, Math.max(0, num)) };
+    }
+
+    const updated = workoutRepository.updateSet(current, target.exerciseId, target.setId, partial);
+    sessionRef.current = updated;
+    setSession(updated);
+    scheduleDebouncedSave(updated);
+    return updated;
+  }, [scheduleDebouncedSave]);
 
   useEffect(() => {
+    const writeSyncEmergencyMirror = () => {
+      const current = sessionRef.current;
+      if (!current || workoutCompletedRef.current) return;
+      workoutStorage.writeSyncEmergencyMirror(current);
+    };
+
+    const handleBackgroundFlush = () => {
+      commitDraftNow();
+      writeSyncEmergencyMirror();
+      void flushActiveWorkout();
+    };
+
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState.match(/inactive|background/)) {
-        void flushActiveWorkout();
+        handleBackgroundFlush();
       }
     });
 
+    const onVisibilityChange = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        handleBackgroundFlush();
+      }
+    };
+
+    const onPageHide = () => {
+      handleBackgroundFlush();
+    };
+
+    const onBeforeUnload = () => {
+      handleBackgroundFlush();
+    };
+
+    if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+      document.addEventListener('visibilitychange', onVisibilityChange);
+    }
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      window.addEventListener('pagehide', onPageHide);
+      window.addEventListener('beforeunload', onBeforeUnload);
+      window.addEventListener('freeze', handleBackgroundFlush);
+    }
+
     return () => {
       subscription.remove();
-      void flushActiveWorkout();
+      if (typeof document !== 'undefined' && typeof document.removeEventListener === 'function') {
+        document.removeEventListener('visibilitychange', onVisibilityChange);
+      }
+      if (typeof window !== 'undefined' && typeof window.removeEventListener === 'function') {
+        window.removeEventListener('pagehide', onPageHide);
+        window.removeEventListener('beforeunload', onBeforeUnload);
+        window.removeEventListener('freeze', handleBackgroundFlush);
+      }
+      handleBackgroundFlush();
     };
-  }, [flushActiveWorkout]);
+  }, [flushActiveWorkout, commitDraftNow]);
 
   useFocusEffect(
     useCallback(() => {
@@ -166,11 +339,41 @@ export default function ActiveWorkoutScreen() {
             return;
           }
 
+          const currentInMemory = sessionRef.current;
+
+          // CONTENT PRESERVATION RULE:
+          // If in-memory state has exercises and stored active session has 0 exercises,
+          // IN-MEMORY WINS! Never clobber rich in-memory sets with empty storage.
+          if (
+            currentInMemory &&
+            currentInMemory.id === active.id &&
+            currentInMemory.exercises &&
+            currentInMemory.exercises.length > 0 &&
+            (!active.exercises || active.exercises.length === 0)
+          ) {
+            console.warn(
+              '[ACTIVE_WORKOUT] In-memory workout has exercises while storage is empty. Healing storage from in-memory!'
+            );
+            void flushActiveWorkout(currentInMemory);
+            return;
+          }
+
           // If storage contains a different active workout session than currently mounted
           if (!sessionRef.current || sessionRef.current.id !== active.id) {
             setSession(active);
             sessionRef.current = active;
             workoutCompletedRef.current = false;
+          } else if (currentInMemory) {
+            // Same session: rehydrate only if stored active has higher revision AND equal or more exercises
+            const storedSeq = Math.max(Number(active.revision ?? 0), Number(active.version ?? 0));
+            const inMemorySeq = Math.max(Number(currentInMemory.revision ?? 0), Number(currentInMemory.version ?? 0));
+            const storedExercisesCount = active.exercises?.length ?? 0;
+            const inMemoryExercisesCount = currentInMemory.exercises?.length ?? 0;
+
+            if (storedSeq > inMemorySeq && storedExercisesCount >= inMemoryExercisesCount) {
+              setSession(active);
+              sessionRef.current = active;
+            }
           }
         } catch {
           // Graceful fallback
@@ -182,7 +385,7 @@ export default function ActiveWorkoutScreen() {
       return () => {
         isFocused = false;
       };
-    }, [router])
+    }, [router, flushActiveWorkout])
   );
 
   const [loading, setLoading] = useState(true);
@@ -339,10 +542,8 @@ export default function ActiveWorkoutScreen() {
       });
     }
 
-    // 0ms optimistic UI: update state on frame 0, flush active workout in background
-    setSession(updated);
-    sessionRef.current = updated;
-    void flushActiveWorkout(updated);
+    // 0ms optimistic UI: update state on frame 0, flush active workout immediately
+    await updateSessionAndAutosaveImmediate(updated);
   };
 
   const handleSelectExercise = async (exercise: Exercise) => {
@@ -360,13 +561,27 @@ export default function ActiveWorkoutScreen() {
           text: 'Remove',
           style: 'destructive',
           onPress: async () => {
+            if (draftTargetRef.current?.exerciseId === exercise.exerciseId) {
+              if (draftTimerRef.current) {
+                clearTimeout(draftTimerRef.current);
+                draftTimerRef.current = null;
+              }
+              draftTargetRef.current = null;
+              draftTextRef.current = '';
+              setDraftTarget(null);
+              setDraftText('');
+              setKeypadFocus(null);
+            }
             const current = sessionRef.current || session;
             if (!current) return;
             const updated = workoutRepository.removeExerciseFromWorkout(
               current,
               exercise.exerciseId,
             );
-            await updateSessionAndAutosaveImmediate(updated);
+            await updateSessionAndAutosaveImmediate(updated, {
+              allowEmptyOverwrites: updated.exercises.length === 0,
+              allowExerciseRemoval: true,
+            });
           },
         },
       ],
@@ -438,13 +653,22 @@ export default function ActiveWorkoutScreen() {
     const current = sessionRef.current || session;
     if (!current) return;
     const updated = workoutRepository.addSetToExercise(current, exerciseId);
-    setSession(updated);
-    sessionRef.current = updated;
-    void flushActiveWorkout(updated);
+    void updateSessionAndAutosaveImmediate(updated);
   };
 
   // Delete set (0ms optimistic UI)
   const handleDeleteSet = (exerciseId: string, setId: string) => {
+    if (draftTargetRef.current?.setId === setId) {
+      if (draftTimerRef.current) {
+        clearTimeout(draftTimerRef.current);
+        draftTimerRef.current = null;
+      }
+      draftTargetRef.current = null;
+      draftTextRef.current = '';
+      setDraftTarget(null);
+      setDraftText('');
+      setKeypadFocus(null);
+    }
     const current = sessionRef.current || session;
     if (!current) return;
     const targetEx = current.exercises.find((e) => e.exerciseId === exerciseId);
@@ -453,9 +677,7 @@ export default function ActiveWorkoutScreen() {
     if (targetSet?.completed) return;
 
     const updated = workoutRepository.removeSetFromExercise(current, exerciseId, setId);
-    setSession(updated);
-    sessionRef.current = updated;
-    void flushActiveWorkout(updated);
+    void updateSessionAndAutosaveImmediate(updated);
   };
 
   // Update set field (weight, reps, rir, notes)
@@ -503,13 +725,41 @@ export default function ActiveWorkoutScreen() {
     [session, updateSessionAndAutosaveImmediate, scheduleDebouncedSave]
   );
 
-  const [keypadFocus, setKeypadFocus] = useState<{
-    exerciseId: string;
-    setId: string;
-    field: 'weight' | 'reps' | 'rir';
-    value: string;
-  } | null>(null);
-  const [useNativeKeyboard, setUseNativeKeyboard] = useState(false);
+  const scheduleDraftMaterialize = useCallback(
+    (
+      target: { exerciseId: string; setId: string; field: 'weight' | 'reps' | 'rir' },
+      nextText: string
+    ) => {
+      if (draftTimerRef.current) {
+        clearTimeout(draftTimerRef.current);
+      }
+      const currentGen = ++editGenerationRef.current;
+      draftTimerRef.current = setTimeout(() => {
+        draftTimerRef.current = null;
+        if (editGenerationRef.current !== currentGen) return;
+        const current = sessionRef.current;
+        if (!current || workoutCompletedRef.current) return;
+
+        let partial: Partial<WorkoutSet> = {};
+        if (target.field === 'weight') {
+          const num = parseFloat(nextText);
+          partial = { weight: isNaN(num) ? 0 : Math.max(0, num) };
+        } else if (target.field === 'reps') {
+          const num = parseInt(nextText, 10);
+          partial = { reps: isNaN(num) ? 0 : Math.max(0, num) };
+        } else if (target.field === 'rir') {
+          const num = parseFloat(nextText);
+          partial = { rir: isNaN(num) ? undefined : Math.min(10, Math.max(0, num)) };
+        }
+
+        const updated = workoutRepository.updateSet(current, target.exerciseId, target.setId, partial);
+        sessionRef.current = updated;
+        setSession(updated);
+        scheduleDebouncedSave(updated);
+      }, 150);
+    },
+    [scheduleDebouncedSave]
+  );
 
   const handleFocusField = useCallback(
     (
@@ -519,6 +769,17 @@ export default function ActiveWorkoutScreen() {
       currentValue: string
     ) => {
       if (useNativeKeyboard) return;
+      if (
+        draftTargetRef.current &&
+        (draftTargetRef.current.setId !== setId || draftTargetRef.current.field !== field)
+      ) {
+        commitDraftNow();
+      }
+      const nextTarget = { exerciseId, setId, field };
+      draftTargetRef.current = nextTarget;
+      draftTextRef.current = currentValue;
+      setDraftTarget(nextTarget);
+      setDraftText(currentValue);
       setKeypadFocus({
         exerciseId,
         setId,
@@ -526,71 +787,90 @@ export default function ActiveWorkoutScreen() {
         value: currentValue,
       });
     },
-    [useNativeKeyboard]
+    [useNativeKeyboard, commitDraftNow]
   );
 
   const handleKeypadPress = useCallback(
     (digit: string) => {
-      setKeypadFocus((prev) => {
-        if (!prev) return null;
-        let nextVal = prev.value;
-        if (digit === '.') {
-          if (nextVal.includes('.')) return prev;
-          nextVal = nextVal ? `${nextVal}.` : '0.';
-        } else {
-          nextVal = nextVal === '0' ? digit : `${nextVal}${digit}`;
-        }
-        void handleUpdateSetField(prev.exerciseId, prev.setId, prev.field, nextVal);
-        return { ...prev, value: nextVal };
-      });
+      const target = draftTargetRef.current;
+      if (!target) return;
+      let currentVal = draftTextRef.current;
+      let nextVal = currentVal;
+      if (digit === '.') {
+        if (nextVal.includes('.')) return;
+        nextVal = nextVal ? `${nextVal}.` : '0.';
+      } else {
+        nextVal = nextVal === '0' ? digit : `${nextVal}${digit}`;
+      }
+      draftTextRef.current = nextVal;
+      setDraftText(nextVal);
+      setKeypadFocus((prev) => (prev ? { ...prev, value: nextVal } : null));
+      scheduleDraftMaterialize(target, nextVal);
     },
-    [handleUpdateSetField]
+    [scheduleDraftMaterialize]
   );
 
   const handleKeypadBackspace = useCallback(() => {
-    setKeypadFocus((prev) => {
-      if (!prev) return null;
-      const nextVal = prev.value.slice(0, -1);
-      void handleUpdateSetField(prev.exerciseId, prev.setId, prev.field, nextVal);
-      return { ...prev, value: nextVal };
-    });
-  }, [handleUpdateSetField]);
+    const target = draftTargetRef.current;
+    if (!target) return;
+    const currentVal = draftTextRef.current;
+    const nextVal = currentVal.slice(0, -1);
+    draftTextRef.current = nextVal;
+    setDraftText(nextVal);
+    setKeypadFocus((prev) => (prev ? { ...prev, value: nextVal } : null));
+    scheduleDraftMaterialize(target, nextVal);
+  }, [scheduleDraftMaterialize]);
 
   const handleKeypadClear = useCallback(() => {
-    setKeypadFocus((prev) => {
-      if (!prev) return null;
-      void handleUpdateSetField(prev.exerciseId, prev.setId, prev.field, '');
-      return { ...prev, value: '' };
-    });
-  }, [handleUpdateSetField]);
+    const target = draftTargetRef.current;
+    if (!target) return;
+    const nextVal = '';
+    draftTextRef.current = nextVal;
+    setDraftText(nextVal);
+    setKeypadFocus((prev) => (prev ? { ...prev, value: nextVal } : null));
+    scheduleDraftMaterialize(target, nextVal);
+  }, [scheduleDraftMaterialize]);
 
   const handleKeypadStep = useCallback(
     (delta: number) => {
-      setKeypadFocus((prev) => {
-        if (!prev) return null;
-        const currentNum = parseFloat(prev.value) || 0;
-        const nextNum = Math.max(0, Math.round((currentNum + delta) * 100) / 100);
-        const nextVal = nextNum === 0 ? '' : String(nextNum);
-        void handleUpdateSetField(prev.exerciseId, prev.setId, prev.field, nextVal);
-        return { ...prev, value: nextVal };
-      });
+      const target = draftTargetRef.current;
+      if (!target) return;
+      const currentVal = draftTextRef.current;
+      const currentNum = parseFloat(currentVal) || 0;
+      const nextNum = Math.max(0, Math.round((currentNum + delta) * 100) / 100);
+      const nextVal = nextNum === 0 ? '' : String(nextNum);
+      draftTextRef.current = nextVal;
+      setDraftText(nextVal);
+      setKeypadFocus((prev) => (prev ? { ...prev, value: nextVal } : null));
+      scheduleDraftMaterialize(target, nextVal);
     },
-    [handleUpdateSetField]
+    [scheduleDraftMaterialize]
   );
 
   const handleKeypadSelectRpe = useCallback(
-    (rpe: number) => {
-      setKeypadFocus((prev) => {
-        if (!prev) return null;
-        const rir = Math.max(0, Math.min(10, Math.round((10 - rpe) * 10) / 10));
-        void handleUpdateSetField(prev.exerciseId, prev.setId, 'rir', String(rir));
-        return { ...prev, value: String(rpe) };
-      });
+    (rpe?: number) => {
+      if (!keypadFocus) return;
+      const current = sessionRef.current || session;
+      if (!current) return;
+      const rirVal =
+        rpe !== undefined
+          ? Math.max(0, Math.min(10, Math.round((10 - rpe) * 10) / 10))
+          : undefined;
+      const updated = workoutRepository.updateSet(
+        current,
+        keypadFocus.exerciseId,
+        keypadFocus.setId,
+        { rir: rirVal }
+      );
+      sessionRef.current = updated;
+      setSession(updated);
+      scheduleDebouncedSave(updated);
     },
-    [handleUpdateSetField]
+    [keypadFocus, session, scheduleDebouncedSave]
   );
 
   const handleKeypadNext = useCallback(() => {
+    commitDraftNow();
     if (!keypadFocus) return;
     const current = sessionRef.current || session;
     if (!current) return;
@@ -601,26 +881,46 @@ export default function ActiveWorkoutScreen() {
 
     if (keypadFocus.field === 'weight') {
       const targetSet = currentEx.actualSets[currentSetIndex];
+      const val =
+        targetSet.reps !== undefined && targetSet.reps !== null && targetSet.reps > 0
+          ? String(targetSet.reps)
+          : '';
+      const nextTarget = {
+        exerciseId: keypadFocus.exerciseId,
+        setId: keypadFocus.setId,
+        field: 'reps' as const,
+      };
+      draftTargetRef.current = nextTarget;
+      draftTextRef.current = val;
+      setDraftTarget(nextTarget);
+      setDraftText(val);
       setKeypadFocus({
         exerciseId: keypadFocus.exerciseId,
         setId: keypadFocus.setId,
         field: 'reps',
-        value:
-          targetSet.reps !== undefined && targetSet.reps !== null && targetSet.reps > 0
-            ? String(targetSet.reps)
-            : '',
+        value: val,
       });
     } else {
       if (currentSetIndex < currentEx.actualSets.length - 1) {
         const nextSet = currentEx.actualSets[currentSetIndex + 1];
+        const val =
+          nextSet.weight !== undefined && nextSet.weight !== null && nextSet.weight > 0
+            ? String(nextSet.weight)
+            : '';
+        const nextTarget = {
+          exerciseId: keypadFocus.exerciseId,
+          setId: nextSet.id,
+          field: 'weight' as const,
+        };
+        draftTargetRef.current = nextTarget;
+        draftTextRef.current = val;
+        setDraftTarget(nextTarget);
+        setDraftText(val);
         setKeypadFocus({
           exerciseId: keypadFocus.exerciseId,
           setId: nextSet.id,
           field: 'weight',
-          value:
-            nextSet.weight !== undefined && nextSet.weight !== null && nextSet.weight > 0
-              ? String(nextSet.weight)
-              : '',
+          value: val,
         });
       } else {
         const exIndex = current.exercises.findIndex((e) => e.exerciseId === keypadFocus.exerciseId);
@@ -628,31 +928,89 @@ export default function ActiveWorkoutScreen() {
           const nextEx = current.exercises[exIndex + 1];
           if (nextEx.actualSets.length > 0) {
             const nextSet = nextEx.actualSets[0];
+            const val =
+              nextSet.weight !== undefined && nextSet.weight !== null && nextSet.weight > 0
+                ? String(nextSet.weight)
+                : '';
+            const nextTarget = {
+              exerciseId: nextEx.exerciseId,
+              setId: nextSet.id,
+              field: 'weight' as const,
+            };
+            draftTargetRef.current = nextTarget;
+            draftTextRef.current = val;
+            setDraftTarget(nextTarget);
+            setDraftText(val);
             setKeypadFocus({
               exerciseId: nextEx.exerciseId,
               setId: nextSet.id,
               field: 'weight',
-              value:
-                nextSet.weight !== undefined && nextSet.weight !== null && nextSet.weight > 0
-                  ? String(nextSet.weight)
-                  : '',
+              value: val,
             });
             return;
           }
         }
+        draftTargetRef.current = null;
+        draftTextRef.current = '';
+        setDraftTarget(null);
+        setDraftText('');
         setKeypadFocus(null);
+        void flushActiveWorkout();
       }
     }
-  }, [keypadFocus, session]);
+  }, [keypadFocus, session, commitDraftNow, flushActiveWorkout]);
 
   const handleKeypadDismiss = useCallback(() => {
+    commitDraftNow();
+    draftTargetRef.current = null;
+    draftTextRef.current = '';
+    setDraftTarget(null);
+    setDraftText('');
     setKeypadFocus(null);
-  }, []);
+    void flushActiveWorkout();
+  }, [commitDraftNow, flushActiveWorkout]);
 
   const handleToggleNativeKeyboard = useCallback(() => {
+    commitDraftNow();
+    draftTargetRef.current = null;
+    draftTextRef.current = '';
+    setDraftTarget(null);
+    setDraftText('');
     setUseNativeKeyboard((prev) => !prev);
     setKeypadFocus(null);
-  }, []);
+  }, [commitDraftNow]);
+
+  const scrollToFocusedRow = useCallback(() => {
+    if (!keypadFocus || useNativeKeyboard) return;
+    const cardLayout = cardLayoutsRef.current[keypadFocus.exerciseId];
+    const rowLayout = setRowLayoutsRef.current[keypadFocus.setId];
+    if (!cardLayout || !rowLayout) return;
+
+    const rowAbsY = exerciseListOffsetYRef.current + cardLayout.y + rowLayout.y;
+    const rowHeight = rowLayout.height || 44;
+    const effectiveKeypadHeight = keypadHeight > 0 ? keypadHeight : 300;
+    const viewportHeight = scrollViewportHeight > 0 ? scrollViewportHeight : 600;
+
+    const visibleBottom = currentScrollY.current + viewportHeight - effectiveKeypadHeight - 16;
+    const visibleTop = currentScrollY.current + 16;
+
+    if (rowAbsY + rowHeight > visibleBottom) {
+      const targetY = Math.max(0, rowAbsY + rowHeight - (viewportHeight - effectiveKeypadHeight) + 32);
+      scrollViewRef.current?.scrollTo({ y: targetY, animated: true });
+    } else if (rowAbsY < visibleTop) {
+      const targetY = Math.max(0, rowAbsY - 24);
+      scrollViewRef.current?.scrollTo({ y: targetY, animated: true });
+    }
+  }, [keypadFocus, useNativeKeyboard, keypadHeight, scrollViewportHeight]);
+
+  useEffect(() => {
+    if (keypadFocus) {
+      const timer = setTimeout(() => {
+        scrollToFocusedRow();
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [keypadFocus, keypadHeight, scrollToFocusedRow]);
 
   // Toggle complete set
   const handleToggleCompleteSet = async (
@@ -660,10 +1018,29 @@ export default function ActiveWorkoutScreen() {
     set: WorkoutSet,
     pendingUpdates?: Partial<WorkoutSet>,
   ) => {
-    const current = sessionRef.current || session;
+    const draftFieldCommitted =
+      draftTargetRef.current?.setId === set.id ? draftTargetRef.current.field : null;
+    const committedSession = commitDraftNow();
+    if (draftTargetRef.current?.setId === set.id) {
+      draftTargetRef.current = null;
+      draftTextRef.current = '';
+      setDraftTarget(null);
+      setDraftText('');
+      setKeypadFocus(null);
+    }
+    const current = committedSession || sessionRef.current || session;
     if (!current) return;
 
-    const effectiveSet = { ...set, ...pendingUpdates };
+    const latestExercise =
+      current.exercises.find((e) => e.exerciseId === exercise.exerciseId) || exercise;
+    const latestSet = latestExercise.actualSets.find((s) => s.id === set.id) || set;
+
+    const safePendingUpdates = { ...pendingUpdates };
+    if (draftFieldCommitted) {
+      delete safePendingUpdates[draftFieldCommitted];
+    }
+
+    const effectiveSet = { ...latestSet, ...safePendingUpdates };
 
     if (!effectiveSet.completed) {
       // Validate before completing
@@ -685,7 +1062,7 @@ export default function ActiveWorkoutScreen() {
 
       // Complete set and trigger rest timer (unless next set is a Drop Set or part of Superset round)
       let updated = workoutRepository.updateSet(current, exercise.exerciseId, set.id, {
-        ...pendingUpdates,
+        ...safePendingUpdates,
         completed: true,
         completedAt: new Date().toISOString(),
       });
@@ -775,6 +1152,15 @@ export default function ActiveWorkoutScreen() {
           text: 'Discard Workout',
           style: 'destructive',
           onPress: async () => {
+            if (draftTimerRef.current) {
+              clearTimeout(draftTimerRef.current);
+              draftTimerRef.current = null;
+            }
+            draftTargetRef.current = null;
+            draftTextRef.current = '';
+            setDraftTarget(null);
+            setDraftText('');
+            setKeypadFocus(null);
             cancelDebouncedSave();
             // Mark completed BEFORE discarding so the unmount cleanup
             // does not re-save the stale active session after the clear.
@@ -820,6 +1206,16 @@ export default function ActiveWorkoutScreen() {
           onPress: async () => {
             try {
               setFinishing(true);
+              commitDraftNow();
+              if (draftTimerRef.current) {
+                clearTimeout(draftTimerRef.current);
+                draftTimerRef.current = null;
+              }
+              draftTargetRef.current = null;
+              draftTextRef.current = '';
+              setDraftTarget(null);
+              setDraftText('');
+              setKeypadFocus(null);
               const latest = sessionRef.current || current;
               await flushActiveWorkout(latest);
               // Mark completed BEFORE the repository call so the unmount
@@ -908,11 +1304,9 @@ export default function ActiveWorkoutScreen() {
   const baseBottomPadding = 80 + Math.max(insets.bottom, 12);
   const measuredRestHeight = restOverlayHeight > 0 ? restOverlayHeight : 112;
   const isKeypadOpen = Boolean(keypadFocus) && !useNativeKeyboard;
-  const keypadPadding = isKeypadOpen ? 320 : 0;
-  const dynamicBottomPadding = Math.max(
-    baseBottomPadding + keypadPadding,
-    (session?.activeRestTimer ? measuredRestHeight + Math.max(insets.bottom, 12) + 24 : 0) + keypadPadding
-  );
+  const keypadClearance = isKeypadOpen && keypadHeight > 0 ? keypadHeight + 16 : (isKeypadOpen ? 320 : 0);
+  const restClearance = session?.activeRestTimer ? measuredRestHeight + Math.max(insets.bottom, 12) + 24 : 0;
+  const dynamicBottomPadding = Math.max(baseBottomPadding, restClearance, keypadClearance);
 
   return (
     <ScreenContainer>
@@ -928,6 +1322,9 @@ export default function ActiveWorkoutScreen() {
         >
         <ScrollView
           ref={scrollViewRef}
+          onLayout={(e) => {
+            setScrollViewportHeight(e.nativeEvent.layout.height);
+          }}
           onScroll={(e) => {
             currentScrollY.current = e.nativeEvent.contentOffset.y;
           }}
@@ -1008,7 +1405,12 @@ export default function ActiveWorkoutScreen() {
               </Text>
             </Card>
           ) : (
-            <View style={styles.exerciseListContainer}>
+            <View
+              style={styles.exerciseListContainer}
+              onLayout={(e) => {
+                exerciseListOffsetYRef.current = e.nativeEvent.layout.y;
+              }}
+            >
               {session.exercises.map((ex, exIndex) => {
                 const isLinkedWithNext =
                   Boolean(ex.supersetGroupId) &&
@@ -1038,7 +1440,12 @@ export default function ActiveWorkoutScreen() {
                     isCustomKeypadActive={Boolean(keypadFocus) && !useNativeKeyboard}
                     activeFocusSetId={keypadFocus?.setId}
                     activeFocusField={keypadFocus?.field}
+                    draftTarget={draftTarget}
+                    draftValue={draftText}
                     onFocusField={handleFocusField}
+                    onSetRowLayout={(setId, y, height) => {
+                      setRowLayoutsRef.current[setId] = { y, height };
+                    }}
                     style={{
                       marginBottom: isLinkedWithNext
                         ? 8
@@ -1063,7 +1470,7 @@ export default function ActiveWorkoutScreen() {
               title="+ Add Exercise"
               onPress={() => {
                 if (sessionRef.current) {
-                  void workoutRepository.updateActiveWorkout(sessionRef.current).catch(() => {});
+                  void flushActiveWorkout();
                 }
                 setIsPickerVisible(true);
               }}
@@ -1273,8 +1680,15 @@ export default function ActiveWorkoutScreen() {
         <WorkoutNumericKeypad
           visible={Boolean(keypadFocus) && !useNativeKeyboard}
           mode={keypadFocus.field === 'weight' ? 'kg' : 'reps'}
-          value={keypadFocus.value}
-          rpeValue={keypadFocus.field === 'rir' ? keypadFocus.value : undefined}
+          value={draftText}
+          selectedRpe={
+            (() => {
+              const ex = session?.exercises.find((e) => e.exerciseId === keypadFocus.exerciseId);
+              const s = ex?.actualSets.find((row) => row.id === keypadFocus.setId);
+              return s?.rir != null ? Math.round((10 - Number(s.rir)) * 10) / 10 : undefined;
+            })()
+          }
+          rpeValue={keypadFocus.field === 'rir' ? draftText : undefined}
           exerciseName={
             session?.exercises.find((e) => e.exerciseId === keypadFocus.exerciseId)?.exerciseName
           }
@@ -1290,10 +1704,11 @@ export default function ActiveWorkoutScreen() {
           onBackspace={handleKeypadBackspace}
           onClear={handleKeypadClear}
           onStep={handleKeypadStep}
-          onSelectRpe={keypadFocus.field !== 'weight' ? handleKeypadSelectRpe : undefined}
+          onSelectRpe={handleKeypadSelectRpe}
           onNext={handleKeypadNext}
           onDismiss={handleKeypadDismiss}
           onToggleNativeKeyboard={handleToggleNativeKeyboard}
+          onHeightChange={setKeypadHeight}
         />
       )}
     </ScreenContainer>

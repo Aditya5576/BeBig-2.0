@@ -3,6 +3,7 @@ import {
   View,
   StyleSheet,
   Pressable,
+  ScrollView,
   useWindowDimensions,
   Platform,
 } from 'react-native';
@@ -19,14 +20,16 @@ export interface WorkoutNumericKeypadProps {
   mode: KeypadMode;
   value: string;
   rpeValue?: string;
+  selectedRpe?: number;
   exerciseName?: string;
   setNumber?: number;
   useNativeKeyboard?: boolean;
+  onHeightChange?: (height: number) => void;
   onKeyPress: (key: string) => void;
   onBackspace: () => void;
   onClear: () => void;
   onStep: (delta: number) => void;
-  onSelectRpe?: (rpe: number) => void;
+  onSelectRpe?: (rpe: number | undefined) => void;
   onNext: () => void;
   onDismiss: () => void;
   onToggleNativeKeyboard?: () => void;
@@ -40,9 +43,11 @@ export const WorkoutNumericKeypad: React.FC<WorkoutNumericKeypadProps> = ({
   mode,
   value,
   rpeValue,
+  selectedRpe,
   exerciseName,
   setNumber,
   useNativeKeyboard = false,
+  onHeightChange,
   onKeyPress,
   onBackspace,
   onClear,
@@ -78,6 +83,12 @@ export const WorkoutNumericKeypad: React.FC<WorkoutNumericKeypadProps> = ({
       style={styles.container}
       accessibilityRole="toolbar"
       accessibilityLabel={`Workout numeric keypad ${mode}`}
+      onLayout={(event) => {
+        const height = Math.ceil(event.nativeEvent.layout.height);
+        if (height > 0) {
+          onHeightChange?.(height);
+        }
+      }}
     >
       <View style={styles.contentWrap}>
         {/* Accessory / Top Header Bar */}
@@ -88,6 +99,11 @@ export const WorkoutNumericKeypad: React.FC<WorkoutNumericKeypadProps> = ({
                 {mode === 'kg' ? unit.toUpperCase() : 'REPS'}
               </Text>
             </View>
+            {value !== undefined ? (
+              <View testID="keypad-value-readout" style={styles.valueReadout}>
+                <Text style={styles.valueReadoutText}>{value || '—'}</Text>
+              </View>
+            ) : null}
             {setNumber !== undefined ? (
               <Text variant="caption" color="secondary" style={styles.contextText}>
                 Set {setNumber}
@@ -208,14 +224,24 @@ export const WorkoutNumericKeypad: React.FC<WorkoutNumericKeypadProps> = ({
                 <Text variant="caption" style={styles.rpeLabel}>
                   RPE:
                 </Text>
-                <View style={styles.rpeChipsScroll}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.rpeChipsScroll}
+                  keyboardShouldPersistTaps="handled"
+                >
                   {RPE_PRESETS.map((rpe) => {
-                    const isSelected = rpeValue === String(rpe);
+                    const isSelected =
+                      selectedRpe === rpe ||
+                      (selectedRpe === undefined && rpeValue === String(rpe));
                     return (
                       <Pressable
                         key={rpe}
                         testID={`keypad-rpe-${rpe}`}
-                        onPress={() => onSelectRpe(rpe)}
+                        onPress={() => onSelectRpe(isSelected ? undefined : rpe)}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: isSelected }}
+                        accessibilityLabel={`RPE ${rpe}`}
                         style={[
                           styles.rpeChip,
                           isSelected && styles.rpeChipSelected,
@@ -232,7 +258,7 @@ export const WorkoutNumericKeypad: React.FC<WorkoutNumericKeypadProps> = ({
                       </Pressable>
                     );
                   })}
-                </View>
+                </ScrollView>
               </View>
             ) : null}
           </View>
@@ -418,6 +444,20 @@ const createStyles = (
       borderWidth: 1,
       borderColor: colors.primary,
     },
+    valueReadout: {
+      backgroundColor: 'rgba(255, 255, 255, 0.08)',
+      borderRadius: radii.xs,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderWidth: 1,
+      borderColor: 'rgba(255, 255, 255, 0.15)',
+    },
+    valueReadoutText: {
+      color: colors.textPrimary ?? '#FFFFFF',
+      fontSize: 12,
+      fontWeight: '700',
+      fontFamily: FONT_FAMILIES.bodySemiBold,
+    },
     modeBadgeText: {
       color: colors.primary,
       fontWeight: '700',
@@ -497,9 +537,9 @@ const createStyles = (
     },
     rpeChipsScroll: {
       flexDirection: 'row',
-      flexWrap: 'wrap',
+      alignItems: 'center',
       gap: 4,
-      flex: 1,
+      paddingRight: 8,
     },
     rpeChip: {
       paddingHorizontal: 6,

@@ -1,5 +1,13 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, StyleSheet, TextInput, Pressable, Modal, useWindowDimensions } from 'react-native';
+import {
+  View,
+  StyleSheet,
+  TextInput,
+  Pressable,
+  Modal,
+  useWindowDimensions,
+  LayoutChangeEvent,
+} from 'react-native';
 import { useAppTheme } from '../../theme';
 import { Text, Icon } from '../../../components/ui';
 import { WorkoutExercise, WorkoutSet, SetType } from '../types';
@@ -29,12 +37,14 @@ export interface ActiveSetRowProps {
   ) => void;
   isCustomKeypadActive?: boolean;
   activeFocusField?: 'weight' | 'reps' | 'rir' | null;
+  draftValue?: string;
   onFocusField?: (
     exerciseId: string,
     setId: string,
     field: 'weight' | 'reps' | 'rir',
     currentValue: string
   ) => void;
+  onLayout?: (e: LayoutChangeEvent) => void;
 }
 
 export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow({
@@ -50,7 +60,9 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
   onToggleCompleteSet,
   isCustomKeypadActive,
   activeFocusField,
+  draftValue,
   onFocusField,
+  onLayout,
 }) {
   const { colors } = useAppTheme();
   const { width: windowWidth } = useWindowDimensions();
@@ -109,6 +121,19 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
     }
   }, [set.completed, set.weight, set.reps, set.rir, set.notes]);
 
+  // Synchronize local input state when draftValue updates for this row
+  useEffect(() => {
+    if (draftValue !== undefined) {
+      if (activeFocusField === 'weight') {
+        setLocalWeight(draftValue);
+      } else if (activeFocusField === 'reps') {
+        setLocalReps(draftValue);
+      } else if (activeFocusField === 'rir') {
+        setLocalRir(draftValue);
+      }
+    }
+  }, [draftValue, activeFocusField]);
+
   const handleWeightChange = useCallback((val: string) => {
     setLocalWeight(val);
     onUpdateSetField(exercise.exerciseId, set.id, 'weight', val);
@@ -154,21 +179,28 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
   const handleToggleComplete = useCallback(() => {
     let pendingUpdates: Partial<WorkoutSet> = {};
 
-    const numWeight = parseFloat(localWeight);
+    const effectiveWeightStr =
+      activeFocusField === 'weight' && draftValue !== undefined ? draftValue : localWeight;
+    const effectiveRepsStr =
+      activeFocusField === 'reps' && draftValue !== undefined ? draftValue : localReps;
+    const effectiveRirStr =
+      activeFocusField === 'rir' && draftValue !== undefined ? draftValue : localRir;
+
+    const numWeight = parseFloat(effectiveWeightStr);
     if (!isNaN(numWeight)) {
       pendingUpdates.weight = Math.max(0, numWeight);
     } else if (set.weight !== undefined && set.weight !== null) {
       pendingUpdates.weight = set.weight;
     }
 
-    const numReps = parseInt(localReps, 10);
+    const numReps = parseInt(effectiveRepsStr, 10);
     if (!isNaN(numReps)) {
       pendingUpdates.reps = Math.max(0, numReps);
     } else if (set.reps !== undefined && set.reps !== null) {
       pendingUpdates.reps = set.reps;
     }
 
-    const numRir = parseFloat(localRir);
+    const numRir = parseFloat(effectiveRirStr);
     if (!isNaN(numRir)) {
       pendingUpdates.rir = Math.min(10, Math.max(0, numRir));
     } else if (set.rir !== undefined && set.rir !== null) {
@@ -178,7 +210,17 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
     pendingUpdates.notes = localNotes;
 
     onToggleCompleteSet(exercise, set, pendingUpdates);
-  }, [exercise, set, localWeight, localReps, localRir, localNotes, onToggleCompleteSet]);
+  }, [
+    exercise,
+    set,
+    localWeight,
+    localReps,
+    localRir,
+    localNotes,
+    activeFocusField,
+    draftValue,
+    onToggleCompleteSet,
+  ]);
 
   const formatPrevious = (prev?: WorkoutSet) => {
     if (!prev) return '—';
@@ -228,8 +270,19 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
   const hasExistingNote = Boolean(localNotes && localNotes.trim().length > 0);
   const isExpanded = isNotesExpanded !== undefined ? isNotesExpanded : hasExistingNote;
 
+  const displayWeight =
+    activeFocusField === 'weight' && draftValue !== undefined ? draftValue : localWeight;
+  const displayReps =
+    activeFocusField === 'reps' && draftValue !== undefined ? draftValue : localReps;
+  const displayRir =
+    activeFocusField === 'rir' && draftValue !== undefined ? draftValue : localRir;
+  const derivedRpe =
+    set.rir != null ? Math.round((10 - Number(set.rir)) * 10) / 10 : undefined;
+
   return (
     <View
+      testID={`active-set-row-${set.id}`}
+      onLayout={onLayout}
       style={[
         styles.rowWrapper,
         set.completed ? styles.rowWrapperCompleted : null,
@@ -340,7 +393,7 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
         <View style={styles.colKg}>
           <TextInput
             testID={`set-weight-${exercise.exerciseId}-${set.setNumber}`}
-            value={localWeight}
+            value={displayWeight}
             placeholder="kg"
             placeholderTextColor="#64748B"
             keyboardType="decimal-pad"
@@ -348,7 +401,7 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
             showSoftInputOnFocus={!isCustomKeypadActive}
             inputMode={isCustomKeypadActive ? 'none' : 'decimal'}
             onFocus={() =>
-              onFocusField?.(exercise.exerciseId, set.id, 'weight', localWeight)
+              onFocusField?.(exercise.exerciseId, set.id, 'weight', displayWeight)
             }
             onChangeText={handleWeightChange}
             onBlur={commitWeight}
@@ -365,7 +418,7 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
         <View style={styles.colReps}>
           <TextInput
             testID={`set-reps-${exercise.exerciseId}-${set.setNumber}`}
-            value={localReps}
+            value={displayReps}
             placeholder="reps"
             placeholderTextColor="#64748B"
             keyboardType="number-pad"
@@ -373,7 +426,7 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
             showSoftInputOnFocus={!isCustomKeypadActive}
             inputMode={isCustomKeypadActive ? 'none' : 'numeric'}
             onFocus={() =>
-              onFocusField?.(exercise.exerciseId, set.id, 'reps', localReps)
+              onFocusField?.(exercise.exerciseId, set.id, 'reps', displayReps)
             }
             onChangeText={handleRepsChange}
             onBlur={commitReps}
@@ -386,11 +439,11 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
           />
         </View>
 
-        {/* RIR */}
+        {/* RIR / RPE */}
         <View style={styles.colRir}>
           <TextInput
             testID={`set-rir-${exercise.exerciseId}-${set.setNumber}`}
-            value={localRir}
+            value={displayRir}
             placeholder="RIR"
             placeholderTextColor="#64748B"
             keyboardType="decimal-pad"
@@ -398,7 +451,7 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
             showSoftInputOnFocus={!isCustomKeypadActive}
             inputMode={isCustomKeypadActive ? 'none' : 'decimal'}
             onFocus={() =>
-              onFocusField?.(exercise.exerciseId, set.id, 'rir', localRir)
+              onFocusField?.(exercise.exerciseId, set.id, 'rir', displayRir)
             }
             onChangeText={handleRirChange}
             onBlur={commitRir}
@@ -410,6 +463,17 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
               activeFocusField === 'rir' && styles.metricInputFocused,
             ]}
           />
+          {derivedRpe !== undefined && !isNaN(derivedRpe) && activeFocusField !== 'rir' ? (
+            <Pressable
+              testID={`set-rpe-badge-${set.id}`}
+              onPress={() => onFocusField?.(exercise.exerciseId, set.id, 'reps', displayReps)}
+              style={styles.rpeBadge}
+              accessibilityLabel={`Set RPE ${derivedRpe}. Tap to edit.`}
+              accessibilityRole="button"
+            >
+              <Text style={styles.rpeBadgeText}>{`RPE ${derivedRpe}`}</Text>
+            </Pressable>
+          ) : null}
         </View>
 
         {/* Compact Complete Button */}
@@ -810,6 +874,28 @@ const createStyles = (colors: any, isCompact: boolean = false) =>
     colRir: {
       flex: 0.85,
       minWidth: isCompact ? 26 : 30,
+      position: 'relative',
+    },
+    rpeBadge: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(15, 23, 42, 0.95)',
+      borderWidth: 1,
+      borderColor: colors.primary,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 2,
+    },
+    rpeBadgeText: {
+      fontSize: isCompact ? 10 : 11,
+      fontWeight: '700',
+      fontFamily: FONT_FAMILIES.bodySemiBold,
+      color: colors.primary,
+      ...NUMERIC_TABULAR_STYLE,
     },
     metricInput: {
       backgroundColor: '#0D121D',

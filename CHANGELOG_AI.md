@@ -3,6 +3,104 @@
 - Refined PR typography and history UI.
 - Stabilized Cinematic Splash Screen with BeBig Barbell Crest.
 
+## [UX & Performance: Workout Numeric Keypad Blueprint & Pre-Release Hardening] — 2026-11-21 — True Nested Layout Auto-Scroll & Zero Stale Completion Overwrite
+
+### Problem
+- **Coordinate Drift in Set-Row Auto-Scroll**: Card-relative row layout measurements previously omitted `exerciseListContainer`'s offset in `ScrollView` and `setsContainer`'s internal offset inside `ActiveExerciseCard`, causing lower set rows to be partially obscured behind the keypad overlay on certain screen heights.
+- **Stale `pendingUpdates` Overwrite on Rapid Set Completion**: During rapid keypad typing (e.g. typing `8` -> `5`), immediately tapping the set complete checkmark could cause `ActiveSetRow`'s local state to send stale `pendingUpdates`, clobbering the freshly committed `85` back to the pre-typed value.
+- In active workout sessions, the custom numeric keypad overlay previously used a static 320px bottom clearance that could cause visual overlap or excessive empty space across differing screen sizes.
+- Keystrokes in the custom keypad triggered asynchronous functional state updates and roundtrip storage autosaves on every keypress, which could cause typing latency, cursor flicker, or intermediate decimal collapses (e.g. typing `"80."` collapsing to `80`).
+- RPE selections in the keypad lacked dedicated single-field mutations (could accidentally touch or overwrite reps) and lacked clear visual identification on tabular set rows.
+
+### Changes
+1. **True ScrollView-Content Y-Coordinate Calculation (`ActiveExerciseCard.tsx` & `app/workout/active.tsx`)**:
+   - In `app/workout/active.tsx`: Added `exerciseListOffsetYRef` measuring `<View style={styles.exerciseListContainer}>`'s `onLayout` inside the `ScrollView`.
+   - In `ActiveExerciseCard.tsx`: Added `setsContainerOffsetYRef` measuring `<View style={styles.setsContainer}>`'s `onLayout`. Reports card-relative set row coordinates as `setsContainerOffsetYRef.current + row.layout.y` (and re-emits when `setsContainer` finishes layout).
+   - In `app/workout/active.tsx`'s `scrollToFocusedRow`: Computes true `ScrollView`-content coordinates:
+     `const rowAbsY = exerciseListOffsetYRef.current + cardLayout.y + rowLayout.y;`
+     ensuring header, banners, and card internal offsets are fully included and every set row scrolls cleanly above the keypad.
+2. **Prevent Stale `pendingUpdates` Overwrite on Rapid Completion (`ActiveSetRow.tsx` & `app/workout/active.tsx`)**:
+   - In `ActiveSetRow.tsx`: Synchronizes local state when `draftValue` updates for the active row. In `handleToggleComplete`, uses the live `draftValue` string when focused, constructing accurate `pendingUpdates`.
+   - In `app/workout/active.tsx` (`handleToggleCompleteSet`): Runs `commitDraftNow()` first, resolves `latestSet` from the committed session, and unconditionally removes `draftFieldCommitted` from `safePendingUpdates` (`delete safePendingUpdates[draftFieldCommitted]`), ensuring both newly typed values and explicitly cleared values (`undefined`, such as cleared RIR) remain authoritative and cannot be overwritten by stale `pendingUpdates`.
+3. **Dynamic Overlap Clearance & Set-Row Auto-Scroll (`src/features/workout/components/WorkoutNumericKeypad.tsx`, `ActiveExerciseCard.tsx`, `ActiveSetRow.tsx`, `app/workout/active.tsx`)**:
+   - Added `onHeightChange?: (height: number) => void` to `WorkoutNumericKeypad`, invoked from root `View.onLayout` (`Math.ceil(layout.height)`). Keypad self-contains safe-area bottom padding (`paddingBottom: Math.max(bottomInset, 8)`), avoiding duplicate bottom inset addition.
+   - In `app/workout/active.tsx`, replaced static 320px padding with dynamic clearance calculation factoring in measured keypad height, safe-area insets, and rest timer overlay:
+     ```ts
+     const keypadClearance = isKeypadOpen && keypadHeight > 0 ? keypadHeight + 16 : (isKeypadOpen ? 320 : 0);
+     const restClearance = session?.activeRestTimer ? measuredRestHeight + Math.max(insets.bottom, 12) + 24 : 0;
+     const dynamicBottomPadding = Math.max(baseBottomPadding, restClearance, keypadClearance);
+     ```
+   - Tracked individual set-row layouts (`setRowLayoutsRef.current[setId]`) and exercise card layouts (`cardLayoutsRef.current[exerciseId]`). Implemented `scrollToFocusedRow` that automatically scrolls the focused set row into clear view above the keypad whenever focus changes or keypad height updates.
+2. **Zero-Latency Local Draft Pipeline (`app/workout/active.tsx`, `ActiveExerciseCard.tsx`, `ActiveSetRow.tsx`, `WorkoutNumericKeypad.tsx`)**:
+   - Added `draftTarget` (`{ exerciseId, setId, field } | null`), `draftText`, and `draftTextRef` to manage active keystroke input with sub-16ms responsiveness.
+   - Keystrokes (digit, decimal `.`, stepper `±`, backspace, clear) update only `draftText` and `draftTextRef` synchronously on frame 0, with zero session cloning or storage writes per keypress.
+   - Rendered live `draftText` in `WorkoutNumericKeypad` value readout (`testID="keypad-value-readout"`) and passed `draftValue` into `ActiveSetRow` to ensure intermediate typing strings (e.g. `"80."` or `"100"`) never collapse while typing.
+   - Materialized `draftText` into `sessionRef.current` and debounced save after 150ms of idle typing, capturing target set in timer closure to prevent row-switch race conditions.
+   - Enforced synchronous draft materialization (`commitDraftNow()`) before:
+     - Next set navigation (`handleKeypadNext`)
+     - Keypad dismissal (`handleKeypadDismiss`)
+     - Switching to native keyboard (`handleToggleNativeKeyboard`)
+     - Completing sets (`handleToggleCompleteSet`)
+     - Workout finish (`handleFinish`)
+     - Mobile background/screen-lock events (`visibilitychange`, `pagehide`, `beforeunload`, `freeze`, and native `AppState`).
+   - Guarded in-flight autosave responses against overwriting newer uncommitted draft text via `editGenerationRef`.
+3. **Clean RPE Chip UX & Set-Row Badge (`WorkoutNumericKeypad.tsx`, `ActiveSetRow.tsx`, `app/workout/active.tsx`)**:
+   - Mapped domain storage in `set.rir` (`0..4` where `RPE = 10 - RIR`).
+   - Pressing an RPE chip (`6..10`) executes `handleKeypadSelectRpe` which mutates only `set.rir` and leaves `draftText` / `reps` untouched, allowing subsequent keystrokes to continue editing reps without interruption.
+   - Tapping an already-selected RPE chip or clear sets `set.rir = undefined` genuinely.
+   - Wrapped RPE chips in a horizontal `ScrollView` (`showsHorizontalScrollIndicator={false}`) with `accessibilityState={{ selected }}`.
+   - Rendered high-contrast `RPE {derivedRpe}` badge pill (`testID="set-rpe-badge-${set.id}"`) directly on `ActiveSetRow` whenever `set.rir != null` (tapping focuses row's reps/RPE keypad).
+4. **Verification**:
+   - Expanded `tests/Milestone5KeypadAndAdminUX.test.tsx` with dedicated tests for keypad height reporting, live draft readout, RPE toggle-off and selection accessibility state, and `ActiveSetRow` draft value rendering and RPE badge interaction.
+   - Verified full passing test suites (32/32 tests across `Milestone5KeypadAndAdminUX` and `ActiveWorkoutScreenLockDurability`, 10/10 in `WorkoutHistoryAndRecovery`).
+   - TypeScript typecheck (`tsc --noEmit`): 0 errors.
+   - Expo lint (`expo lint`): 0 errors.
+   - Web build (`node scripts/build-web.js`): 45 static routes bundled into `dist/`.
+
+## [P0 Hotfix: Active Workout Screen-Lock Durability & Recovery Guard] — 2026-11-20 — Zero Data Loss on Screen Lock / Mobile Background Suspension
+
+### Problem
+- **Real User Incident**: During a 1h02m gym workout with 6 exercise variations and 3 completed sets each (18 sets total), the user locked their phone screen.
+- Upon unlocking later, the timer accurately showed `1h 02m` elapsed (`startedAt` survived), but all 6 exercise variations and 18 sets were lost/wiped (`exercises: []`).
+
+### Root Causes
+1. **CAS Revision Stagnation / Silent Rejection**: In `app/workout/active.tsx`, `flushActiveWorkout` previously discarded the session returned by `workoutRepository.updateActiveWorkout`. Subsequent set updates sent stale revisions (`incomingSeq <= persistedSeq`), causing `workoutStorage.saveActiveWorkout` to reject the write with a CAS conflict, which was silently swallowed.
+2. **Debounced Save Interrupted by OS Sleep**: Set edits relied on a 300ms `scheduleDebouncedSave`. Locking mobile web/PWA suspended JS execution before the timer could fire, leaving modified sets uncommitted.
+3. **Missing Native Screen-Lock Lifecycle Listeners**: `active.tsx` only listened to `AppState.addEventListener('change')` from `react-native`, omitting mobile Web/PWA native events (`visibilitychange` with `document.visibilityState === 'hidden'`, `pagehide`, `beforeunload`, `freeze`).
+4. **Missing Content-Preserving Monotonic Invariant & No Recovery Backup**: Storage lacked a shadow recovery backup for active workouts. If an empty snapshot was flushed on unmount or corrupted, `exercises: []` clobbered non-empty sessions without gating. On unlock/remount, `getActiveWorkout` rehydrated the empty session, showing a running timer with zero exercises.
+
+### Changes
+1. **Content-Preserving Monotonicity Guard, Partial Truncation Defense & Shadow Recovery Backup (`src/features/workout/storage/workoutStorage.ts`)**:
+   - Introduced `BASE_ACTIVE_WORKOUT_RECOVERY_BACKUP_KEY = 'bebig.workout.active.recovery_backup'` and `BASE_ACTIVE_WORKOUT_SYNC_EMERGENCY_KEY = 'bebig.workout.active.sync_emergency'`.
+   - In `saveActiveWorkout`: Enforced content preservation. If stored session has `exercises.length > 0` and incoming session has `exercises.length === 0`, it refuses to wipe unless `options?.allowEmptyOverwrites` is explicitly true, and returns the preserved stored session.
+   - Guarded against silent partial exercise truncation: If `incoming.exercises.length < currentStored.exercises.length` and `stored.exercises.length > 1`, unmentioned exercises are preserved unless `options?.allowExerciseRemoval` or `options?.allowEmptyOverwrites` is explicitly provided.
+   - Updated `recoveryBackupKey` automatically on all writes where `exercises.length > 0`. Logs warning on write failures rather than silently swallowing. Purges backup only on explicit discard, completion, or authorized wipe.
+   - In `getActiveWorkout`: Added automatic self-healing recovery. Enforces strict active token match (`token.status === 'active' && token.sessionId === parsedBackup.id`) before restoring from shadow recovery backup (both when primary storage is missing and when primary storage is empty). Promotes cross-platform synchronous emergency mirror (`sync_emergency` backed by memory and `localStorage`) if primary is missing or empty.
+   - In `createActiveWorkout`: Synchronously establishes shadow recovery backup if created session contains exercises.
+2. **CAS Auto-Rebase Retry Engine with True 3-Way Set Deletion Merging (`src/features/workout/services/workoutRepository.ts`)**:
+   - In `updateActiveWorkout`: Enforces a bounded CAS retry loop (up to 3 attempts). Wraps all `saveActiveWorkout` and `getActiveWorkout` calls in `try / catch` so any rejected storage promise is caught and rethrown as `ActiveWorkoutPersistenceError`, never escaping as a raw storage error.
+   - True 3-Way Set Deletion: In `mergeSessionDeep`, checks sets against `baseSession`. If a set existed in `baseSession` and is absent in `incomingSession`, it is recognized as a deliberate deletion and is NOT resurrected from `latestStored`. Only concurrently added sets (not in `baseSession`) or sets remaining in `incomingSession` are preserved.
+   - Preserves concurrent edits: set completions and set weights edited across concurrent mutations (e.g. Set 1 weight edit + Set 2 completion) both cleanly survive.
+   - Surfaces `ActiveWorkoutPersistenceError` with detailed conflict and revision diagnostics when retries are exhausted or persistence is rejected, eliminating fake success returns.
+   - In `completeActiveWorkout`: Supported caller-provided `UserScope` to cleanly clear primary active draft, emergency mirror, and shadow recovery backup.
+3. **Screen-Lock Lifecycle Handlers, Cross-Platform Synchronous Emergency Mirror & Immediate Autosave (`app/workout/active.tsx`)**:
+   - Added cross-platform synchronous emergency mirror (`workoutStorage.writeSyncEmergencyMirror(current)`) backed by an in-memory module map + `window.localStorage` when available, ensuring native `AppState` background transitions on mobile also populate the emergency mirror synchronously when `window` is undefined.
+   - Added native web/PWA lifecycle hooks (`document.addEventListener('visibilitychange')`, `window.addEventListener('pagehide')`, `beforeunload`, `freeze`) that flush immediately on screen lock or suspension.
+   - In `useFocusEffect`: Enforced Content Preservation Rule. If `currentInMemory.exercises.length > 0` and storage has `0` exercises upon resume/unlock, in-memory state wins and heals storage.
+   - Routed bottom "+ Add Exercise" button through `flushActiveWorkout()` to eliminate stale revision race conditions when opening the picker.
+   - In debounced saves: updates React state with the persisted revision returned by storage.
+   - Passed `allowExerciseRemoval: true` on explicit single exercise removal and `allowEmptyOverwrites: true` strictly when user deliberately removes the last exercise.
+4. **Durability Regression Test Suite (`tests/ActiveWorkoutScreenLockDurability.test.tsx`)**:
+   - Added 21 comprehensive tests across 9 test cases covering 6 variations / 18 sets gym session durability, concurrent set-level CAS auto-rebase, deliberate set deletion 3-way preservation (no resurrection), rejected storage promise wrapping in `ActiveWorkoutPersistenceError`, token-authorized shadow recovery backup rejection on missing/mismatched tokens, cross-platform emergency sync mirror restoration without `window`, 1h02m elapsed timer unlock rehydration, bottom "+ Add Exercise" flush, and clean completion/discard purge.
+
+### Verification Gate Results
+- **Jest Test Suites**: 4 passed, 4 total (62 passed, 62 total).
+- **Targeted Durability Suite**: 21 passed, 21 total (100% pass in 7.8s).
+- **TypeScript Typecheck (`tsc --noEmit`)**: Exited with code 0 (0 errors).
+- **Expo Lint (`expo lint`)**: Exited with code 0 (0 errors, 39 warnings).
+- **Web Export (`node scripts/build-web.js`)**: Exited with code 0 (45 static routes bundled into `dist/`).
+- **Option A Enforcement**: Local verification only; zero git commits, git pushes, or remote deployments executed.
+
 ## [Release v2.6.0] — 2026-11-19 — Production Deployment: Server-Side Wger Catalog, expo-image Caching, Zod Validation & CI Hardening
 
 ### Summary

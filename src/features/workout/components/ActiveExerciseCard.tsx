@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { View, StyleSheet, Pressable, LayoutChangeEvent, useWindowDimensions } from 'react-native';
 import { useAppTheme } from '../../theme';
 import { Text, Card, Button, Icon } from '../../../components/ui';
@@ -52,6 +52,9 @@ export interface ActiveExerciseCardProps {
     field: 'weight' | 'reps' | 'rir',
     currentValue: string
   ) => void;
+  draftTarget?: { exerciseId: string; setId: string; field: 'weight' | 'reps' | 'rir' } | null;
+  draftValue?: string;
+  onSetRowLayout?: (setId: string, y: number, height: number) => void;
 }
 
 const formatShortDate = (dateStr?: string) => {
@@ -86,11 +89,16 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(function A
   activeFocusSetId,
   activeFocusField,
   onFocusField,
+  draftTarget,
+  draftValue,
+  onSetRowLayout,
 }) {
   const { colors } = useAppTheme();
   const styles = createStyles(colors);
   const { width: windowWidth } = useWindowDimensions();
   const [isLastSessionExpanded, setIsLastSessionExpanded] = useState(false);
+  const setsContainerOffsetYRef = useRef<number>(0);
+  const rawRowLayoutsRef = useRef<{ [setId: string]: { y: number; height: number } }>({});
   const resolvedOverloadNudge =
     overloadNudge !== undefined ? overloadNudge : computeBestLastSetNudge(lastPerformance);
 
@@ -449,7 +457,16 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(function A
       </View>
 
       {/* Sets List */}
-      <View style={styles.setsContainer}>
+      <View
+        testID={`sets-container-${exercise.exerciseId}`}
+        style={styles.setsContainer}
+        onLayout={(e) => {
+          setsContainerOffsetYRef.current = e.nativeEvent.layout.y;
+          Object.entries(rawRowLayoutsRef.current).forEach(([sId, layout]) => {
+            onSetRowLayout?.(sId, setsContainerOffsetYRef.current + layout.y, layout.height);
+          });
+        }}
+      >
         {exercise.actualSets.map((set, setIndex) => (
           <ActiveSetRow
             key={set.id}
@@ -465,7 +482,13 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(function A
             onToggleCompleteSet={onToggleCompleteSet}
             isCustomKeypadActive={isCustomKeypadActive}
             activeFocusField={activeFocusSetId === set.id ? activeFocusField : null}
+            draftValue={draftTarget?.setId === set.id ? draftValue : undefined}
             onFocusField={onFocusField}
+            onLayout={(e) => {
+              const { y, height } = e.nativeEvent.layout;
+              rawRowLayoutsRef.current[set.id] = { y, height };
+              onSetRowLayout?.(set.id, setsContainerOffsetYRef.current + y, height);
+            }}
           />
         ))}
       </View>

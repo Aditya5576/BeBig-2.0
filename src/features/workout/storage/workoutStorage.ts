@@ -15,6 +15,8 @@ import { platformStorage } from '../../../lib/storage';
 
 export const BASE_ACTIVE_WORKOUT_KEY = 'bebig.workout.active';
 export const BASE_ACTIVE_SESSION_TOKEN_KEY = 'bebig.workout.active.token';
+export const BASE_ACTIVE_WORKOUT_RECOVERY_BACKUP_KEY = 'bebig.workout.active.recovery_backup';
+export const BASE_ACTIVE_WORKOUT_SYNC_EMERGENCY_KEY = 'bebig.workout.active.sync_emergency';
 export const BASE_ABANDONED_WORKOUT_KEY = 'bebig.workout.active.abandoned';
 export const BASE_DISCARDED_WORKOUTS_KEY = 'bebig.workout.active.discarded';
 export const BASE_COMPLETED_WORKOUTS_KEY = 'bebig.workout.completed';
@@ -31,6 +33,10 @@ export interface SaveActiveWorkoutResult {
   conflict?: boolean;
   persistedRevision?: number;
   incomingRevision?: number;
+  rebased?: boolean;
+  restoredExercisesCount?: number;
+  session?: WorkoutSession;
+  workout?: WorkoutSession;
   error?: string;
 }
 
@@ -47,6 +53,77 @@ const writeStorage = async (key: string, value: string): Promise<void> => {
 
 const deleteStorage = async (key: string): Promise<void> => {
   await platformStorage.removeItem(key);
+};
+
+const inMemoryEmergencyMirror = new Map<string, WorkoutSession>();
+
+export const writeSyncEmergencyMirror = (session: WorkoutSession): void => {
+  if (!session || !session.id) return;
+  try {
+    inMemoryEmergencyMirror.set(BASE_ACTIVE_WORKOUT_SYNC_EMERGENCY_KEY, JSON.parse(JSON.stringify(session)));
+    const storageObj =
+      typeof window !== 'undefined' && window.localStorage
+        ? window.localStorage
+        : typeof globalThis !== 'undefined' && (globalThis as any).localStorage
+          ? (globalThis as any).localStorage
+          : null;
+    if (storageObj && typeof storageObj.setItem === 'function') {
+      storageObj.setItem(BASE_ACTIVE_WORKOUT_SYNC_EMERGENCY_KEY, JSON.stringify(session));
+    }
+  } catch {}
+};
+
+export const readSyncEmergencyMirror = async (): Promise<WorkoutSession | null> => {
+  try {
+    // 1. In-memory emergency mirror (works synchronously on native & web)
+    const inMem = inMemoryEmergencyMirror.get(BASE_ACTIVE_WORKOUT_SYNC_EMERGENCY_KEY);
+    if (inMem && isValidSession(inMem) && (inMem.status === 'active' || (inMem.status as string) === 'in_progress')) {
+      return inMem;
+    }
+
+    // 2. localStorage emergency mirror
+    const storageObj =
+      typeof window !== 'undefined' && window.localStorage
+        ? window.localStorage
+        : typeof globalThis !== 'undefined' && (globalThis as any).localStorage
+          ? (globalThis as any).localStorage
+          : null;
+    if (storageObj && typeof storageObj.getItem === 'function') {
+      const raw = storageObj.getItem(BASE_ACTIVE_WORKOUT_SYNC_EMERGENCY_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (isValidSession(parsed) && (parsed.status === 'active' || (parsed.status as string) === 'in_progress')) {
+          return parsed;
+        }
+      }
+    }
+
+    // 3. Platform storage fallback
+    const rawPlatform = await readStorage(BASE_ACTIVE_WORKOUT_SYNC_EMERGENCY_KEY);
+    if (rawPlatform) {
+      const parsed = JSON.parse(rawPlatform);
+      if (isValidSession(parsed) && (parsed.status === 'active' || (parsed.status as string) === 'in_progress')) {
+        return parsed;
+      }
+    }
+  } catch {}
+  return null;
+};
+
+export const clearSyncEmergencyMirror = async (): Promise<void> => {
+  try {
+    inMemoryEmergencyMirror.delete(BASE_ACTIVE_WORKOUT_SYNC_EMERGENCY_KEY);
+    const storageObj =
+      typeof window !== 'undefined' && window.localStorage
+        ? window.localStorage
+        : typeof globalThis !== 'undefined' && (globalThis as any).localStorage
+          ? (globalThis as any).localStorage
+          : null;
+    if (storageObj && typeof storageObj.removeItem === 'function') {
+      storageObj.removeItem(BASE_ACTIVE_WORKOUT_SYNC_EMERGENCY_KEY);
+    }
+    await deleteStorage(BASE_ACTIVE_WORKOUT_SYNC_EMERGENCY_KEY);
+  } catch {}
 };
 
 /**
@@ -746,7 +823,85 @@ export const workoutStorage = {
           raw = await readStorage(storageKey);
         }
 
-        if (!raw) return null;
+        // Emergency Mirror Check:
+        // If a synchronous emergency snapshot was captured during iOS/PWA pagehide / screen-lock,
+        // inspect it before reading secondary or fallback storage.
+        const emergencySnapshot = await readSyncEmergencyMirror();
+        if (emergencySnapshot) {
+          const isTokenMismatch = token && token.status === 'active' && token.sessionId !== emergencySnapshot.id;
+          if (!isTokenMismatch) {
+            const emergencySeq = Math.max(
+              Number((emergencySnapshot as any).revision ?? 0),
+              Number(emergencySnapshot.version ?? 0)
+            );
+
+            let primarySession: WorkoutSession | null = null;
+            if (raw) {
+              try {
+                const parsedRaw = JSON.parse(raw);
+                if (isValidSession(parsedRaw) && parsedRaw.id === emergencySnapshot.id) {
+                  primarySession = parsedRaw;
+                }
+              } catch {}
+            }
+
+            const primarySeq = primarySession
+              ? Math.max(Number((primarySession as any).revision ?? 0), Number(primarySession.version ?? 0))
+              : 0;
+
+            if (
+              !primarySession ||
+              emergencySeq > primarySeq ||
+              ((emergencySnapshot.exercises?.length ?? 0) > 0 && (!primarySession.exercises || primarySession.exercises.length === 0))
+            ) {
+              console.warn(
+                `[WORKOUT_STORAGE] Restored/promoted active workout "${emergencySnapshot.name}" (${emergencySnapshot.id}) from sync emergency mirror!`
+              );
+              if (storageKey) {
+                await writeStorage(storageKey, JSON.stringify(emergencySnapshot));
+              }
+              return emergencySnapshot;
+            }
+          }
+        }
+
+        const recoveryBackupKey =
+          getUserScopedKey(BASE_ACTIVE_WORKOUT_RECOVERY_BACKUP_KEY, resolvedScope) ||
+          (process.env.NODE_ENV === 'test' ? 'bebig.workout.active.recovery_backup' : null);
+
+        if (!raw) {
+          // If primary active workout key was cleared or evicted, check recovery backup before giving up
+          if (recoveryBackupKey) {
+            const rawBackup = await readStorage(recoveryBackupKey);
+            if (rawBackup) {
+              try {
+                const parsedBackup = JSON.parse(rawBackup);
+                if (
+                  isValidSession(parsedBackup) &&
+                  (parsedBackup.status === 'active' || (parsedBackup.status as string) === 'in_progress') &&
+                  parsedBackup.exercises &&
+                  parsedBackup.exercises.length > 0
+                ) {
+                  // Verify token authorization: require active token AND token.sessionId === parsedBackup.id!
+                  if (token && token.status === 'active' && token.sessionId === parsedBackup.id) {
+                    console.warn(
+                      `[WORKOUT_STORAGE] Restored active workout "${parsedBackup.name}" (${parsedBackup.id}) from shadow recovery backup!`
+                    );
+                    if (storageKey) {
+                      await writeStorage(storageKey, JSON.stringify(parsedBackup));
+                    }
+                    return parsedBackup;
+                  } else {
+                    console.warn(
+                      `[WORKOUT_STORAGE] Rejected shadow recovery backup "${parsedBackup.id}": active token missing or mismatched (token: ${JSON.stringify(token)}).`
+                    );
+                  }
+                }
+              } catch {}
+            }
+          }
+          return null;
+        }
 
         const parsed = JSON.parse(raw);
         if (isValidSession(parsed) && parsed.status === 'active') {
@@ -766,6 +921,47 @@ export const workoutStorage = {
             if (storageKey) await deleteStorage(storageKey);
             return null;
           }
+
+          // Self-Healing Recovery Check:
+          // If parsed.exercises is empty, check if recovery backup exists with non-empty exercises for this session
+          if (recoveryBackupKey && (!parsed.exercises || parsed.exercises.length === 0)) {
+            const rawBackup = await readStorage(recoveryBackupKey);
+            if (rawBackup) {
+              try {
+                const parsedBackup = JSON.parse(rawBackup);
+                if (
+                  isValidSession(parsedBackup) &&
+                  parsedBackup.id === parsed.id &&
+                  (parsedBackup.status === 'active' || (parsedBackup.status as string) === 'in_progress') &&
+                  token &&
+                  token.status === 'active' &&
+                  token.sessionId === parsedBackup.id &&
+                  parsedBackup.exercises &&
+                  parsedBackup.exercises.length > 0
+                ) {
+                  console.warn(
+                    `[WORKOUT_STORAGE] Self-healed active workout "${parsed.name}" (${parsed.id}) from shadow recovery backup: restored ${parsedBackup.exercises.length} exercises!`
+                  );
+                  const healedSession: WorkoutSession = {
+                    ...parsed,
+                    exercises: parsedBackup.exercises,
+                    activeRestTimer: parsedBackup.activeRestTimer ?? parsed.activeRestTimer,
+                    revision: Math.max(Number(parsed.revision ?? 0), Number(parsedBackup.revision ?? 0)) + 1,
+                    version: Math.max(Number(parsed.version ?? 0), Number(parsedBackup.version ?? 0)) + 1,
+                  };
+                  if (storageKey) {
+                    await writeStorage(storageKey, JSON.stringify(healedSession));
+                  }
+                  return healedSession;
+                } else if (parsedBackup && (!token || token.status !== 'active' || token.sessionId !== parsedBackup.id)) {
+                  console.warn(
+                    `[WORKOUT_STORAGE] Rejected self-healing from recovery backup "${parsedBackup?.id}": active token missing or mismatched.`
+                  );
+                }
+              } catch {}
+            }
+          }
+
           return parsed;
         }
         return null;
@@ -861,6 +1057,23 @@ export const workoutStorage = {
         status: 'active',
         updatedAt: new Date().toISOString(),
       });
+
+      // Update shadow recovery backup if created session already has exercises (e.g. from template or recovery)
+      const recoveryBackupKey =
+        getUserScopedKey(BASE_ACTIVE_WORKOUT_RECOVERY_BACKUP_KEY, targetScope) ||
+        (process.env.NODE_ENV === 'test' ? 'bebig.workout.active.recovery_backup' : null);
+      if (recoveryBackupKey) {
+        try {
+          if (workout.exercises && workout.exercises.length > 0) {
+            await writeStorage(recoveryBackupKey, JSON.stringify(workout));
+          } else {
+            await deleteStorage(recoveryBackupKey);
+          }
+        } catch (err) {
+          console.warn('[WORKOUT_STORAGE] Non-fatal error persisting shadow recovery backup in createActiveWorkout:', err);
+        }
+      }
+
       return workout;
     });
   },
@@ -868,7 +1081,7 @@ export const workoutStorage = {
   saveActiveWorkout: async (
     workout: WorkoutSession,
     scope?: UserScope | null,
-    options?: { allowDifferentSession?: boolean; skipVersionCheck?: boolean }
+    options?: { allowDifferentSession?: boolean; skipVersionCheck?: boolean; allowEmptyOverwrites?: boolean; allowExerciseRemoval?: boolean }
   ): Promise<SaveActiveWorkoutResult> => {
     const targetScope =
       scope !== undefined
@@ -981,6 +1194,47 @@ export const workoutStorage = {
           }
         }
 
+        // Invariant: Content-Preserving Monotonicity Guard
+        // If storage already holds an active session with the same ID, and that stored session
+        // has exercises, NEVER wipe them with an empty snapshot unless explicitly authorized
+        // via options.allowEmptyOverwrites.
+        let effectiveExercises = workout.exercises;
+        let restoredExercisesCount: number | undefined = undefined;
+        if (
+          currentStored &&
+          currentStored.id === workout.id &&
+          currentStored.exercises &&
+          currentStored.exercises.length > 0 &&
+          (!workout.exercises || workout.exercises.length === 0) &&
+          !options?.allowEmptyOverwrites
+        ) {
+          console.warn(
+            `[WORKOUT_STORAGE] Prevented accidental wipe of active session "${workout.name}" (${workout.id})! Preserving ${currentStored.exercises.length} stored exercises.`
+          );
+          effectiveExercises = currentStored.exercises;
+          restoredExercisesCount = currentStored.exercises.length;
+        } else if (
+          currentStored &&
+          currentStored.id === workout.id &&
+          currentStored.exercises &&
+          currentStored.exercises.length > 1 &&
+          workout.exercises &&
+          workout.exercises.length > 0 &&
+          workout.exercises.length < currentStored.exercises.length &&
+          !options?.allowExerciseRemoval &&
+          !options?.allowEmptyOverwrites
+        ) {
+          const incomingIds = new Set(workout.exercises.map((e) => e.exerciseId));
+          const missing = currentStored.exercises.filter((e) => !incomingIds.has(e.exerciseId));
+          if (missing.length > 0) {
+            console.warn(
+              `[WORKOUT_STORAGE] Prevented accidental partial truncation of active session "${workout.name}" (${workout.id})! Preserving ${missing.length} missing exercises.`
+            );
+            effectiveExercises = [...workout.exercises, ...missing].sort((a, b) => a.order - b.order);
+            restoredExercisesCount = missing.length;
+          }
+        }
+
         // 3. Unified Monotonic Revision + Version CAS Guard (P0-02):
         const incomingSeq = Math.max(
           Number((workout as any).revision ?? 0),
@@ -1013,11 +1267,29 @@ export const workoutStorage = {
         // Persist both revision: incomingSeq and version: incomingSeq on accepted writes
         const workoutToPersist: WorkoutSession = {
           ...workout,
+          exercises: effectiveExercises,
           revision: incomingSeq,
           version: incomingSeq,
         };
 
         await writeStorage(storageKey, JSON.stringify(workoutToPersist));
+
+        // Always update shadow recovery backup if workout has non-empty exercises.
+        // If empty exercises was explicitly allowed (e.g. user manually deleted all exercises), purge recovery backup.
+        const recoveryBackupKey =
+          getUserScopedKey(BASE_ACTIVE_WORKOUT_RECOVERY_BACKUP_KEY, targetScope) ||
+          (process.env.NODE_ENV === 'test' ? 'bebig.workout.active.recovery_backup' : null);
+        if (recoveryBackupKey) {
+          try {
+            if (effectiveExercises && effectiveExercises.length > 0) {
+              await writeStorage(recoveryBackupKey, JSON.stringify(workoutToPersist));
+            } else if (options?.allowEmptyOverwrites) {
+              await deleteStorage(recoveryBackupKey);
+            }
+          } catch (err) {
+            console.warn('[WORKOUT_STORAGE] Non-fatal error persisting shadow recovery backup:', err);
+          }
+        }
 
         // Post-write verification:
         // Confirm that the session was not discarded or replaced by another tab while the write was in-flight.
@@ -1055,6 +1327,9 @@ export const workoutStorage = {
         return {
           ok: true,
           incomingRevision: incomingSeq,
+          restoredExercisesCount,
+          session: workoutToPersist,
+          workout: workoutToPersist,
         };
       });
     });
@@ -1240,6 +1515,15 @@ export const workoutStorage = {
           }
         }
       }
+
+      // 6. Purge shadow recovery backup and sync emergency mirror
+      const recoveryBackupKey =
+        getUserScopedKey(BASE_ACTIVE_WORKOUT_RECOVERY_BACKUP_KEY, resolvedScope) ||
+        (process.env.NODE_ENV === 'test' ? 'bebig.workout.active.recovery_backup' : null);
+      if (recoveryBackupKey) {
+        await deleteStorage(recoveryBackupKey);
+      }
+      await clearSyncEmergencyMirror();
     });
   },
 
@@ -1309,10 +1593,17 @@ export const workoutStorage = {
     const tokenKey =
       getUserScopedKey(BASE_ACTIVE_SESSION_TOKEN_KEY, resolvedScope) ||
       (process.env.NODE_ENV === 'test' ? 'bebig.active.workout.token' : null);
+    const recoveryBackupKey =
+      getUserScopedKey(BASE_ACTIVE_WORKOUT_RECOVERY_BACKUP_KEY, resolvedScope) ||
+      (process.env.NODE_ENV === 'test' ? 'bebig.workout.active.recovery_backup' : null);
     if (!storageKey) return;
 
     return enqueueActiveWorkoutOp(async () => {
       await deleteStorage(storageKey);
+      if (recoveryBackupKey) {
+        await deleteStorage(recoveryBackupKey);
+      }
+      await clearSyncEmergencyMirror();
       await writeActiveSessionToken(tokenKey, {
         sessionId: null,
         status: 'completed',
@@ -1479,6 +1770,7 @@ export const workoutStorage = {
       const completedKey = getUserScopedKey(BASE_COMPLETED_WORKOUTS_KEY, scope);
       const tombstoneKey = getUserScopedKey(BASE_COMPLETED_TOMBSTONES_KEY, scope);
       const tokenKey = getUserScopedKey(BASE_ACTIVE_SESSION_TOKEN_KEY, scope);
+      const recoveryBackupKey = getUserScopedKey(BASE_ACTIVE_WORKOUT_RECOVERY_BACKUP_KEY, scope);
 
       if (activeKey) await deleteStorage(activeKey);
       if (abandonedKey) await deleteStorage(abandonedKey);
@@ -1486,6 +1778,8 @@ export const workoutStorage = {
       if (completedKey) await deleteStorage(completedKey);
       if (tombstoneKey) await deleteStorage(tombstoneKey);
       if (tokenKey) await deleteStorage(tokenKey);
+      if (recoveryBackupKey) await deleteStorage(recoveryBackupKey);
+      await clearSyncEmergencyMirror();
 
       // In test runs without scope, also clear all memoryStorage and legacy keys
       if (!scope && process.env.NODE_ENV === 'test') {
@@ -1494,6 +1788,7 @@ export const workoutStorage = {
         await deleteStorage('bebig.active.workout.abandoned');
         await deleteStorage('bebig.active.workout.discarded');
         await deleteStorage('bebig.active.workout.token');
+        await deleteStorage('bebig.workout.active.recovery_backup');
         await deleteStorage('bebig.completed.workouts');
         await deleteStorage('bebig.workout.completed.deleted');
       }
@@ -1533,4 +1828,7 @@ export const workoutStorage = {
       }
     });
   },
+  writeSyncEmergencyMirror,
+  readSyncEmergencyMirror,
+  clearSyncEmergencyMirror,
 };

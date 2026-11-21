@@ -7,10 +7,294 @@
 
 import { WorkoutTemplate } from '../../templates/types';
 import { WorkoutSession, WorkoutExercise, WorkoutSet, SetType, ActiveRestTimer } from '../types';
-import { workoutStorage } from '../storage/workoutStorage';
+import { workoutStorage, SaveActiveWorkoutResult } from '../storage/workoutStorage';
 import { getCurrentUserScope, UserScope } from '../../auth/utils/userScope';
 import { syncMetadataStore, syncLifecycleManager, getRecordKey } from '../../../services/sync';
 import { nativeRestTimerService } from './nativeRestTimerService';
+
+/**
+ * Structured persistence failure error surfaced when active workout persistence fails
+ * or all CAS retry attempts are exhausted.
+ */
+export class ActiveWorkoutPersistenceError extends Error {
+  readonly code = 'ACTIVE_WORKOUT_PERSISTENCE_FAILED';
+  readonly lastConflict?: boolean;
+  readonly incomingRevision?: number;
+  readonly persistedRevision?: number;
+
+  constructor(
+    message: string,
+    details?: { conflict?: boolean; incomingRevision?: number; persistedRevision?: number }
+  ) {
+    super(message);
+    this.name = 'ActiveWorkoutPersistenceError';
+    this.lastConflict = details?.conflict;
+    this.incomingRevision = details?.incomingRevision;
+    this.persistedRevision = details?.persistedRevision;
+    Object.setPrototypeOf(this, ActiveWorkoutPersistenceError.prototype);
+  }
+}
+
+/**
+ * In-memory LRU cache of recent session snapshots indexed by sessionId:revision.
+ * Enables 3-way set-level merge during CAS contention rebases.
+ */
+const recentSessionSnapshots = new Map<string, WorkoutSession>();
+
+export function cacheSessionSnapshot(session: WorkoutSession): void {
+  if (!session || !session.id) return;
+  const rev = Math.max(Number(session.revision ?? 0), Number(session.version ?? 0));
+  const key = `${session.id}:${rev}`;
+  recentSessionSnapshots.set(key, JSON.parse(JSON.stringify(session)));
+  if (recentSessionSnapshots.size > 100) {
+    const oldestKey = recentSessionSnapshots.keys().next().value;
+    if (oldestKey) recentSessionSnapshots.delete(oldestKey);
+  }
+}
+
+export function getSessionSnapshot(sessionId: string, revision?: number): WorkoutSession | undefined {
+  if (!sessionId) return undefined;
+  if (revision !== undefined) {
+    const exact = recentSessionSnapshots.get(`${sessionId}:${revision}`);
+    if (exact) return exact;
+  }
+  let best: WorkoutSession | undefined;
+  for (const [key, sess] of recentSessionSnapshots.entries()) {
+    if (key.startsWith(`${sessionId}:`)) {
+      const sessRev = Math.max(Number(sess.revision ?? 0), Number(sess.version ?? 0));
+      if (revision === undefined || sessRev <= revision) {
+        if (!best || Math.max(Number(best.revision ?? 0), Number(best.version ?? 0)) < sessRev) {
+          best = sess;
+        }
+      }
+    }
+  }
+  return best;
+}
+
+/**
+ * Performs a deep exercise- and set-level 3-way merge when rebasing an incoming mutation onto latestStored.
+ * Preserves edits/completions from latestStored on sets not modified by the incoming delta,
+ * and takes the incoming mutation's modified sets/exercises cleanly so rapid/concurrent set edits
+ * never clobber each other.
+ */
+export function mergeSessionDeep(
+  latestStored: WorkoutSession,
+  incoming: WorkoutSession,
+  options?: { allowEmptyOverwrites?: boolean; allowExerciseRemoval?: boolean },
+  base?: WorkoutSession
+): WorkoutSession {
+  // If stored has exercises and incoming has none, and empty overwrites is not authorized:
+  if (
+    latestStored.exercises &&
+    latestStored.exercises.length > 0 &&
+    (!incoming.exercises || incoming.exercises.length === 0) &&
+    !options?.allowEmptyOverwrites
+  ) {
+    return {
+      ...latestStored,
+      ...incoming,
+      exercises: latestStored.exercises,
+      activeRestTimer: incoming.activeRestTimer ?? latestStored.activeRestTimer,
+    };
+  }
+
+  const storedExMap = new Map<string, WorkoutExercise>();
+  for (const ex of latestStored.exercises || []) {
+    storedExMap.set(ex.exerciseId, ex);
+  }
+
+  const baseExMap = new Map<string, WorkoutExercise>();
+  if (base?.exercises) {
+    for (const ex of base.exercises) {
+      baseExMap.set(ex.exerciseId, ex);
+    }
+  }
+
+  const mergedExercises: WorkoutExercise[] = [];
+  const processedExerciseIds = new Set<string>();
+
+  for (const incEx of incoming.exercises || []) {
+    processedExerciseIds.add(incEx.exerciseId);
+    const storedEx = storedExMap.get(incEx.exerciseId);
+    const baseEx = baseExMap.get(incEx.exerciseId);
+
+    if (!storedEx) {
+      mergedExercises.push(incEx);
+      continue;
+    }
+
+    const storedSetMap = new Map<string, WorkoutSet>();
+    for (const s of storedEx.actualSets || []) {
+      storedSetMap.set(s.id, s);
+    }
+
+    const baseSetMap = new Map<string, WorkoutSet>();
+    if (baseEx?.actualSets) {
+      for (const s of baseEx.actualSets) {
+        baseSetMap.set(s.id, s);
+      }
+    }
+
+    const mergedSets: WorkoutSet[] = [];
+    const processedSetIds = new Set<string>();
+
+    for (const incSet of incEx.actualSets || []) {
+      processedSetIds.add(incSet.id);
+      const storedSet = storedSetMap.get(incSet.id);
+      const baseSet = baseSetMap.get(incSet.id);
+
+      if (!storedSet) {
+        mergedSets.push(incSet);
+        continue;
+      }
+
+      // 3-way merge on set attributes:
+      // Completion:
+      let completed = incSet.completed;
+      let completedAt = incSet.completedAt;
+      if (baseSet) {
+        const incChangedCompleted = incSet.completed !== baseSet.completed;
+        const storedChangedCompleted = storedSet.completed !== baseSet.completed;
+        if (storedChangedCompleted && !incChangedCompleted) {
+          completed = storedSet.completed;
+          completedAt = storedSet.completedAt;
+        } else if (incChangedCompleted) {
+          completed = incSet.completed;
+          completedAt = incSet.completedAt;
+        } else {
+          completed = storedSet.completed || incSet.completed;
+          completedAt = incSet.completedAt || storedSet.completedAt;
+        }
+      } else {
+        completed = storedSet.completed || incSet.completed;
+        completedAt = incSet.completedAt || storedSet.completedAt;
+      }
+
+      // Weight:
+      let weight = incSet.weight;
+      if (baseSet) {
+        const incChangedWeight = incSet.weight !== baseSet.weight;
+        const storedChangedWeight = storedSet.weight !== baseSet.weight;
+        if (storedChangedWeight && !incChangedWeight) {
+          weight = storedSet.weight;
+        } else if (incChangedWeight && !storedChangedWeight) {
+          weight = incSet.weight;
+        } else if (incChangedWeight && storedChangedWeight) {
+          weight = incSet.weight; // incoming active mutation wins on true collision
+        } else {
+          weight = (storedSet.weight !== undefined && storedSet.weight > 0) ? storedSet.weight : incSet.weight;
+        }
+      } else {
+        weight =
+          incSet.weight !== storedSet.weight && incSet.weight > 0
+            ? incSet.weight
+            : (storedSet.weight !== undefined && storedSet.weight > 0 ? storedSet.weight : incSet.weight);
+      }
+
+      // Reps:
+      let reps = incSet.reps;
+      if (baseSet) {
+        const incChangedReps = incSet.reps !== baseSet.reps;
+        const storedChangedReps = storedSet.reps !== baseSet.reps;
+        if (storedChangedReps && !incChangedReps) {
+          reps = storedSet.reps;
+        } else if (incChangedReps && !storedChangedReps) {
+          reps = incSet.reps;
+        } else if (incChangedReps && storedChangedReps) {
+          reps = incSet.reps;
+        } else {
+          reps = (storedSet.reps !== undefined && storedSet.reps > 0) ? storedSet.reps : incSet.reps;
+        }
+      } else {
+        reps =
+          incSet.reps !== storedSet.reps && incSet.reps > 0
+            ? incSet.reps
+            : (storedSet.reps !== undefined && storedSet.reps > 0 ? storedSet.reps : incSet.reps);
+      }
+
+      // RIR:
+      let rir = incSet.rir;
+      if (baseSet) {
+        const incChangedRir = incSet.rir !== baseSet.rir;
+        const storedChangedRir = storedSet.rir !== baseSet.rir;
+        if (storedChangedRir && !incChangedRir) {
+          rir = storedSet.rir;
+        } else {
+          rir = incSet.rir !== undefined ? incSet.rir : storedSet.rir;
+        }
+      } else {
+        rir = incSet.rir !== undefined ? incSet.rir : storedSet.rir;
+      }
+
+      // Notes:
+      let notes = incSet.notes;
+      if (baseSet) {
+        const incChangedNotes = (incSet.notes || '').trim() !== (baseSet.notes || '').trim();
+        const storedChangedNotes = (storedSet.notes || '').trim() !== (baseSet.notes || '').trim();
+        if (storedChangedNotes && !incChangedNotes) {
+          notes = storedSet.notes;
+        } else {
+          notes = (incSet.notes && incSet.notes.trim()) ? incSet.notes : (storedSet.notes || incSet.notes);
+        }
+      } else {
+        notes = (incSet.notes && incSet.notes.trim()) ? incSet.notes : (storedSet.notes || incSet.notes);
+      }
+
+      const setType = incSet.setType || storedSet.setType || 'normal';
+
+      mergedSets.push({
+        ...storedSet,
+        ...incSet,
+        weight,
+        reps,
+        rir,
+        notes,
+        setType,
+        completed,
+        completedAt,
+      });
+    }
+
+    // Preserve any sets from storedEx that incoming didn't have:
+    // Only preserve sets that were NOT in baseEx (i.e. concurrently added by another write).
+    // If a set existed in baseEx and is absent in incEx, the user deliberately deleted it - do NOT resurrect it!
+    for (const storedSet of storedEx.actualSets || []) {
+      if (!processedSetIds.has(storedSet.id)) {
+        const wasInBase = baseSetMap.has(storedSet.id);
+        if (!wasInBase) {
+          mergedSets.push(storedSet);
+        }
+      }
+    }
+
+    mergedSets.sort((a, b) => a.setNumber - b.setNumber);
+
+    mergedExercises.push({
+      ...storedEx,
+      ...incEx,
+      actualSets: mergedSets,
+    });
+  }
+
+  // Preserve any exercises from latestStored not present in incoming unless removal was authorized
+  if (!options?.allowExerciseRemoval && !options?.allowEmptyOverwrites) {
+    for (const storedEx of latestStored.exercises || []) {
+      if (!processedExerciseIds.has(storedEx.exerciseId)) {
+        mergedExercises.push(storedEx);
+      }
+    }
+  }
+
+  mergedExercises.sort((a, b) => a.order - b.order);
+
+  return {
+    ...latestStored,
+    ...incoming,
+    exercises: mergedExercises,
+    activeRestTimer: incoming.activeRestTimer ?? latestStored.activeRestTimer,
+  };
+}
 
 export class WorkoutRepository {
   /**
@@ -126,9 +410,11 @@ export class WorkoutRepository {
       activeRestTimer: null,
     };
 
-    return workoutStorage.createActiveWorkout(session, resolvedScope, {
+    const created = await workoutStorage.createActiveWorkout(session, resolvedScope, {
       forceDiscardExisting: options?.forceDiscardExisting,
     });
+    cacheSessionSnapshot(created);
+    return created;
   }
 
   /**
@@ -165,35 +451,123 @@ export class WorkoutRepository {
       activeRestTimer: null,
     };
 
-    return workoutStorage.createActiveWorkout(session, resolvedScope, {
+    const created = await workoutStorage.createActiveWorkout(session, resolvedScope, {
       forceDiscardExisting: options?.forceDiscardExisting,
     });
+    cacheSessionSnapshot(created);
+    return created;
   }
 
   /**
    * Retrieves the current active workout session draft, or null if none.
    */
   async getActiveWorkout(scope?: UserScope | null): Promise<WorkoutSession | null> {
-    return workoutStorage.getActiveWorkout(scope);
+    const session = await workoutStorage.getActiveWorkout(scope);
+    if (session) {
+      cacheSessionSnapshot(session);
+    }
+    return session;
   }
 
   /**
    * Persists an updated active workout session (continuous autosave).
+   * Enforces CAS auto-rebase with deep set-level merge: if a CAS conflict occurs,
+   * performs a bounded retry loop (up to 3 attempts), re-reading the latest stored session,
+   * merging the delta cleanly onto higher revisions, and surfacing ActiveWorkoutPersistenceError
+   * if all retries fail. Always returns the exact persisted session accepted by storage.
    */
-  async updateActiveWorkout(workout: WorkoutSession, scope?: UserScope | null): Promise<WorkoutSession> {
+  async updateActiveWorkout(
+    workout: WorkoutSession,
+    scope?: UserScope | null,
+    options?: { allowEmptyOverwrites?: boolean; allowExerciseRemoval?: boolean }
+  ): Promise<WorkoutSession> {
     if (!workout || workout.status !== 'active') {
       throw new Error('Only active workouts can be updated in draft.');
     }
     const currentSeq = Math.max(Number(workout.revision ?? 0), Number(workout.version ?? 0));
-    const nextSeq = currentSeq + 1;
-    const sessionToSave: WorkoutSession = {
+    const baseSnapshot = getSessionSnapshot(workout.id, currentSeq);
+    let nextSeq = currentSeq + 1;
+    let sessionToSave: WorkoutSession = {
       ...workout,
       updatedAt: new Date().toISOString(),
       version: nextSeq,
       revision: nextSeq,
     };
-    await workoutStorage.saveActiveWorkout(sessionToSave, scope);
-    return sessionToSave;
+    let res: SaveActiveWorkoutResult;
+    try {
+      res = await workoutStorage.saveActiveWorkout(sessionToSave, scope, options);
+    } catch (err: any) {
+      if (err instanceof ActiveWorkoutPersistenceError) {
+        throw err;
+      }
+      throw new ActiveWorkoutPersistenceError(
+        err?.message || 'Storage write failed while updating active workout.',
+        {
+          incomingRevision: nextSeq,
+          persistedRevision: currentSeq,
+        }
+      );
+    }
+
+    // Bounded CAS retry loop (up to 3 attempts) with deep set-level merge rebase
+    const maxRetries = 3;
+    let attempt = 0;
+    while (!res.ok && res.conflict && attempt < maxRetries) {
+      attempt++;
+      let latestStored: WorkoutSession | null = null;
+      try {
+        latestStored = await workoutStorage.getActiveWorkout(scope);
+      } catch (err: any) {
+        if (err instanceof ActiveWorkoutPersistenceError) throw err;
+        throw new ActiveWorkoutPersistenceError(
+          err?.message || 'Storage read failed during CAS rebase.',
+          { conflict: true, incomingRevision: nextSeq, persistedRevision: res.persistedRevision }
+        );
+      }
+      if (latestStored && latestStored.id === workout.id) {
+        cacheSessionSnapshot(latestStored);
+        const higherRevision = Math.max(
+          Number((latestStored as any).revision ?? 0),
+          Number(latestStored.version ?? 0),
+          Number(res.persistedRevision ?? 0),
+          nextSeq
+        );
+        nextSeq = higherRevision + 1;
+        const merged = mergeSessionDeep(latestStored, sessionToSave, options, baseSnapshot);
+        sessionToSave = {
+          ...merged,
+          revision: nextSeq,
+          version: nextSeq,
+          updatedAt: new Date().toISOString(),
+        };
+        try {
+          res = await workoutStorage.saveActiveWorkout(sessionToSave, scope, options);
+        } catch (err: any) {
+          if (err instanceof ActiveWorkoutPersistenceError) throw err;
+          throw new ActiveWorkoutPersistenceError(
+            err?.message || `Storage write failed during CAS retry attempt ${attempt}.`,
+            { conflict: true, incomingRevision: nextSeq, persistedRevision: res.persistedRevision }
+          );
+        }
+      } else {
+        break;
+      }
+    }
+
+    if (!res.ok) {
+      throw new ActiveWorkoutPersistenceError(
+        res.error || `Failed to persist active workout after ${attempt} retry attempt(s).`,
+        {
+          conflict: res.conflict,
+          incomingRevision: res.incomingRevision,
+          persistedRevision: res.persistedRevision,
+        }
+      );
+    }
+
+    const persistedSession = res.session || res.workout || sessionToSave;
+    cacheSessionSnapshot(persistedSession);
+    return persistedSession;
   }
 
   /**
@@ -670,8 +1044,21 @@ export class WorkoutRepository {
    * Requires at least one completed set. Calculates duration and total tonnage volume.
    * Clears active draft and adds to completed workouts history.
    */
-  async completeActiveWorkout(activeSession?: WorkoutSession): Promise<WorkoutSession> {
-    const sessionToFinish = activeSession ?? (await workoutStorage.getActiveWorkout());
+  async completeActiveWorkout(
+    activeSession?: WorkoutSession,
+    scope?: UserScope | null
+  ): Promise<WorkoutSession> {
+    const resolvedScope =
+      scope !== undefined
+        ? scope
+        : activeSession?.ownerId && activeSession?.ownerType
+          ? { ownerId: activeSession.ownerId, ownerType: activeSession.ownerType }
+          : (getCurrentUserScope() ??
+            (process.env.NODE_ENV === 'test'
+              ? { ownerId: 'test_default_user', ownerType: 'authenticated' as const }
+              : null));
+
+    const sessionToFinish = activeSession ?? (await workoutStorage.getActiveWorkout(resolvedScope));
     if (!sessionToFinish) {
       throw new Error('No active workout to complete.');
     }
@@ -709,21 +1096,24 @@ export class WorkoutRepository {
     };
 
     // 1. Save completed workout locally (Source of Truth)
-    await workoutStorage.saveCompletedWorkout(completedSession);
+    await (scope !== undefined
+      ? workoutStorage.saveCompletedWorkout(completedSession, scope)
+      : workoutStorage.saveCompletedWorkout(completedSession));
 
     // 2. Clear active in-progress draft (Immunity preserved)
     await nativeRestTimerService.cancelRestTimer();
-    await workoutStorage.clearActiveWorkout();
+    await (scope !== undefined
+      ? workoutStorage.clearActiveWorkout(scope)
+      : workoutStorage.clearActiveWorkout());
 
     // 3. Mark pending metadata (wrapped in try/catch to protect durability)
-    const scope = getCurrentUserScope();
-    if (scope && scope.ownerType === 'authenticated') {
+    if (resolvedScope && resolvedScope.ownerType === 'authenticated') {
       try {
         await syncMetadataStore.markPendingUpload(
           'workout',
           completedSession.id,
           completedSession.finishedAt || completedSession.startedAt,
-          scope,
+          resolvedScope,
         );
       } catch {
         // Local completed workout is already durable in local storage.
@@ -734,7 +1124,7 @@ export class WorkoutRepository {
       }
 
       // 4. Fire-and-forget sync trigger (asynchronous, non-blocking)
-      void syncLifecycleManager.triggerSync({ reason: 'workout_completed', scope }).catch(() => {
+      void syncLifecycleManager.triggerSync({ reason: 'workout_completed', scope: resolvedScope }).catch(() => {
         // Silently caught; sync failure cannot throw or affect caller
       });
     }
