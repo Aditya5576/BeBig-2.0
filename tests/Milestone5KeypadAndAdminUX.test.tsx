@@ -101,7 +101,6 @@ describe('Milestone 5 & Admin UX Verification Suite', () => {
       const onBackspace = jest.fn();
       const onClear = jest.fn();
       const onStep = jest.fn();
-      const onSelectRpe = jest.fn();
       const onNext = jest.fn();
       const onDismiss = jest.fn();
       const onToggleNative = jest.fn();
@@ -115,7 +114,6 @@ describe('Milestone 5 & Admin UX Verification Suite', () => {
           onBackspace={onBackspace}
           onClear={onClear}
           onStep={onStep}
-          onSelectRpe={onSelectRpe}
           onNext={onNext}
           onDismiss={onDismiss}
           onToggleNativeKeyboard={onToggleNative}
@@ -162,16 +160,15 @@ describe('Milestone 5 & Admin UX Verification Suite', () => {
       expect(queryByTestId('keypad-rpe-bar')).toBeNull();
     });
 
-    it('handles reps mode with steppers, integer constraint, RPE bar, and clear', async () => {
+    it('handles reps mode with steppers, integer constraint, clean numeric layout without RPE bar, and clear', async () => {
       const onKeyPress = jest.fn();
       const onBackspace = jest.fn();
       const onClear = jest.fn();
       const onStep = jest.fn();
-      const onSelectRpe = jest.fn();
       const onNext = jest.fn();
       const onDismiss = jest.fn();
 
-      const { getByTestId } = await render(
+      const { getByTestId, queryByTestId } = await render(
         <WorkoutNumericKeypad
           visible={true}
           mode="reps"
@@ -180,7 +177,6 @@ describe('Milestone 5 & Admin UX Verification Suite', () => {
           onBackspace={onBackspace}
           onClear={onClear}
           onStep={onStep}
-          onSelectRpe={onSelectRpe}
           onNext={onNext}
           onDismiss={onDismiss}
         />
@@ -197,92 +193,83 @@ describe('Milestone 5 & Admin UX Verification Suite', () => {
       await fireEvent.press(getByTestId('keypad-key-clear'));
       expect(onClear).toHaveBeenCalledTimes(1);
 
-      // RPE bar exists with options
-      expect(getByTestId('keypad-rpe-bar')).toBeTruthy();
-      expect(getByTestId('keypad-rpe-8')).toBeTruthy();
-      expect(getByTestId('keypad-rpe-8.5')).toBeTruthy();
-      expect(getByTestId('keypad-rpe-10')).toBeTruthy();
-
-      await fireEvent.press(getByTestId('keypad-rpe-8.5'));
-      expect(onSelectRpe).toHaveBeenCalledWith(8.5);
+      // RPE bar should NOT be rendered in reps mode
+      expect(queryByTestId('keypad-rpe-bar')).toBeNull();
 
       // Next set navigation
       await fireEvent.press(getByTestId('keypad-key-next'));
       expect(onNext).toHaveBeenCalledTimes(1);
     });
 
-    it('fires onHeightChange on root view layout and displays live draft readout', async () => {
-      const onHeightChange = jest.fn();
+    it('supports treadmill keypad modes: incline, speed, and durationMinutes', async () => {
+      const onStep = jest.fn();
       const onKeyPress = jest.fn();
 
-      const { getByTestId } = await render(
+      // Incline mode
+      const { getByTestId, rerender } = await render(
         <WorkoutNumericKeypad
           visible={true}
-          mode="kg"
-          value="80."
-          onHeightChange={onHeightChange}
+          mode="incline"
+          value="2.5"
           onKeyPress={onKeyPress}
           onBackspace={jest.fn()}
           onClear={jest.fn()}
-          onStep={jest.fn()}
+          onStep={onStep}
           onNext={jest.fn()}
           onDismiss={jest.fn()}
         />
       );
 
-      // Trigger layout event
-      await fireEvent(getByTestId('workout-numeric-keypad'), 'layout', {
-        nativeEvent: { layout: { height: 284 } },
-      });
+      // Incline steppers (±0.5%, ±2%)
+      expect(getByTestId('keypad-incline-step-plus-half')).toBeTruthy();
+      await fireEvent.press(getByTestId('keypad-incline-step-plus-half'));
+      expect(onStep).toHaveBeenCalledWith(0.5);
 
-      expect(onHeightChange).toHaveBeenCalledWith(284);
-
-      // Check readout
-      const readout = getByTestId('keypad-value-readout');
-      expect(readout).toBeTruthy();
-      expect(readout).toHaveTextContent('80.');
-    });
-
-    it('handles selectedRpe highlighting and toggling off when tapped again', async () => {
-      const onSelectRpe = jest.fn();
-
-      const { getByTestId } = await render(
+      // Speed mode
+      await rerender(
         <WorkoutNumericKeypad
           visible={true}
-          mode="reps"
-          value="8"
-          selectedRpe={8}
-          onSelectRpe={onSelectRpe}
-          onKeyPress={jest.fn()}
+          mode="speed"
+          value="8.0"
+          onKeyPress={onKeyPress}
           onBackspace={jest.fn()}
           onClear={jest.fn()}
-          onStep={jest.fn()}
+          onStep={onStep}
           onNext={jest.fn()}
           onDismiss={jest.fn()}
         />
       );
 
-      // RPE 8 should have accessibilityState.selected = true
-      const chip8 = getByTestId('keypad-rpe-8');
-      expect(chip8.props.accessibilityState.selected).toBe(true);
+      // Speed steppers (±0.2, ±1.0)
+      expect(getByTestId('keypad-speed-step-plus-point2')).toBeTruthy();
+      await fireEvent.press(getByTestId('keypad-speed-step-plus-point2'));
+      expect(onStep).toHaveBeenCalledWith(0.2);
 
-      const chip9 = getByTestId('keypad-rpe-9');
-      expect(chip9.props.accessibilityState.selected).toBe(false);
+      // Duration mode
+      await rerender(
+        <WorkoutNumericKeypad
+          visible={true}
+          mode="durationMinutes"
+          value="12.5"
+          onKeyPress={onKeyPress}
+          onBackspace={jest.fn()}
+          onClear={jest.fn()}
+          onStep={onStep}
+          onNext={jest.fn()}
+          onDismiss={jest.fn()}
+        />
+      );
 
-      // Tapping already-selected chip 8 toggles off -> calls onSelectRpe(undefined)
-      await fireEvent.press(chip8);
-      expect(onSelectRpe).toHaveBeenCalledWith(undefined);
-
-      // Tapping unselected chip 9 calls onSelectRpe(9)
-      await fireEvent.press(chip9);
-      expect(onSelectRpe).toHaveBeenCalledWith(9);
+      // Duration steppers (±1, ±5)
+      expect(getByTestId('keypad-duration-step-plus-1')).toBeTruthy();
+      await fireEvent.press(getByTestId('keypad-duration-step-plus-1'));
+      expect(onStep).toHaveBeenCalledWith(1);
     });
 
-    it('renders ActiveSetRow with draft value and RPE badge', async () => {
+    it('renders ActiveSetRow with strength numeric inputs for weight, reps, and RIR', async () => {
       const onFocusField = jest.fn();
       const onUpdateSetField = jest.fn();
       const onToggleCompleteSet = jest.fn();
-      const onLayout = jest.fn();
 
       const mockExercise: WorkoutExercise = {
         exerciseId: 'ex1',
@@ -296,7 +283,7 @@ describe('Milestone 5 & Admin UX Verification Suite', () => {
         setNumber: 1,
         weight: 80,
         reps: 8,
-        rir: 2, // 10 - 2 = RPE 8
+        rir: 2,
         completed: false,
       };
 
@@ -309,202 +296,38 @@ describe('Milestone 5 & Admin UX Verification Suite', () => {
           onDeleteSet={jest.fn()}
           onUpdateSetField={onUpdateSetField}
           onToggleCompleteSet={onToggleCompleteSet}
-          isCustomKeypadActive={true}
-          activeFocusField="weight"
-          draftValue="82.5"
+          isCustomKeypadActive={false}
           onFocusField={onFocusField}
-          onLayout={onLayout}
         />
       );
 
-      // Weight input reflects live draftValue "82.5"
       const weightInput = getByTestId('set-weight-ex1-1');
-      expect(weightInput.props.value).toBe('82.5');
+      expect(weightInput.props.value).toBe('80');
 
-      // RPE badge is rendered showing "RPE 8"
-      const rpeBadge = getByTestId('set-rpe-badge-set1');
-      expect(rpeBadge).toBeTruthy();
-      expect(rpeBadge).toHaveTextContent('RPE 8');
+      const repsInput = getByTestId('set-reps-ex1-1');
+      expect(repsInput.props.value).toBe('8');
 
-      // Tapping RPE badge calls onFocusField with 'reps'
-      await fireEvent.press(rpeBadge);
-      expect(onFocusField).toHaveBeenCalledWith('ex1', 'set1', 'reps', expect.any(String));
+      const rirInput = getByTestId('set-rir-ex1-1');
+      expect(rirInput.props.value).toBe('2');
     });
 
-    it('nested layout offsets in ActiveExerciseCard include setsContainer offset', async () => {
-      const onSetRowLayout = jest.fn();
-
-      const mockExercise: WorkoutExercise = {
-        exerciseId: 'ex-nested',
-        exerciseName: 'Incline Bench Press',
-        order: 0,
-        actualSets: [
-          {
-            id: 'set-nested-1',
-            setNumber: 1,
-            weight: 70,
-            reps: 10,
-            completed: false,
-          },
-        ],
-      };
-
-      const { getByTestId } = await render(
-        <ActiveExerciseCard
-          exercise={mockExercise}
-          exIndex={0}
-          totalExercisesCount={1}
-          expandedNotesSetIds={{}}
-          onMoveUp={jest.fn()}
-          onMoveDown={jest.fn()}
-          onRemoveExercise={jest.fn()}
-          onAddSet={jest.fn()}
-          onDeleteSet={jest.fn()}
-          onToggleNotes={jest.fn()}
-          onUpdateSetField={jest.fn()}
-          onToggleCompleteSet={jest.fn()}
-          onSetRowLayout={onSetRowLayout}
-        />
-      );
-
-      // Simulate set row layout within setsContainer
-      await fireEvent(getByTestId('active-set-row-set-nested-1'), 'layout', {
-        nativeEvent: { layout: { y: 40, height: 44 } },
-      });
-
-      // Simulate setsContainer layout within card (offset 150)
-      await fireEvent(getByTestId('sets-container-ex-nested'), 'layout', {
-        nativeEvent: { layout: { y: 150 } },
-      });
-
-      // 150 + 40 = 190 card-relative offset
-      expect(onSetRowLayout).toHaveBeenCalledWith('set-nested-1', 190, 44);
-    });
-
-    it('ActiveSetRow uses live draftValue in pendingUpdates when completing set during rapid typing', async () => {
-      const onToggleCompleteSet = jest.fn();
-
-      const mockExercise: WorkoutExercise = {
-        exerciseId: 'ex1',
-        exerciseName: 'Bench Press',
-        order: 0,
-        actualSets: [],
-      };
-
-      const mockSet: WorkoutSet = {
-        id: 'set1',
-        setNumber: 1,
-        weight: 80, // initial stored weight
-        reps: 8,
-        completed: false,
-      };
-
-      const { getByTestId } = await render(
-        <ActiveSetRow
-          exercise={mockExercise}
-          set={mockSet}
-          canDelete={false}
-          onToggleNotes={jest.fn()}
-          onDeleteSet={jest.fn()}
-          onUpdateSetField={jest.fn()}
-          onToggleCompleteSet={onToggleCompleteSet}
-          isCustomKeypadActive={true}
-          activeFocusField="weight"
-          draftValue="85" // user rapidly typed 85
-          onFocusField={jest.fn()}
-        />
-      );
-
-      // User immediately taps complete button
-      await fireEvent.press(getByTestId('complete-set-ex1-1'));
-
-      // pendingUpdates must contain the live draft 85, NOT the stale 80
-      expect(onToggleCompleteSet).toHaveBeenCalledWith(
-        mockExercise,
-        mockSet,
-        expect.objectContaining({ weight: 85 })
-      );
-    });
-
-    it('ActiveWorkoutScreen rapid typing and immediate completion commits draft and completes set without reverting', async () => {
+    it('enforces canonical RIR bounds within 0 to 4 in domain validation', () => {
       const mockSession: WorkoutSession = {
-        id: 'session-rapid-test',
-        name: 'Rapid Completion Test',
-        status: 'active',
-        startedAt: new Date().toISOString(),
-        exercises: [
-          {
-            exerciseId: 'ex-rapid',
-            exerciseName: 'Shoulder Press',
-            order: 0,
-            actualSets: [
-              {
-                id: 'set-rapid-1',
-                setNumber: 1,
-                weight: 60,
-                reps: 10,
-                completed: false,
-              },
-            ],
-          },
-        ],
-      };
-
-      jest.spyOn(workoutRepository, 'getActiveWorkout').mockResolvedValue(mockSession);
-      const updateActiveWorkoutSpy = jest
-        .spyOn(workoutRepository, 'updateActiveWorkout')
-        .mockImplementation(async (s) => s);
-
-      const { getByTestId, findByTestId } = await render(<ActiveWorkoutScreen />);
-
-      // Wait for session to load
-      await findByTestId('active-workout-title');
-
-      // Focus weight field
-      const weightInput = getByTestId('set-weight-ex-rapid-1');
-      await fireEvent(weightInput, 'focus');
-
-      // Keypad should be open in kg mode; backspace existing digits, then type 8, then 5
-      await fireEvent.press(getByTestId('keypad-key-backspace'));
-      await fireEvent.press(getByTestId('keypad-key-backspace'));
-      await fireEvent.press(getByTestId('keypad-key-8'));
-      await fireEvent.press(getByTestId('keypad-key-5'));
-
-      // Value readout shows 85
-      const readout = getByTestId('keypad-value-readout');
-      expect(readout).toHaveTextContent('85');
-
-      // Immediately tap complete button
-      await fireEvent.press(getByTestId('complete-set-ex-rapid-1'));
-
-      // Verify that updateActiveWorkout was called with completed: true and weight: 85
-      await waitFor(() => {
-        expect(updateActiveWorkoutSpy).toHaveBeenCalled();
-        const lastCallSession =
-          updateActiveWorkoutSpy.mock.calls[updateActiveWorkoutSpy.mock.calls.length - 1][0];
-        const completedSet = lastCallSession.exercises[0].actualSets[0];
-        expect(completedSet.completed).toBe(true);
-        expect(completedSet.weight).toBe(85);
-      });
-    });
-
-    it('clearing RIR via keypad and immediately completing set keeps set.rir undefined even if pendingUpdates contains older rir', async () => {
-      const mockSession: WorkoutSession = {
-        id: 'session-rir-clear-test',
-        name: 'RIR Clearing Test',
+        id: 'session-rir-bounds',
+        name: 'RIR Bounds Test',
         status: 'active',
         startedAt: new Date().toISOString(),
         exercises: [
           {
             exerciseId: 'ex-rir',
-            exerciseName: 'Lateral Raise',
+            exerciseName: 'Bench Press',
             order: 0,
             actualSets: [
               {
                 id: 'set-rir-1',
                 setNumber: 1,
-                weight: 12,
-                reps: 15,
+                weight: 100,
+                reps: 5,
                 rir: 2,
                 completed: false,
               },
@@ -513,41 +336,69 @@ describe('Milestone 5 & Admin UX Verification Suite', () => {
         ],
       };
 
-      jest.spyOn(workoutRepository, 'getActiveWorkout').mockResolvedValue(mockSession);
-      const updateActiveWorkoutSpy = jest
-        .spyOn(workoutRepository, 'updateActiveWorkout')
-        .mockImplementation(async (s) => s);
+      // Valid RIR within 0–4 updates successfully
+      const validUpdated = workoutRepository.updateSet(mockSession, 'ex-rir', 'set-rir-1', { rir: 4 });
+      expect(validUpdated.exercises[0].actualSets[0].rir).toBe(4);
 
-      const { getByTestId, findByTestId } = await render(<ActiveWorkoutScreen />);
+      // RIR > 4 rejected
+      expect(() => {
+        workoutRepository.updateSet(mockSession, 'ex-rir', 'set-rir-1', { rir: 4.5 });
+      }).toThrow(/rir must be a number between 0 and 4/i);
 
-      // Wait for session to load
-      await findByTestId('active-workout-title');
+      // Negative RIR rejected
+      expect(() => {
+        workoutRepository.updateSet(mockSession, 'ex-rir', 'set-rir-1', { rir: -0.5 });
+      }).toThrow(/rir must be a number between 0 and 4/i);
+    });
 
-      // Focus RIR field
-      const rirInput = getByTestId('set-rir-ex-rir-1');
-      await fireEvent(rirInput, 'focus');
+    it('renders ActiveSetRow with treadmill columns (incline, speed, time) and hides RIR', async () => {
+      const mockTreadmillExercise: WorkoutExercise = {
+        exerciseId: 'seed-treadmill',
+        exerciseName: 'Treadmill',
+        trackingMode: 'treadmill',
+        order: 0,
+        actualSets: [],
+      };
 
-      // Keypad should be open in RIR mode with initial value '2'
-      expect(getByTestId('keypad-value-readout')).toHaveTextContent('2');
+      const mockTreadmillSet: WorkoutSet = {
+        id: 'tm-set-1',
+        setNumber: 1,
+        weight: 0,
+        reps: 0,
+        inclinePercent: 3,
+        speedKph: 8.5,
+        durationSeconds: 750, // 12:30
+        completed: false,
+      };
 
-      // Clear RIR by pressing backspace
-      await fireEvent.press(getByTestId('keypad-key-backspace'));
+      const { getByTestId, queryByTestId } = await render(
+        <ActiveSetRow
+          exercise={mockTreadmillExercise}
+          set={mockTreadmillSet}
+          canDelete={false}
+          onToggleNotes={jest.fn()}
+          onDeleteSet={jest.fn()}
+          onUpdateSetField={jest.fn()}
+          onToggleCompleteSet={jest.fn()}
+          isCustomKeypadActive={false}
+          onFocusField={jest.fn()}
+        />
+      );
 
-      // Value readout should now be '—' (em-dash placeholder)
-      expect(getByTestId('keypad-value-readout')).toHaveTextContent('—');
+      // Incline input has '3'
+      const inclineInput = getByTestId('set-incline-seed-treadmill-1');
+      expect(inclineInput.props.value).toBe('3');
 
-      // Immediately tap complete button
-      await fireEvent.press(getByTestId('complete-set-ex-rir-1'));
+      // Speed input has '8.5'
+      const speedInput = getByTestId('set-speed-seed-treadmill-1');
+      expect(speedInput.props.value).toBe('8.5');
 
-      // Verify that updateActiveWorkout was called with completed: true and rir: undefined
-      await waitFor(() => {
-        expect(updateActiveWorkoutSpy).toHaveBeenCalled();
-        const lastCallSession =
-          updateActiveWorkoutSpy.mock.calls[updateActiveWorkoutSpy.mock.calls.length - 1][0];
-        const completedSet = lastCallSession.exercises[0].actualSets[0];
-        expect(completedSet.completed).toBe(true);
-        expect(completedSet.rir).toBeUndefined();
-      });
+      // Time input displays formatted mm:ss ('12:30')
+      const timeInput = getByTestId('set-time-seed-treadmill-1');
+      expect(timeInput.props.value).toBe('12:30');
+
+      // RIR column should NOT exist for treadmill
+      expect(queryByTestId('set-rir-seed-treadmill-1')).toBeNull();
     });
   });
 

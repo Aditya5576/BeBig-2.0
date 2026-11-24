@@ -7,17 +7,22 @@
  */
 
 import { OwnerType } from '../auth';
+import { ExerciseTrackingMode } from '../exercises/exerciseTracking';
+export type { ExerciseTrackingMode };
 
 export type SetType = 'normal' | 'warmup' | 'drop' | 'failure';
 
 export interface WorkoutSet {
   id: string;
   setNumber: number;
-  weight: number; // kg, supports decimals (e.g. 62.5)
-  reps: number; // positive whole integer (e.g. 8)
+  weight: number; // kg, supports decimals (e.g. 62.5, 0 on treadmill)
+  reps: number; // positive whole integer (e.g. 8, 0 on treadmill)
   rir?: number; // Reps In Reserve (0 to 10)
   setType?: SetType; // 'normal' | 'warmup' | 'drop' | 'failure' (defaults to 'normal')
   notes?: string; // optional user notes
+  inclinePercent?: number; // Incline percentage 0–50% (0 is a valid defined value!)
+  speedKph?: number; // Speed in km/h > 0–40 (e.g. 8.5)
+  durationSeconds?: number; // Time in seconds 1–86400 (e.g. 750 for 12:30)
   completed: boolean;
   completedAt?: string; // ISO 8601 timestamp
 }
@@ -27,12 +32,16 @@ export interface WorkoutExercise {
   exerciseName: string;
   categoryName?: string;
   order: number;
+  trackingMode?: ExerciseTrackingMode;
   supersetGroupId?: string | null; // null/undefined for standalone; shared string for contiguous Superset (2) or Giant Set (3+)
   // Preserved snapshot of planned targets from template (if any)
   plannedSets?: number;
   plannedTargetReps?: string;
   plannedRestTime?: number;
   plannedTargetWeight?: number;
+  plannedTargetInclinePercent?: number;
+  plannedTargetSpeedKph?: number;
+  plannedTargetDurationSeconds?: number;
   // Actual sets logged during the active workout session
   actualSets: WorkoutSet[];
 }

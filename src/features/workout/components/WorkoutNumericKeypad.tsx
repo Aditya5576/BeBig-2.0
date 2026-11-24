@@ -3,7 +3,6 @@ import {
   View,
   StyleSheet,
   Pressable,
-  ScrollView,
   useWindowDimensions,
   Platform,
 } from 'react-native';
@@ -13,46 +12,36 @@ import { Text, Icon } from '../../../components/ui';
 import { spacing, radii } from '../../../constants/theme';
 import { FONT_FAMILIES } from '../../../theme/typography';
 
-export type KeypadMode = 'kg' | 'reps';
+export type KeypadMode = 'kg' | 'reps' | 'incline' | 'speed' | 'durationMinutes';
 
 export interface WorkoutNumericKeypadProps {
   visible: boolean;
   mode: KeypadMode;
   value: string;
-  rpeValue?: string;
-  selectedRpe?: number;
   exerciseName?: string;
   setNumber?: number;
   useNativeKeyboard?: boolean;
-  onHeightChange?: (height: number) => void;
   onKeyPress: (key: string) => void;
   onBackspace: () => void;
   onClear: () => void;
   onStep: (delta: number) => void;
-  onSelectRpe?: (rpe: number | undefined) => void;
   onNext: () => void;
   onDismiss: () => void;
   onToggleNativeKeyboard?: () => void;
   unit?: 'kg' | 'lb';
 }
 
-const RPE_PRESETS = [6, 7, 7.5, 8, 8.5, 9, 9.5, 10];
-
 export const WorkoutNumericKeypad: React.FC<WorkoutNumericKeypadProps> = ({
   visible = true,
   mode,
-  value,
-  rpeValue,
-  selectedRpe,
+  value: _value,
   exerciseName,
   setNumber,
   useNativeKeyboard = false,
-  onHeightChange,
   onKeyPress,
   onBackspace,
   onClear,
   onStep,
-  onSelectRpe,
   onNext,
   onDismiss,
   onToggleNativeKeyboard,
@@ -76,6 +65,22 @@ export const WorkoutNumericKeypad: React.FC<WorkoutNumericKeypadProps> = ({
   if (!visible) return null;
 
   const stepDelta = mode === 'kg' ? (unit === 'kg' ? 2.5 : 5) : 1;
+  const allowsDecimal =
+    mode === 'kg' ||
+    mode === 'incline' ||
+    mode === 'speed' ||
+    mode === 'durationMinutes';
+
+  const modeBadgeLabel =
+    mode === 'kg'
+      ? unit.toUpperCase()
+      : mode === 'incline'
+      ? 'INCLINE %'
+      : mode === 'speed'
+      ? 'SPEED KM/H'
+      : mode === 'durationMinutes'
+      ? 'TIME MIN'
+      : 'REPS';
 
   return (
     <View
@@ -83,12 +88,6 @@ export const WorkoutNumericKeypad: React.FC<WorkoutNumericKeypadProps> = ({
       style={styles.container}
       accessibilityRole="toolbar"
       accessibilityLabel={`Workout numeric keypad ${mode}`}
-      onLayout={(event) => {
-        const height = Math.ceil(event.nativeEvent.layout.height);
-        if (height > 0) {
-          onHeightChange?.(height);
-        }
-      }}
     >
       <View style={styles.contentWrap}>
         {/* Accessory / Top Header Bar */}
@@ -96,14 +95,9 @@ export const WorkoutNumericKeypad: React.FC<WorkoutNumericKeypadProps> = ({
           <View style={styles.accessoryLeft}>
             <View style={styles.modeBadge}>
               <Text variant="caption" style={styles.modeBadgeText}>
-                {mode === 'kg' ? unit.toUpperCase() : 'REPS'}
+                {modeBadgeLabel}
               </Text>
             </View>
-            {value !== undefined ? (
-              <View testID="keypad-value-readout" style={styles.valueReadout}>
-                <Text style={styles.valueReadoutText}>{value || '—'}</Text>
-              </View>
-            ) : null}
             {setNumber !== undefined ? (
               <Text variant="caption" color="secondary" style={styles.contextText}>
                 Set {setNumber}
@@ -150,7 +144,7 @@ export const WorkoutNumericKeypad: React.FC<WorkoutNumericKeypadProps> = ({
           </View>
         </View>
 
-        {/* Quick Steppers & Reps/RPE Row */}
+        {/* Quick Steppers & Reps Row */}
         {mode === 'kg' ? (
           <View style={styles.stepperRow}>
             <Pressable
@@ -194,73 +188,157 @@ export const WorkoutNumericKeypad: React.FC<WorkoutNumericKeypadProps> = ({
               <Text style={styles.stepButtonText}>+{stepDelta * 2}</Text>
             </Pressable>
           </View>
+        ) : mode === 'incline' ? (
+          <View style={styles.stepperRow}>
+            <Pressable
+              testID="keypad-incline-step-minus-2"
+              style={({ pressed }) => [
+                styles.stepButton,
+                pressed && styles.stepButtonPressed,
+              ]}
+              onPress={() => onStep(-2)}
+            >
+              <Text style={styles.stepButtonText}>-2%</Text>
+            </Pressable>
+            <Pressable
+              testID="keypad-incline-step-minus-half"
+              style={({ pressed }) => [
+                styles.stepButton,
+                pressed && styles.stepButtonPressed,
+              ]}
+              onPress={() => onStep(-0.5)}
+            >
+              <Text style={styles.stepButtonText}>-0.5%</Text>
+            </Pressable>
+            <Pressable
+              testID="keypad-incline-step-plus-half"
+              style={({ pressed }) => [
+                styles.stepButton,
+                pressed && styles.stepButtonPressed,
+              ]}
+              onPress={() => onStep(0.5)}
+            >
+              <Text style={styles.stepButtonText}>+0.5%</Text>
+            </Pressable>
+            <Pressable
+              testID="keypad-incline-step-plus-2"
+              style={({ pressed }) => [
+                styles.stepButton,
+                pressed && styles.stepButtonPressed,
+              ]}
+              onPress={() => onStep(2)}
+            >
+              <Text style={styles.stepButtonText}>+2%</Text>
+            </Pressable>
+          </View>
+        ) : mode === 'speed' ? (
+          <View style={styles.stepperRow}>
+            <Pressable
+              testID="keypad-speed-step-minus-1"
+              style={({ pressed }) => [
+                styles.stepButton,
+                pressed && styles.stepButtonPressed,
+              ]}
+              onPress={() => onStep(-1)}
+            >
+              <Text style={styles.stepButtonText}>-1.0</Text>
+            </Pressable>
+            <Pressable
+              testID="keypad-speed-step-minus-point2"
+              style={({ pressed }) => [
+                styles.stepButton,
+                pressed && styles.stepButtonPressed,
+              ]}
+              onPress={() => onStep(-0.2)}
+            >
+              <Text style={styles.stepButtonText}>-0.2</Text>
+            </Pressable>
+            <Pressable
+              testID="keypad-speed-step-plus-point2"
+              style={({ pressed }) => [
+                styles.stepButton,
+                pressed && styles.stepButtonPressed,
+              ]}
+              onPress={() => onStep(0.2)}
+            >
+              <Text style={styles.stepButtonText}>+0.2</Text>
+            </Pressable>
+            <Pressable
+              testID="keypad-speed-step-plus-1"
+              style={({ pressed }) => [
+                styles.stepButton,
+                pressed && styles.stepButtonPressed,
+              ]}
+              onPress={() => onStep(1)}
+            >
+              <Text style={styles.stepButtonText}>+1.0</Text>
+            </Pressable>
+          </View>
+        ) : mode === 'durationMinutes' ? (
+          <View style={styles.stepperRow}>
+            <Pressable
+              testID="keypad-duration-step-minus-5"
+              style={({ pressed }) => [
+                styles.stepButton,
+                pressed && styles.stepButtonPressed,
+              ]}
+              onPress={() => onStep(-5)}
+            >
+              <Text style={styles.stepButtonText}>-5 min</Text>
+            </Pressable>
+            <Pressable
+              testID="keypad-duration-step-minus-1"
+              style={({ pressed }) => [
+                styles.stepButton,
+                pressed && styles.stepButtonPressed,
+              ]}
+              onPress={() => onStep(-1)}
+            >
+              <Text style={styles.stepButtonText}>-1 min</Text>
+            </Pressable>
+            <Pressable
+              testID="keypad-duration-step-plus-1"
+              style={({ pressed }) => [
+                styles.stepButton,
+                pressed && styles.stepButtonPressed,
+              ]}
+              onPress={() => onStep(1)}
+            >
+              <Text style={styles.stepButtonText}>+1 min</Text>
+            </Pressable>
+            <Pressable
+              testID="keypad-duration-step-plus-5"
+              style={({ pressed }) => [
+                styles.stepButton,
+                pressed && styles.stepButtonPressed,
+              ]}
+              onPress={() => onStep(5)}
+            >
+              <Text style={styles.stepButtonText}>+5 min</Text>
+            </Pressable>
+          </View>
         ) : (
-          <View style={styles.rpeAndStepperSection}>
-            <View style={styles.repsStepperWrap}>
-              <Pressable
-                testID="keypad-reps-step-minus"
-                style={({ pressed }) => [
-                  styles.repsStepBtn,
-                  pressed && styles.stepButtonPressed,
-                ]}
-                onPress={() => onStep(-1)}
-              >
-                <Text style={styles.stepButtonText}>-1 Rep</Text>
-              </Pressable>
-              <Pressable
-                testID="keypad-reps-step-plus"
-                style={({ pressed }) => [
-                  styles.repsStepBtn,
-                  pressed && styles.stepButtonPressed,
-                ]}
-                onPress={() => onStep(1)}
-              >
-                <Text style={styles.stepButtonText}>+1 Rep</Text>
-              </Pressable>
-            </View>
-
-            {onSelectRpe ? (
-              <View testID="keypad-rpe-bar" style={styles.rpeWrap}>
-                <Text variant="caption" style={styles.rpeLabel}>
-                  RPE:
-                </Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.rpeChipsScroll}
-                  keyboardShouldPersistTaps="handled"
-                >
-                  {RPE_PRESETS.map((rpe) => {
-                    const isSelected =
-                      selectedRpe === rpe ||
-                      (selectedRpe === undefined && rpeValue === String(rpe));
-                    return (
-                      <Pressable
-                        key={rpe}
-                        testID={`keypad-rpe-${rpe}`}
-                        onPress={() => onSelectRpe(isSelected ? undefined : rpe)}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: isSelected }}
-                        accessibilityLabel={`RPE ${rpe}`}
-                        style={[
-                          styles.rpeChip,
-                          isSelected && styles.rpeChipSelected,
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.rpeChipText,
-                            isSelected && styles.rpeChipTextSelected,
-                          ]}
-                        >
-                          {rpe}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-            ) : null}
+          <View style={styles.repsStepperWrap}>
+            <Pressable
+              testID="keypad-reps-step-minus"
+              style={({ pressed }) => [
+                styles.repsStepBtn,
+                pressed && styles.stepButtonPressed,
+              ]}
+              onPress={() => onStep(-1)}
+            >
+              <Text style={styles.stepButtonText}>-1 Rep</Text>
+            </Pressable>
+            <Pressable
+              testID="keypad-reps-step-plus"
+              style={({ pressed }) => [
+                styles.repsStepBtn,
+                pressed && styles.stepButtonPressed,
+              ]}
+              onPress={() => onStep(1)}
+            >
+              <Text style={styles.stepButtonText}>+1 Rep</Text>
+            </Pressable>
           </View>
         )}
 
@@ -315,7 +393,7 @@ export const WorkoutNumericKeypad: React.FC<WorkoutNumericKeypadProps> = ({
           </View>
 
           <View style={styles.gridRow}>
-            {mode === 'kg' ? (
+            {allowsDecimal ? (
               <Pressable
                 testID="keypad-key-dot"
                 style={({ pressed }) => [
@@ -360,6 +438,7 @@ export const WorkoutNumericKeypad: React.FC<WorkoutNumericKeypadProps> = ({
                 pressed && styles.keyPressed,
               ]}
               onPress={onBackspace}
+              accessibilityRole="button"
               accessibilityLabel="Backspace"
             >
               <Icon name="x" size={20} color={colors.textPrimary} />
@@ -367,7 +446,7 @@ export const WorkoutNumericKeypad: React.FC<WorkoutNumericKeypadProps> = ({
           </View>
         </View>
 
-        {/* Next Action Button */}
+        {/* Big Primary Next Action Button */}
         <View style={styles.actionRow}>
           <Pressable
             testID="keypad-key-next"
@@ -376,10 +455,10 @@ export const WorkoutNumericKeypad: React.FC<WorkoutNumericKeypadProps> = ({
               pressed && styles.nextButtonPressed,
             ]}
             onPress={onNext}
+            accessibilityRole="button"
+            accessibilityLabel="Next field or next set"
           >
-            <Text style={styles.nextButtonText}>
-              {mode === 'kg' ? 'Next: Reps →' : 'Next Set ↵'}
-            </Text>
+            <Text style={styles.nextButtonText}>Next</Text>
           </Pressable>
         </View>
       </View>
@@ -388,7 +467,7 @@ export const WorkoutNumericKeypad: React.FC<WorkoutNumericKeypadProps> = ({
 };
 
 const createStyles = (
-  colors: ReturnType<typeof useAppTheme>['colors'],
+  colors: any,
   bottomInset: number,
   windowWidth: number
 ) => {
@@ -443,20 +522,6 @@ const createStyles = (
       paddingVertical: 2,
       borderWidth: 1,
       borderColor: colors.primary,
-    },
-    valueReadout: {
-      backgroundColor: 'rgba(255, 255, 255, 0.08)',
-      borderRadius: radii.xs,
-      paddingHorizontal: 6,
-      paddingVertical: 2,
-      borderWidth: 1,
-      borderColor: 'rgba(255, 255, 255, 0.15)',
-    },
-    valueReadoutText: {
-      color: colors.textPrimary ?? '#FFFFFF',
-      fontSize: 12,
-      fontWeight: '700',
-      fontFamily: FONT_FAMILIES.bodySemiBold,
     },
     modeBadgeText: {
       color: colors.primary,
@@ -524,43 +589,6 @@ const createStyles = (
       paddingVertical: 6,
       alignItems: 'center',
       justifyContent: 'center',
-    },
-    rpeWrap: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-    },
-    rpeLabel: {
-      fontSize: 11,
-      fontWeight: '700',
-      color: colors.textSecondary,
-    },
-    rpeChipsScroll: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      paddingRight: 8,
-    },
-    rpeChip: {
-      paddingHorizontal: 6,
-      paddingVertical: 3,
-      borderRadius: radii.xs,
-      backgroundColor: colors.background ?? '#1E293B',
-      borderWidth: 1,
-      borderColor: colors.border ?? '#334155',
-    },
-    rpeChipSelected: {
-      backgroundColor: colors.secondaryAccent ?? '#A855F7',
-      borderColor: colors.secondaryAccent ?? '#A855F7',
-    },
-    rpeChipText: {
-      fontSize: 11,
-      fontWeight: '600',
-      color: colors.textSecondary,
-    },
-    rpeChipTextSelected: {
-      color: '#FFFFFF',
-      fontWeight: '700',
     },
     grid: {
       gap: 5,

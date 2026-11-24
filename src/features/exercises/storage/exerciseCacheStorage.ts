@@ -10,6 +10,7 @@
 
 import { platformStorage } from '../../../lib/storage';
 import { Exercise, ExerciseCategory } from '../types';
+import { TREADMILL_EXERCISE_ID } from '../exerciseTracking';
 import { filterAndRankExercises } from '../utils/exerciseSearch';
 import {
   customExerciseStorage,
@@ -263,6 +264,26 @@ export const SEED_EXERCISES: Exercise[] = [
     sourceProvider: 'system',
     isCustom: false,
   },
+  {
+    id: TREADMILL_EXERCISE_ID,
+    name: 'Treadmill',
+    description: 'Cardiovascular endurance, metabolic conditioning, and incline walking/running.',
+    category: 'cardio',
+    categoryName: 'Cardio',
+    primaryMuscles: [
+      { id: 'm-quads', name: 'Quadriceps', isFront: true },
+      { id: 'm-calves', name: 'Calves', isFront: false },
+    ],
+    secondaryMuscles: [
+      { id: 'm-hamstrings', name: 'Hamstrings', isFront: false },
+      { id: 'm-glutes', name: 'Glutes', isFront: false },
+    ],
+    equipment: [{ id: 'eq-treadmill', name: 'Treadmill' }],
+    images: [],
+    sourceProvider: 'system',
+    isCustom: false,
+    trackingMode: 'treadmill',
+  },
 ];
 
 class ExerciseCacheStorage {
@@ -367,6 +388,10 @@ class ExerciseCacheStorage {
    * Enables 0ms render on initial component mount.
    */
   getCachedCatalogSync(): Exercise[] {
+    const treadmillSeed = SEED_EXERCISES.find((e) => e.id === TREADMILL_EXERCISE_ID);
+    if (treadmillSeed && !this.memoryCatalog.has(TREADMILL_EXERCISE_ID)) {
+      this.memoryCatalog.set(TREADMILL_EXERCISE_ID, treadmillSeed);
+    }
     return Array.from(this.memoryCatalog.values());
   }
 
@@ -377,7 +402,14 @@ class ExerciseCacheStorage {
   getCachedExerciseByIdSync(id: string, scope?: UserScope | null): Exercise | null {
     if (!id) return null;
     const scopeMap = this.getScopeCustomMap(scope, false);
-    return scopeMap?.get(id) || this.memoryCatalog.get(id) || null;
+    const ex = scopeMap?.get(id) || this.memoryCatalog.get(id) || null;
+    if (ex && (ex.id === TREADMILL_EXERCISE_ID || ex.name.toLowerCase() === 'treadmill')) {
+      return { ...ex, trackingMode: 'treadmill' };
+    }
+    if (!ex && id === TREADMILL_EXERCISE_ID) {
+      return SEED_EXERCISES.find((e) => e.id === TREADMILL_EXERCISE_ID) || null;
+    }
+    return ex;
   }
 
   /**
@@ -414,11 +446,29 @@ class ExerciseCacheStorage {
           if (Array.isArray(parsed) && parsed.length > 0) {
             parsed.forEach((ex) => {
               if (ex && ex.id) {
-                this.memoryCatalog.set(ex.id, ex);
+                if (ex.id === TREADMILL_EXERCISE_ID || ex.name.toLowerCase() === 'treadmill') {
+                  this.memoryCatalog.set(ex.id, {
+                    ...ex,
+                    trackingMode: 'treadmill',
+                  });
+                } else {
+                  this.memoryCatalog.set(ex.id, ex);
+                }
               }
             });
           }
         }
+
+        // Always guarantee canonical SEED_EXERCISES (especially seed-treadmill with trackingMode: 'treadmill')
+        // are merged into memoryCatalog so older caches never lose seed-treadmill
+        SEED_EXERCISES.forEach((seed) => {
+          const existing = this.memoryCatalog.get(seed.id);
+          this.memoryCatalog.set(seed.id, {
+            ...(existing || {}),
+            ...seed,
+            trackingMode: seed.trackingMode || existing?.trackingMode,
+          });
+        });
 
         const scopeMap = this.getScopeCustomMap(scope, true)!;
         scopeMap.clear();
@@ -499,14 +549,31 @@ class ExerciseCacheStorage {
   async getCachedExerciseById(id: string, scope?: UserScope | null): Promise<Exercise | null> {
     if (!id) return null;
     const scopeMap = this.getScopeCustomMap(scope, false);
-    const custom = scopeMap?.get(id);
-    if (custom) return custom;
-    const mem = this.memoryCatalog.get(id);
-    if (mem) return mem;
+    let custom = scopeMap?.get(id);
+    if (custom) {
+      if (custom.id === TREADMILL_EXERCISE_ID || custom.name.toLowerCase() === 'treadmill') {
+        custom = { ...custom, trackingMode: 'treadmill' };
+      }
+      return custom;
+    }
+    let mem = this.memoryCatalog.get(id);
+    if (mem) {
+      if (mem.id === TREADMILL_EXERCISE_ID || mem.name.toLowerCase() === 'treadmill') {
+        mem = { ...mem, trackingMode: 'treadmill' };
+      }
+      return mem;
+    }
 
     await this.ensureHydrated(scope);
     const hydratedScopeMap = this.getScopeCustomMap(scope, false);
-    return hydratedScopeMap?.get(id) || this.memoryCatalog.get(id) || null;
+    let res = hydratedScopeMap?.get(id) || this.memoryCatalog.get(id) || null;
+    if (res && (res.id === TREADMILL_EXERCISE_ID || res.name.toLowerCase() === 'treadmill')) {
+      res = { ...res, trackingMode: 'treadmill' };
+    }
+    if (!res && id === TREADMILL_EXERCISE_ID) {
+      return SEED_EXERCISES.find((e) => e.id === TREADMILL_EXERCISE_ID) || null;
+    }
+    return res;
   }
 
   /**
@@ -560,13 +627,46 @@ class ExerciseCacheStorage {
         pool = Array.from(mergedMap.values());
       }
 
-      let filtered = pool;
+      // Guarantee seed-treadmill is always in pool and has trackingMode: 'treadmill'
+      const treadmillSeed = SEED_EXERCISES.find((e) => e.id === TREADMILL_EXERCISE_ID);
+      const hasTreadmill = pool.some((e) => e.id === TREADMILL_EXERCISE_ID);
+      if (treadmillSeed && !hasTreadmill) {
+        pool.push(treadmillSeed);
+      }
+
+      // Deduplicate/hide legacy wger_1615 ("Treadmill Cardio") in the picker in favor of seed-treadmill
+      let filtered = pool.filter((e) => e.id !== 'wger_1615' && e.sourceExerciseId !== '1615');
+
+      // Guarantee any treadmill entry has trackingMode: 'treadmill'
+      filtered = filtered.map((e) => {
+        if (e.id === TREADMILL_EXERCISE_ID || e.name.toLowerCase() === 'treadmill') {
+          return { ...e, trackingMode: 'treadmill' as const };
+        }
+        return e;
+      });
+
       if (category) {
         filtered = filtered.filter((e) => e.category === category);
+        // If category is cardio, ensure seed-treadmill is placed at the top of results
+        if (category === 'cardio') {
+          const tmIndex = filtered.findIndex((e) => e.id === TREADMILL_EXERCISE_ID);
+          if (tmIndex > 0) {
+            const [tm] = filtered.splice(tmIndex, 1);
+            filtered.unshift(tm);
+          }
+        }
       }
 
       if (query) {
         filtered = filterAndRankExercises(filtered, query, category as ExerciseCategory);
+        // If searching treadmill, ensure seed-treadmill is ranked at the very top
+        if (query.toLowerCase().includes('tread')) {
+          const tmIndex = filtered.findIndex((e) => e.id === TREADMILL_EXERCISE_ID);
+          if (tmIndex > 0) {
+            const [tm] = filtered.splice(tmIndex, 1);
+            filtered.unshift(tm);
+          }
+        }
       }
 
       this.lastSearchKey = cacheKey;

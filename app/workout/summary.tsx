@@ -3,7 +3,7 @@ import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, ActivityIndicator, TextInput, Pressable, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ScreenContainer, Text, Button, Card, Icon } from '../../src/components/ui';
-import { workoutRepository, WorkoutSession } from '../../src/features/workout';
+import { workoutRepository, WorkoutSession, formatTreadmillSet, isTreadmillExercise } from '../../src/features/workout';
 import { templateRepository, CreateTemplateInput, WorkoutTemplate } from '../../src/features/templates';
 import {
   WORKOUT_FOCUS_OPTIONS,
@@ -56,16 +56,32 @@ export function convertWorkoutToTemplateInput(workout: WorkoutSession, customNam
       }
     }
 
-    const restTime = typeof ex.plannedRestTime === 'number' && ex.plannedRestTime >= 0 ? ex.plannedRestTime : 90;
+    const isTreadmill = ex.trackingMode === 'treadmill';
+    const restTime = isTreadmill
+      ? 0
+      : (typeof ex.plannedRestTime === 'number' && ex.plannedRestTime >= 0 ? ex.plannedRestTime : 90);
 
     return {
       exerciseId: ex.exerciseId,
       exerciseName: ex.exerciseName,
       categoryName: ex.categoryName,
       sets,
-      targetReps,
+      targetReps: isTreadmill ? '1' : targetReps,
       restTime,
-      targetWeight,
+      targetWeight: isTreadmill ? undefined : targetWeight,
+      trackingMode: ex.trackingMode,
+      targetInclinePercent:
+        ex.plannedTargetInclinePercent !== undefined
+          ? ex.plannedTargetInclinePercent
+          : (finishedSets[0]?.inclinePercent ?? 0),
+      targetSpeedKph:
+        ex.plannedTargetSpeedKph !== undefined
+          ? ex.plannedTargetSpeedKph
+          : (finishedSets[0]?.speedKph ?? 5),
+      targetDurationSeconds:
+        ex.plannedTargetDurationSeconds !== undefined
+          ? ex.plannedTargetDurationSeconds
+          : (finishedSets[0]?.durationSeconds ?? 600),
     };
   });
 
@@ -643,9 +659,9 @@ export default function WorkoutSummaryScreen() {
                               SET {s.setNumber}
                             </Text>
                             <Text variant="bodyBold" color="primary" style={styles.setData}>
-                              {(s.weight ?? 0) > 0 ? `${s.weight} kg × ` : ''}
-                              {s.reps ?? 0} reps
-                              {s.rir !== undefined ? ` (RIR ${s.rir})` : ''}
+                              {isTreadmillExercise(ex)
+                                ? formatTreadmillSet(s)
+                                : `${(s.weight ?? 0) > 0 ? `${s.weight} kg × ` : ''}${s.reps ?? 0} reps${s.rir !== undefined ? ` (RIR ${s.rir})` : ''}`}
                             </Text>
                           </View>
                           {hasNote && (

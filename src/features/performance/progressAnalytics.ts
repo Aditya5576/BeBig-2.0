@@ -9,6 +9,7 @@
  */
 
 import { WorkoutSession } from '../workout/types';
+import { isStrengthExercise } from '../workout/utils/treadmillMetrics';
 import { extractExercisePerformances, ExercisePerformanceSnapshot } from './index';
 
 export type AnalyticsPeriod = 'week' | 'month' | 'all_time';
@@ -256,6 +257,7 @@ export function calculateProgressAnalytics(
     }
 
     for (const ex of w.exercises || []) {
+      if (!isStrengthExercise(ex)) continue;
       for (const set of ex.actualSets || []) {
         if (set.completed && set.reps > 0) {
           currentSetsCount++;
@@ -275,6 +277,7 @@ export function calculateProgressAnalytics(
 
   for (const w of previousWorkouts) {
     for (const ex of w.exercises || []) {
+      if (!isStrengthExercise(ex)) continue;
       for (const set of ex.actualSets || []) {
         if (set.completed && set.reps > 0) {
           previousSetsCount++;
@@ -396,6 +399,7 @@ export function calculateProgressAnalytics(
       let sessVol = 0;
       let sessSets = 0;
       for (const ex of w.exercises || []) {
+        if (!isStrengthExercise(ex)) continue;
         for (const s of ex.actualSets || []) {
           if (s.completed && s.reps > 0) {
             sessSets++;
@@ -415,6 +419,7 @@ export function calculateProgressAnalytics(
 
     for (const w of data.workouts) {
       for (const ex of w.exercises || []) {
+        if (!isStrengthExercise(ex)) continue;
         let exSets = 0;
         let exVol = 0;
         let topWeight = 0;

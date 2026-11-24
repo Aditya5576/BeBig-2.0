@@ -36,9 +36,12 @@ import {
 } from '../../src/features/workout/services/previousPerformanceService';
 import { useAuthStore } from '../../src/features/auth';
 import { Exercise } from '../../src/features/exercises';
+import { normalizeTrackingMode, resolveExerciseTrackingMode } from '../../src/features/exercises/exerciseTracking';
 import { spacing, radii } from '../../src/constants/theme';
+import { DOMAIN_LIMITS } from '../../src/constants/domainLimits';
 import { RestTimerOverlay } from '../../src/features/workout/components/RestTimerOverlay';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ActiveFocusField } from '../../src/features/workout/components/ActiveSetRow';
 
 const useFocusEffect =
   typeof routerFocusEffect === 'function' ? routerFocusEffect : (fn: any) => fn();
@@ -75,34 +78,15 @@ export default function ActiveWorkoutScreen() {
   const workoutCompletedRef = useRef(false);
   const scrollViewRef = useRef<ScrollView>(null);
   const currentScrollY = useRef(0);
-  const exerciseListOffsetYRef = useRef(0);
   const cardLayoutsRef = useRef<{ [exerciseId: string]: { y: number; height: number } }>({});
-  const setRowLayoutsRef = useRef<{ [setId: string]: { y: number; height: number } }>({});
-  const [keypadHeight, setKeypadHeight] = useState<number>(0);
-  const [scrollViewportHeight, setScrollViewportHeight] = useState<number>(0);
-
-  const draftTargetRef = useRef<{
-    exerciseId: string;
-    setId: string;
-    field: 'weight' | 'reps' | 'rir';
-  } | null>(null);
-  const draftTextRef = useRef<string>('');
-  const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const editGenerationRef = useRef<number>(0);
 
   const [keypadFocus, setKeypadFocus] = useState<{
     exerciseId: string;
     setId: string;
-    field: 'weight' | 'reps' | 'rir';
+    field: ActiveFocusField;
     value: string;
   } | null>(null);
   const [useNativeKeyboard, setUseNativeKeyboard] = useState(false);
-  const [draftTarget, setDraftTarget] = useState<{
-    exerciseId: string;
-    setId: string;
-    field: 'weight' | 'reps' | 'rir';
-  } | null>(null);
-  const [draftText, setDraftText] = useState<string>('');
 
   useEffect(() => {
     sessionRef.current = session;
@@ -135,27 +119,8 @@ export default function ActiveWorkoutScreen() {
         }
         const saved = await workoutRepository.updateActiveWorkout(sessionToSave, undefined, options);
         if (saved && !workoutCompletedRef.current) {
-          const target = draftTargetRef.current;
-          if (target) {
-            const text = draftTextRef.current;
-            let partial: Partial<WorkoutSet> = {};
-            if (target.field === 'weight') {
-              const num = parseFloat(text);
-              partial = { weight: isNaN(num) ? 0 : Math.max(0, num) };
-            } else if (target.field === 'reps') {
-              const num = parseInt(text, 10);
-              partial = { reps: isNaN(num) ? 0 : Math.max(0, num) };
-            } else if (target.field === 'rir') {
-              const num = parseFloat(text);
-              partial = { rir: isNaN(num) ? undefined : Math.min(10, Math.max(0, num)) };
-            }
-            const merged = workoutRepository.updateSet(saved, target.exerciseId, target.setId, partial);
-            sessionRef.current = merged;
-            setSession(merged);
-          } else {
-            sessionRef.current = saved;
-            setSession(saved);
-          }
+          sessionRef.current = saved;
+          setSession(saved);
         }
       } catch {
         // Background autosave failure caught gracefully
@@ -202,27 +167,8 @@ export default function ActiveWorkoutScreen() {
           }
           const saved = await workoutRepository.updateActiveWorkout(sessionToSave);
           if (saved && !workoutCompletedRef.current) {
-            const target = draftTargetRef.current;
-            if (target) {
-              const text = draftTextRef.current;
-              let partial: Partial<WorkoutSet> = {};
-              if (target.field === 'weight') {
-                const num = parseFloat(text);
-                partial = { weight: isNaN(num) ? 0 : Math.max(0, num) };
-              } else if (target.field === 'reps') {
-                const num = parseInt(text, 10);
-                partial = { reps: isNaN(num) ? 0 : Math.max(0, num) };
-              } else if (target.field === 'rir') {
-                const num = parseFloat(text);
-                partial = { rir: isNaN(num) ? undefined : Math.min(10, Math.max(0, num)) };
-              }
-              const merged = workoutRepository.updateSet(saved, target.exerciseId, target.setId, partial);
-              sessionRef.current = merged;
-              setSession(merged);
-            } else {
-              sessionRef.current = saved;
-              setSession(saved);
-            }
+            sessionRef.current = saved;
+            setSession(saved);
           }
         } catch {
           // Silent error during debounced save
@@ -232,38 +178,6 @@ export default function ActiveWorkoutScreen() {
     [cancelDebouncedSave]
   );
 
-  const commitDraftNow = useCallback((): WorkoutSession | null => {
-    if (draftTimerRef.current) {
-      clearTimeout(draftTimerRef.current);
-      draftTimerRef.current = null;
-    }
-    const target = draftTargetRef.current;
-    if (!target) return null;
-    const text = draftTextRef.current;
-    const current = sessionRef.current;
-    if (!current || workoutCompletedRef.current) return null;
-
-    editGenerationRef.current += 1;
-
-    let partial: Partial<WorkoutSet> = {};
-    if (target.field === 'weight') {
-      const num = parseFloat(text);
-      partial = { weight: isNaN(num) ? 0 : Math.max(0, num) };
-    } else if (target.field === 'reps') {
-      const num = parseInt(text, 10);
-      partial = { reps: isNaN(num) ? 0 : Math.max(0, num) };
-    } else if (target.field === 'rir') {
-      const num = parseFloat(text);
-      partial = { rir: isNaN(num) ? undefined : Math.min(10, Math.max(0, num)) };
-    }
-
-    const updated = workoutRepository.updateSet(current, target.exerciseId, target.setId, partial);
-    sessionRef.current = updated;
-    setSession(updated);
-    scheduleDebouncedSave(updated);
-    return updated;
-  }, [scheduleDebouncedSave]);
-
   useEffect(() => {
     const writeSyncEmergencyMirror = () => {
       const current = sessionRef.current;
@@ -272,7 +186,6 @@ export default function ActiveWorkoutScreen() {
     };
 
     const handleBackgroundFlush = () => {
-      commitDraftNow();
       writeSyncEmergencyMirror();
       void flushActiveWorkout();
     };
@@ -318,7 +231,7 @@ export default function ActiveWorkoutScreen() {
       }
       handleBackgroundFlush();
     };
-  }, [flushActiveWorkout, commitDraftNow]);
+  }, [flushActiveWorkout]);
 
   useFocusEffect(
     useCallback(() => {
@@ -535,10 +448,12 @@ export default function ActiveWorkoutScreen() {
 
     let updated = current;
     for (const exercise of nonDuplicates) {
+      const trackingMode = resolveExerciseTrackingMode(exercise);
       updated = workoutRepository.addExerciseToWorkout(updated, {
         id: exercise.id,
         name: exercise.name,
         categoryName: exercise.categoryName,
+        trackingMode,
       });
     }
 
@@ -561,15 +476,7 @@ export default function ActiveWorkoutScreen() {
           text: 'Remove',
           style: 'destructive',
           onPress: async () => {
-            if (draftTargetRef.current?.exerciseId === exercise.exerciseId) {
-              if (draftTimerRef.current) {
-                clearTimeout(draftTimerRef.current);
-                draftTimerRef.current = null;
-              }
-              draftTargetRef.current = null;
-              draftTextRef.current = '';
-              setDraftTarget(null);
-              setDraftText('');
+            if (keypadFocus?.exerciseId === exercise.exerciseId) {
               setKeypadFocus(null);
             }
             const current = sessionRef.current || session;
@@ -658,15 +565,7 @@ export default function ActiveWorkoutScreen() {
 
   // Delete set (0ms optimistic UI)
   const handleDeleteSet = (exerciseId: string, setId: string) => {
-    if (draftTargetRef.current?.setId === setId) {
-      if (draftTimerRef.current) {
-        clearTimeout(draftTimerRef.current);
-        draftTimerRef.current = null;
-      }
-      draftTargetRef.current = null;
-      draftTextRef.current = '';
-      setDraftTarget(null);
-      setDraftText('');
+    if (keypadFocus?.setId === setId) {
       setKeypadFocus(null);
     }
     const current = sessionRef.current || session;
@@ -680,12 +579,12 @@ export default function ActiveWorkoutScreen() {
     void updateSessionAndAutosaveImmediate(updated);
   };
 
-  // Update set field (weight, reps, rir, notes)
+  // Update set field (weight, reps, rir, inclinePercent, speedKph, durationSeconds, notes)
   const handleUpdateSetField = useCallback(
     async (
       exerciseId: string,
       setId: string,
-      field: keyof WorkoutSet,
+      field: keyof WorkoutSet | 'durationMinutes',
       value: string,
     ) => {
       const current = sessionRef.current || session;
@@ -700,7 +599,35 @@ export default function ActiveWorkoutScreen() {
         partial = { reps: isNaN(num) ? 0 : Math.max(0, num) };
       } else if (field === 'rir') {
         const num = parseFloat(value);
-        partial = { rir: isNaN(num) ? 0 : Math.min(10, Math.max(0, num)) };
+        partial = { rir: isNaN(num) ? 0 : Math.min(DOMAIN_LIMITS.RIR_MAX, Math.max(DOMAIN_LIMITS.RIR_MIN, num)) };
+      } else if (field === 'inclinePercent') {
+        if (!value || value.trim() === '') {
+          partial = { inclinePercent: undefined };
+        } else {
+          const num = parseFloat(value);
+          partial = { inclinePercent: isNaN(num) ? undefined : Math.min(50, Math.max(0, num)) };
+        }
+      } else if (field === 'speedKph') {
+        if (!value || value.trim() === '') {
+          partial = { speedKph: undefined };
+        } else {
+          const num = parseFloat(value);
+          partial = { speedKph: isNaN(num) ? undefined : Math.min(40, Math.max(0, num)) };
+        }
+      } else if (field === 'durationMinutes') {
+        if (!value || value.trim() === '') {
+          partial = { durationSeconds: undefined };
+        } else {
+          const num = parseFloat(value);
+          partial = { durationSeconds: isNaN(num) ? undefined : Math.min(86400, Math.max(0, Math.round(num * 60))) };
+        }
+      } else if (field === 'durationSeconds') {
+        if (!value || value.trim() === '') {
+          partial = { durationSeconds: undefined };
+        } else {
+          const num = parseInt(value, 10);
+          partial = { durationSeconds: isNaN(num) ? undefined : Math.min(86400, Math.max(0, num)) };
+        }
       } else if (field === 'notes') {
         partial = { notes: value };
       } else if (field === 'setType') {
@@ -725,61 +652,14 @@ export default function ActiveWorkoutScreen() {
     [session, updateSessionAndAutosaveImmediate, scheduleDebouncedSave]
   );
 
-  const scheduleDraftMaterialize = useCallback(
-    (
-      target: { exerciseId: string; setId: string; field: 'weight' | 'reps' | 'rir' },
-      nextText: string
-    ) => {
-      if (draftTimerRef.current) {
-        clearTimeout(draftTimerRef.current);
-      }
-      const currentGen = ++editGenerationRef.current;
-      draftTimerRef.current = setTimeout(() => {
-        draftTimerRef.current = null;
-        if (editGenerationRef.current !== currentGen) return;
-        const current = sessionRef.current;
-        if (!current || workoutCompletedRef.current) return;
-
-        let partial: Partial<WorkoutSet> = {};
-        if (target.field === 'weight') {
-          const num = parseFloat(nextText);
-          partial = { weight: isNaN(num) ? 0 : Math.max(0, num) };
-        } else if (target.field === 'reps') {
-          const num = parseInt(nextText, 10);
-          partial = { reps: isNaN(num) ? 0 : Math.max(0, num) };
-        } else if (target.field === 'rir') {
-          const num = parseFloat(nextText);
-          partial = { rir: isNaN(num) ? undefined : Math.min(10, Math.max(0, num)) };
-        }
-
-        const updated = workoutRepository.updateSet(current, target.exerciseId, target.setId, partial);
-        sessionRef.current = updated;
-        setSession(updated);
-        scheduleDebouncedSave(updated);
-      }, 150);
-    },
-    [scheduleDebouncedSave]
-  );
-
   const handleFocusField = useCallback(
     (
       exerciseId: string,
       setId: string,
-      field: 'weight' | 'reps' | 'rir',
+      field: ActiveFocusField,
       currentValue: string
     ) => {
       if (useNativeKeyboard) return;
-      if (
-        draftTargetRef.current &&
-        (draftTargetRef.current.setId !== setId || draftTargetRef.current.field !== field)
-      ) {
-        commitDraftNow();
-      }
-      const nextTarget = { exerciseId, setId, field };
-      draftTargetRef.current = nextTarget;
-      draftTextRef.current = currentValue;
-      setDraftTarget(nextTarget);
-      setDraftText(currentValue);
       setKeypadFocus({
         exerciseId,
         setId,
@@ -787,14 +667,13 @@ export default function ActiveWorkoutScreen() {
         value: currentValue,
       });
     },
-    [useNativeKeyboard, commitDraftNow]
+    [useNativeKeyboard]
   );
 
   const handleKeypadPress = useCallback(
     (digit: string) => {
-      const target = draftTargetRef.current;
-      if (!target) return;
-      let currentVal = draftTextRef.current;
+      if (!keypadFocus) return;
+      let currentVal = keypadFocus.value;
       let nextVal = currentVal;
       if (digit === '.') {
         if (nextVal.includes('.')) return;
@@ -802,75 +681,42 @@ export default function ActiveWorkoutScreen() {
       } else {
         nextVal = nextVal === '0' ? digit : `${nextVal}${digit}`;
       }
-      draftTextRef.current = nextVal;
-      setDraftText(nextVal);
       setKeypadFocus((prev) => (prev ? { ...prev, value: nextVal } : null));
-      scheduleDraftMaterialize(target, nextVal);
+      void handleUpdateSetField(keypadFocus.exerciseId, keypadFocus.setId, keypadFocus.field, nextVal);
     },
-    [scheduleDraftMaterialize]
+    [keypadFocus, handleUpdateSetField]
   );
 
   const handleKeypadBackspace = useCallback(() => {
-    const target = draftTargetRef.current;
-    if (!target) return;
-    const currentVal = draftTextRef.current;
+    if (!keypadFocus) return;
+    const currentVal = keypadFocus.value;
     const nextVal = currentVal.slice(0, -1);
-    draftTextRef.current = nextVal;
-    setDraftText(nextVal);
     setKeypadFocus((prev) => (prev ? { ...prev, value: nextVal } : null));
-    scheduleDraftMaterialize(target, nextVal);
-  }, [scheduleDraftMaterialize]);
+    void handleUpdateSetField(keypadFocus.exerciseId, keypadFocus.setId, keypadFocus.field, nextVal);
+  }, [keypadFocus, handleUpdateSetField]);
 
   const handleKeypadClear = useCallback(() => {
-    const target = draftTargetRef.current;
-    if (!target) return;
+    if (!keypadFocus) return;
     const nextVal = '';
-    draftTextRef.current = nextVal;
-    setDraftText(nextVal);
     setKeypadFocus((prev) => (prev ? { ...prev, value: nextVal } : null));
-    scheduleDraftMaterialize(target, nextVal);
-  }, [scheduleDraftMaterialize]);
+    void handleUpdateSetField(keypadFocus.exerciseId, keypadFocus.setId, keypadFocus.field, nextVal);
+  }, [keypadFocus, handleUpdateSetField]);
 
   const handleKeypadStep = useCallback(
     (delta: number) => {
-      const target = draftTargetRef.current;
-      if (!target) return;
-      const currentVal = draftTextRef.current;
-      const currentNum = parseFloat(currentVal) || 0;
-      const nextNum = Math.max(0, Math.round((currentNum + delta) * 100) / 100);
-      const nextVal = nextNum === 0 ? '' : String(nextNum);
-      draftTextRef.current = nextVal;
-      setDraftText(nextVal);
-      setKeypadFocus((prev) => (prev ? { ...prev, value: nextVal } : null));
-      scheduleDraftMaterialize(target, nextVal);
-    },
-    [scheduleDraftMaterialize]
-  );
-
-  const handleKeypadSelectRpe = useCallback(
-    (rpe?: number) => {
       if (!keypadFocus) return;
-      const current = sessionRef.current || session;
-      if (!current) return;
-      const rirVal =
-        rpe !== undefined
-          ? Math.max(0, Math.min(10, Math.round((10 - rpe) * 10) / 10))
-          : undefined;
-      const updated = workoutRepository.updateSet(
-        current,
-        keypadFocus.exerciseId,
-        keypadFocus.setId,
-        { rir: rirVal }
-      );
-      sessionRef.current = updated;
-      setSession(updated);
-      scheduleDebouncedSave(updated);
+      const currentVal = keypadFocus.value;
+      const currentNum = parseFloat(currentVal) || 0;
+      const nextNum = Math.round((currentNum + delta) * 100) / 100;
+      const clamped = Math.max(0, nextNum);
+      const nextVal = keypadFocus.field === 'inclinePercent' ? String(clamped) : clamped === 0 ? '' : String(clamped);
+      setKeypadFocus((prev) => (prev ? { ...prev, value: nextVal } : null));
+      void handleUpdateSetField(keypadFocus.exerciseId, keypadFocus.setId, keypadFocus.field, nextVal);
     },
-    [keypadFocus, session, scheduleDebouncedSave]
+    [keypadFocus, handleUpdateSetField]
   );
 
   const handleKeypadNext = useCallback(() => {
-    commitDraftNow();
     if (!keypadFocus) return;
     const current = sessionRef.current || session;
     if (!current) return;
@@ -878,139 +724,119 @@ export default function ActiveWorkoutScreen() {
     if (!currentEx) return;
     const currentSetIndex = currentEx.actualSets.findIndex((s) => s.id === keypadFocus.setId);
     if (currentSetIndex === -1) return;
+    const targetSet = currentEx.actualSets[currentSetIndex];
+    const isTreadmill = normalizeTrackingMode(currentEx.trackingMode) === 'treadmill';
 
-    if (keypadFocus.field === 'weight') {
-      const targetSet = currentEx.actualSets[currentSetIndex];
-      const val =
-        targetSet.reps !== undefined && targetSet.reps !== null && targetSet.reps > 0
-          ? String(targetSet.reps)
+    if (isTreadmill) {
+      if (keypadFocus.field === 'inclinePercent') {
+        const val = targetSet.speedKph != null && targetSet.speedKph > 0 ? String(targetSet.speedKph) : '';
+        setKeypadFocus({
+          exerciseId: keypadFocus.exerciseId,
+          setId: keypadFocus.setId,
+          field: 'speedKph',
+          value: val,
+        });
+        return;
+      } else if (keypadFocus.field === 'speedKph') {
+        const val = targetSet.durationSeconds != null && targetSet.durationSeconds > 0
+          ? String(Math.round((targetSet.durationSeconds / 60) * 100) / 100)
           : '';
-      const nextTarget = {
-        exerciseId: keypadFocus.exerciseId,
-        setId: keypadFocus.setId,
-        field: 'reps' as const,
-      };
-      draftTargetRef.current = nextTarget;
-      draftTextRef.current = val;
-      setDraftTarget(nextTarget);
-      setDraftText(val);
-      setKeypadFocus({
-        exerciseId: keypadFocus.exerciseId,
-        setId: keypadFocus.setId,
-        field: 'reps',
-        value: val,
-      });
+        setKeypadFocus({
+          exerciseId: keypadFocus.exerciseId,
+          setId: keypadFocus.setId,
+          field: 'durationMinutes',
+          value: val,
+        });
+        return;
+      }
+      // durationMinutes -> advance to next set or next exercise or dismiss
     } else {
-      if (currentSetIndex < currentEx.actualSets.length - 1) {
-        const nextSet = currentEx.actualSets[currentSetIndex + 1];
-        const val =
-          nextSet.weight !== undefined && nextSet.weight !== null && nextSet.weight > 0
-            ? String(nextSet.weight)
-            : '';
-        const nextTarget = {
+      if (keypadFocus.field === 'weight') {
+        const val = targetSet.reps != null && targetSet.reps > 0 ? String(targetSet.reps) : '';
+        setKeypadFocus({
+          exerciseId: keypadFocus.exerciseId,
+          setId: keypadFocus.setId,
+          field: 'reps',
+          value: val,
+        });
+        return;
+      } else if (keypadFocus.field === 'reps') {
+        const val = targetSet.rir != null ? String(targetSet.rir) : '';
+        setKeypadFocus({
+          exerciseId: keypadFocus.exerciseId,
+          setId: keypadFocus.setId,
+          field: 'rir',
+          value: val,
+        });
+        return;
+      }
+      // rir -> advance to next set or next exercise or dismiss
+    }
+
+    // Advance to next set
+    if (currentSetIndex < currentEx.actualSets.length - 1) {
+      const nextSet = currentEx.actualSets[currentSetIndex + 1];
+      if (isTreadmill) {
+        const val = nextSet.inclinePercent != null ? String(nextSet.inclinePercent) : '';
+        setKeypadFocus({
           exerciseId: keypadFocus.exerciseId,
           setId: nextSet.id,
-          field: 'weight' as const,
-        };
-        draftTargetRef.current = nextTarget;
-        draftTextRef.current = val;
-        setDraftTarget(nextTarget);
-        setDraftText(val);
+          field: 'inclinePercent',
+          value: val,
+        });
+      } else {
+        const val = nextSet.weight != null && nextSet.weight > 0 ? String(nextSet.weight) : '';
         setKeypadFocus({
           exerciseId: keypadFocus.exerciseId,
           setId: nextSet.id,
           field: 'weight',
           value: val,
         });
-      } else {
-        const exIndex = current.exercises.findIndex((e) => e.exerciseId === keypadFocus.exerciseId);
-        if (exIndex < current.exercises.length - 1) {
-          const nextEx = current.exercises[exIndex + 1];
-          if (nextEx.actualSets.length > 0) {
-            const nextSet = nextEx.actualSets[0];
-            const val =
-              nextSet.weight !== undefined && nextSet.weight !== null && nextSet.weight > 0
-                ? String(nextSet.weight)
-                : '';
-            const nextTarget = {
-              exerciseId: nextEx.exerciseId,
-              setId: nextSet.id,
-              field: 'weight' as const,
-            };
-            draftTargetRef.current = nextTarget;
-            draftTextRef.current = val;
-            setDraftTarget(nextTarget);
-            setDraftText(val);
-            setKeypadFocus({
-              exerciseId: nextEx.exerciseId,
-              setId: nextSet.id,
-              field: 'weight',
-              value: val,
-            });
-            return;
-          }
+      }
+      return;
+    }
+
+    // Advance to next exercise
+    const exIndex = current.exercises.findIndex((e) => e.exerciseId === keypadFocus.exerciseId);
+    if (exIndex < current.exercises.length - 1) {
+      const nextEx = current.exercises[exIndex + 1];
+      if (nextEx.actualSets.length > 0) {
+        const nextSet = nextEx.actualSets[0];
+        const nextIsTreadmill = normalizeTrackingMode(nextEx.trackingMode) === 'treadmill';
+        if (nextIsTreadmill) {
+          const val = nextSet.inclinePercent != null ? String(nextSet.inclinePercent) : '';
+          setKeypadFocus({
+            exerciseId: nextEx.exerciseId,
+            setId: nextSet.id,
+            field: 'inclinePercent',
+            value: val,
+          });
+        } else {
+          const val = nextSet.weight != null && nextSet.weight > 0 ? String(nextSet.weight) : '';
+          setKeypadFocus({
+            exerciseId: nextEx.exerciseId,
+            setId: nextSet.id,
+            field: 'weight',
+            value: val,
+          });
         }
-        draftTargetRef.current = null;
-        draftTextRef.current = '';
-        setDraftTarget(null);
-        setDraftText('');
-        setKeypadFocus(null);
-        void flushActiveWorkout();
+        return;
       }
     }
-  }, [keypadFocus, session, commitDraftNow, flushActiveWorkout]);
 
-  const handleKeypadDismiss = useCallback(() => {
-    commitDraftNow();
-    draftTargetRef.current = null;
-    draftTextRef.current = '';
-    setDraftTarget(null);
-    setDraftText('');
     setKeypadFocus(null);
     void flushActiveWorkout();
-  }, [commitDraftNow, flushActiveWorkout]);
+  }, [keypadFocus, session, flushActiveWorkout]);
+
+  const handleKeypadDismiss = useCallback(() => {
+    setKeypadFocus(null);
+    void flushActiveWorkout();
+  }, [flushActiveWorkout]);
 
   const handleToggleNativeKeyboard = useCallback(() => {
-    commitDraftNow();
-    draftTargetRef.current = null;
-    draftTextRef.current = '';
-    setDraftTarget(null);
-    setDraftText('');
     setUseNativeKeyboard((prev) => !prev);
     setKeypadFocus(null);
-  }, [commitDraftNow]);
-
-  const scrollToFocusedRow = useCallback(() => {
-    if (!keypadFocus || useNativeKeyboard) return;
-    const cardLayout = cardLayoutsRef.current[keypadFocus.exerciseId];
-    const rowLayout = setRowLayoutsRef.current[keypadFocus.setId];
-    if (!cardLayout || !rowLayout) return;
-
-    const rowAbsY = exerciseListOffsetYRef.current + cardLayout.y + rowLayout.y;
-    const rowHeight = rowLayout.height || 44;
-    const effectiveKeypadHeight = keypadHeight > 0 ? keypadHeight : 300;
-    const viewportHeight = scrollViewportHeight > 0 ? scrollViewportHeight : 600;
-
-    const visibleBottom = currentScrollY.current + viewportHeight - effectiveKeypadHeight - 16;
-    const visibleTop = currentScrollY.current + 16;
-
-    if (rowAbsY + rowHeight > visibleBottom) {
-      const targetY = Math.max(0, rowAbsY + rowHeight - (viewportHeight - effectiveKeypadHeight) + 32);
-      scrollViewRef.current?.scrollTo({ y: targetY, animated: true });
-    } else if (rowAbsY < visibleTop) {
-      const targetY = Math.max(0, rowAbsY - 24);
-      scrollViewRef.current?.scrollTo({ y: targetY, animated: true });
-    }
-  }, [keypadFocus, useNativeKeyboard, keypadHeight, scrollViewportHeight]);
-
-  useEffect(() => {
-    if (keypadFocus) {
-      const timer = setTimeout(() => {
-        scrollToFocusedRow();
-      }, 50);
-      return () => clearTimeout(timer);
-    }
-  }, [keypadFocus, keypadHeight, scrollToFocusedRow]);
+  }, []);
 
   // Toggle complete set
   const handleToggleCompleteSet = async (
@@ -1018,91 +844,101 @@ export default function ActiveWorkoutScreen() {
     set: WorkoutSet,
     pendingUpdates?: Partial<WorkoutSet>,
   ) => {
-    const draftFieldCommitted =
-      draftTargetRef.current?.setId === set.id ? draftTargetRef.current.field : null;
-    const committedSession = commitDraftNow();
-    if (draftTargetRef.current?.setId === set.id) {
-      draftTargetRef.current = null;
-      draftTextRef.current = '';
-      setDraftTarget(null);
-      setDraftText('');
+    if (keypadFocus?.setId === set.id) {
       setKeypadFocus(null);
     }
-    const current = committedSession || sessionRef.current || session;
+    const current = sessionRef.current || session;
     if (!current) return;
 
     const latestExercise =
       current.exercises.find((e) => e.exerciseId === exercise.exerciseId) || exercise;
     const latestSet = latestExercise.actualSets.find((s) => s.id === set.id) || set;
 
-    const safePendingUpdates = { ...pendingUpdates };
-    if (draftFieldCommitted) {
-      delete safePendingUpdates[draftFieldCommitted];
-    }
-
-    const effectiveSet = { ...latestSet, ...safePendingUpdates };
+    const effectiveSet = { ...latestSet, ...pendingUpdates };
+    const isTreadmill = normalizeTrackingMode(latestExercise.trackingMode) === 'treadmill';
 
     if (!effectiveSet.completed) {
       // Validate before completing
-      if (effectiveSet.reps <= 0 || !Number.isInteger(effectiveSet.reps)) {
-        Alert.alert(
-          'Invalid Reps',
-          'Reps must be a positive integer (at least 1) to complete a set.',
-        );
-        return;
-      }
-      if (effectiveSet.weight < 0 || isNaN(effectiveSet.weight)) {
-        Alert.alert('Invalid Weight', 'Weight cannot be negative.');
-        return;
-      }
-      if (effectiveSet.rir !== undefined && (effectiveSet.rir < 0 || effectiveSet.rir > 10 || isNaN(effectiveSet.rir))) {
-        Alert.alert('Invalid RIR', 'RIR must be between 0 and 10.');
-        return;
+      if (isTreadmill) {
+        const speed = effectiveSet.speedKph ?? 0;
+        const dur = effectiveSet.durationSeconds ?? 0;
+        const incline = effectiveSet.inclinePercent ?? 0;
+
+        if (speed <= 0 || isNaN(speed)) {
+          Alert.alert('Invalid Speed', 'Speed must be greater than 0 km/h to complete a treadmill set.');
+          return;
+        }
+        if (dur <= 0 || isNaN(dur)) {
+          Alert.alert('Invalid Duration', 'Duration must be greater than 0 seconds to complete a treadmill set.');
+          return;
+        }
+        if (incline < 0 || isNaN(incline)) {
+          Alert.alert('Invalid Incline', 'Incline cannot be negative.');
+          return;
+        }
+      } else {
+        if (effectiveSet.reps <= 0 || !Number.isInteger(effectiveSet.reps)) {
+          Alert.alert(
+            'Invalid Reps',
+            'Reps must be a positive integer (at least 1) to complete a set.',
+          );
+          return;
+        }
+        if (effectiveSet.weight < 0 || isNaN(effectiveSet.weight)) {
+          Alert.alert('Invalid Weight', 'Weight cannot be negative.');
+          return;
+        }
+        if (effectiveSet.rir !== undefined && (effectiveSet.rir < DOMAIN_LIMITS.RIR_MIN || effectiveSet.rir > DOMAIN_LIMITS.RIR_MAX || isNaN(effectiveSet.rir))) {
+          Alert.alert('Invalid RIR', `RIR must be between ${DOMAIN_LIMITS.RIR_MIN} and ${DOMAIN_LIMITS.RIR_MAX}.`);
+          return;
+        }
       }
 
-      // Complete set and trigger rest timer (unless next set is a Drop Set or part of Superset round)
+      // Complete set and trigger rest timer (unless treadmill, drop set, or superset intermediate)
       let updated = workoutRepository.updateSet(current, exercise.exerciseId, set.id, {
-        ...safePendingUpdates,
+        ...pendingUpdates,
         completed: true,
         completedAt: new Date().toISOString(),
       });
 
-      // Check if next set in this exercise is a Drop Set
-      const currentEx = updated.exercises.find((e) => e.exerciseId === exercise.exerciseId);
-      const setIndex = currentEx?.actualSets.findIndex((s) => s.id === set.id) ?? -1;
-      const nextSet = setIndex >= 0 && currentEx ? currentEx.actualSets[setIndex + 1] : undefined;
-      const isNextDropSet = nextSet?.setType === 'drop';
-
       // Unified rest pacing:
-      // 1. Skip rest timer if next set in this exercise is a drop set
-      // 2. Skip rest timer if exercise is in a superset/giant set and NOT the last exercise in the group (A1 -> A2)
-      let shouldTriggerRestTimer = !isNextDropSet;
-
-      if (shouldTriggerRestTimer && exercise.supersetGroupId) {
-        const groupExercises = updated.exercises.filter(
-          (e) => e.supersetGroupId === exercise.supersetGroupId,
-        );
-        const groupPos = groupExercises.findIndex(
-          (e) => e.exerciseId === exercise.exerciseId,
-        );
-
-        if (groupPos >= 0 && groupPos < groupExercises.length - 1) {
-          // Not the last exercise in the superset/giant set round:
-          // Skip rest timer so lifter transitions immediately to next paired exercise
-          shouldTriggerRestTimer = false;
-        }
-      }
+      // Skip rest timer for treadmill exercises
+      let shouldTriggerRestTimer = !isTreadmill;
 
       if (shouldTriggerRestTimer) {
-        const restTime =
-          exercise.plannedRestTime && exercise.plannedRestTime > 0 ? exercise.plannedRestTime : 90;
-        updated = workoutRepository.startRestTimer(
-          updated,
-          exercise.exerciseId,
-          set.setNumber,
-          restTime,
-          exercise.exerciseName,
-        );
+        const currentEx = updated.exercises.find((e) => e.exerciseId === exercise.exerciseId);
+        const setIndex = currentEx?.actualSets.findIndex((s) => s.id === set.id) ?? -1;
+        const nextSet = setIndex >= 0 && currentEx ? currentEx.actualSets[setIndex + 1] : undefined;
+        const isNextDropSet = nextSet?.setType === 'drop';
+
+        if (isNextDropSet) {
+          shouldTriggerRestTimer = false;
+        }
+
+        if (shouldTriggerRestTimer && exercise.supersetGroupId) {
+          const groupExercises = updated.exercises.filter(
+            (e) => e.supersetGroupId === exercise.supersetGroupId,
+          );
+          const groupPos = groupExercises.findIndex(
+            (e) => e.exerciseId === exercise.exerciseId,
+          );
+
+          if (groupPos >= 0 && groupPos < groupExercises.length - 1) {
+            shouldTriggerRestTimer = false;
+          }
+        }
+
+        if (shouldTriggerRestTimer) {
+          const restTime =
+            exercise.plannedRestTime && exercise.plannedRestTime > 0 ? exercise.plannedRestTime : 90;
+          updated = workoutRepository.startRestTimer(
+            updated,
+            exercise.exerciseId,
+            set.setNumber,
+            restTime,
+            exercise.exerciseName,
+          );
+        }
       }
 
       await updateSessionAndAutosaveImmediate(updated);
@@ -1152,14 +988,6 @@ export default function ActiveWorkoutScreen() {
           text: 'Discard Workout',
           style: 'destructive',
           onPress: async () => {
-            if (draftTimerRef.current) {
-              clearTimeout(draftTimerRef.current);
-              draftTimerRef.current = null;
-            }
-            draftTargetRef.current = null;
-            draftTextRef.current = '';
-            setDraftTarget(null);
-            setDraftText('');
             setKeypadFocus(null);
             cancelDebouncedSave();
             // Mark completed BEFORE discarding so the unmount cleanup
@@ -1206,15 +1034,6 @@ export default function ActiveWorkoutScreen() {
           onPress: async () => {
             try {
               setFinishing(true);
-              commitDraftNow();
-              if (draftTimerRef.current) {
-                clearTimeout(draftTimerRef.current);
-                draftTimerRef.current = null;
-              }
-              draftTargetRef.current = null;
-              draftTextRef.current = '';
-              setDraftTarget(null);
-              setDraftText('');
               setKeypadFocus(null);
               const latest = sessionRef.current || current;
               await flushActiveWorkout(latest);
@@ -1304,9 +1123,11 @@ export default function ActiveWorkoutScreen() {
   const baseBottomPadding = 80 + Math.max(insets.bottom, 12);
   const measuredRestHeight = restOverlayHeight > 0 ? restOverlayHeight : 112;
   const isKeypadOpen = Boolean(keypadFocus) && !useNativeKeyboard;
-  const keypadClearance = isKeypadOpen && keypadHeight > 0 ? keypadHeight + 16 : (isKeypadOpen ? 320 : 0);
-  const restClearance = session?.activeRestTimer ? measuredRestHeight + Math.max(insets.bottom, 12) + 24 : 0;
-  const dynamicBottomPadding = Math.max(baseBottomPadding, restClearance, keypadClearance);
+  const keypadPadding = isKeypadOpen ? 320 : 0;
+  const dynamicBottomPadding = Math.max(
+    baseBottomPadding + keypadPadding,
+    (session.activeRestTimer ? measuredRestHeight + Math.max(insets.bottom, 12) + 24 : 0) + keypadPadding
+  );
 
   return (
     <ScreenContainer>
@@ -1322,9 +1143,6 @@ export default function ActiveWorkoutScreen() {
         >
         <ScrollView
           ref={scrollViewRef}
-          onLayout={(e) => {
-            setScrollViewportHeight(e.nativeEvent.layout.height);
-          }}
           onScroll={(e) => {
             currentScrollY.current = e.nativeEvent.contentOffset.y;
           }}
@@ -1405,12 +1223,7 @@ export default function ActiveWorkoutScreen() {
               </Text>
             </Card>
           ) : (
-            <View
-              style={styles.exerciseListContainer}
-              onLayout={(e) => {
-                exerciseListOffsetYRef.current = e.nativeEvent.layout.y;
-              }}
-            >
+            <View style={styles.exerciseListContainer}>
               {session.exercises.map((ex, exIndex) => {
                 const isLinkedWithNext =
                   Boolean(ex.supersetGroupId) &&
@@ -1440,12 +1253,7 @@ export default function ActiveWorkoutScreen() {
                     isCustomKeypadActive={Boolean(keypadFocus) && !useNativeKeyboard}
                     activeFocusSetId={keypadFocus?.setId}
                     activeFocusField={keypadFocus?.field}
-                    draftTarget={draftTarget}
-                    draftValue={draftText}
                     onFocusField={handleFocusField}
-                    onSetRowLayout={(setId, y, height) => {
-                      setRowLayoutsRef.current[setId] = { y, height };
-                    }}
                     style={{
                       marginBottom: isLinkedWithNext
                         ? 8
@@ -1679,16 +1487,18 @@ export default function ActiveWorkoutScreen() {
       {keypadFocus && !useNativeKeyboard && (
         <WorkoutNumericKeypad
           visible={Boolean(keypadFocus) && !useNativeKeyboard}
-          mode={keypadFocus.field === 'weight' ? 'kg' : 'reps'}
-          value={draftText}
-          selectedRpe={
-            (() => {
-              const ex = session?.exercises.find((e) => e.exerciseId === keypadFocus.exerciseId);
-              const s = ex?.actualSets.find((row) => row.id === keypadFocus.setId);
-              return s?.rir != null ? Math.round((10 - Number(s.rir)) * 10) / 10 : undefined;
-            })()
+          mode={
+            keypadFocus.field === 'weight'
+              ? 'kg'
+              : keypadFocus.field === 'inclinePercent'
+              ? 'incline'
+              : keypadFocus.field === 'speedKph'
+              ? 'speed'
+              : keypadFocus.field === 'durationMinutes'
+              ? 'durationMinutes'
+              : 'reps'
           }
-          rpeValue={keypadFocus.field === 'rir' ? draftText : undefined}
+          value={keypadFocus.value}
           exerciseName={
             session?.exercises.find((e) => e.exerciseId === keypadFocus.exerciseId)?.exerciseName
           }
@@ -1704,11 +1514,9 @@ export default function ActiveWorkoutScreen() {
           onBackspace={handleKeypadBackspace}
           onClear={handleKeypadClear}
           onStep={handleKeypadStep}
-          onSelectRpe={handleKeypadSelectRpe}
           onNext={handleKeypadNext}
           onDismiss={handleKeypadDismiss}
           onToggleNativeKeyboard={handleToggleNativeKeyboard}
-          onHeightChange={setKeypadHeight}
         />
       )}
     </ScreenContainer>

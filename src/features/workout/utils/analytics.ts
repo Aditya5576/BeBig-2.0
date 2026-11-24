@@ -196,7 +196,7 @@ export function calculatePersonalRecords(workouts: WorkoutSession[]): {
   for (const workout of workouts) {
     if (!workout.exercises) continue;
     for (const ex of workout.exercises) {
-      if (!ex.exerciseId || !ex.actualSets) continue;
+      if (!ex.exerciseId || !ex.actualSets || ex.trackingMode === 'treadmill') continue;
       const validCompletedSets = ex.actualSets.filter(
         (s) => s.completed && typeof s.weight === 'number' && s.weight > 0 && s.reps > 0,
       );

@@ -64,14 +64,19 @@ export default function CreateTemplateScreen() {
     }
 
     setError(null);
+    const isTreadmill = exercise.trackingMode === 'treadmill';
     const newEntry: FormExercise = {
       exerciseId: exercise.id,
       exerciseName: exercise.name,
       categoryName: exercise.categoryName,
+      trackingMode: exercise.trackingMode,
       sets: 3,
-      targetReps: '8-12',
-      restTime: 90,
+      targetReps: isTreadmill ? '1' : '8-12',
+      restTime: isTreadmill ? 0 : 90,
       targetWeight: undefined,
+      targetInclinePercent: isTreadmill ? 0 : undefined,
+      targetSpeedKph: isTreadmill ? 5 : undefined,
+      targetDurationSeconds: isTreadmill ? 600 : undefined,
     };
 
     setExercises((prev) => [...prev, newEntry]);
@@ -359,85 +364,177 @@ export default function CreateTemplateScreen() {
 
                 {/* Targets Grid: 2x2 Responsive Layout */}
                 <View style={styles.gridContainer}>
-                  <View style={styles.gridRow}>
-                    {/* Sets */}
-                    <View style={styles.gridColumn}>
-                      <Text variant="caption" color="muted" style={styles.fieldLabel}>
-                        SETS
-                      </Text>
-                      <TextInput
-                        testID={`exercise-sets-${item.exerciseId}`}
-                        style={styles.gridInput}
-                        keyboardType="number-pad"
-                        value={String(item.sets)}
-                        onChangeText={(val) => {
-                          const parsed = parseInt(val, 10);
-                          handleUpdateExercise(index, 'sets', isNaN(parsed) ? 0 : parsed);
-                        }}
-                      />
-                    </View>
+                  {item.trackingMode === 'treadmill' ? (
+                    <>
+                      <View style={styles.gridRow}>
+                        {/* Sets */}
+                        <View style={styles.gridColumn}>
+                          <Text variant="caption" color="muted" style={styles.fieldLabel}>
+                            SETS
+                          </Text>
+                          <TextInput
+                            testID={`exercise-sets-${item.exerciseId}`}
+                            style={styles.gridInput}
+                            keyboardType="number-pad"
+                            value={String(item.sets)}
+                            onChangeText={(val) => {
+                              const parsed = parseInt(val, 10);
+                              handleUpdateExercise(index, 'sets', isNaN(parsed) ? 0 : parsed);
+                            }}
+                          />
+                        </View>
 
-                    {/* Target Reps */}
-                    <View style={styles.gridColumn}>
-                      <Text variant="caption" color="muted" style={styles.fieldLabel}>
-                        TARGET REPS
-                      </Text>
-                      <TextInput
-                        testID={`exercise-reps-${item.exerciseId}`}
-                        style={styles.gridInput}
-                        placeholder="e.g. 8-10"
-                        placeholderTextColor={colors.textMuted}
-                        value={item.targetReps}
-                        onChangeText={(val) => handleUpdateExercise(index, 'targetReps', val)}
-                      />
-                    </View>
-                  </View>
+                        {/* Incline (%) */}
+                        <View style={styles.gridColumn}>
+                          <Text variant="caption" color="muted" style={styles.fieldLabel}>
+                            INCLINE (%)
+                          </Text>
+                          <TextInput
+                            testID={`exercise-incline-${item.exerciseId}`}
+                            style={styles.gridInput}
+                            keyboardType="decimal-pad"
+                            placeholder="0"
+                            placeholderTextColor={colors.textMuted}
+                            value={item.targetInclinePercent !== undefined ? String(item.targetInclinePercent) : '0'}
+                            onChangeText={(val) => {
+                              const parsed = parseFloat(val);
+                              handleUpdateExercise(index, 'targetInclinePercent', isNaN(parsed) ? 0 : Math.min(50, Math.max(0, parsed)));
+                            }}
+                          />
+                        </View>
+                      </View>
 
-                  <View style={styles.gridRow}>
-                    {/* Rest (sec) */}
-                    <View style={styles.gridColumn}>
-                      <Text variant="caption" color="muted" style={styles.fieldLabel}>
-                        REST (SEC)
-                      </Text>
-                      <TextInput
-                        testID={`exercise-rest-${item.exerciseId}`}
-                        style={styles.gridInput}
-                        keyboardType="number-pad"
-                        value={String(item.restTime)}
-                        onChangeText={(val) => {
-                          const parsed = parseInt(val, 10);
-                          handleUpdateExercise(index, 'restTime', isNaN(parsed) ? 0 : parsed);
-                        }}
-                      />
-                    </View>
+                      <View style={styles.gridRow}>
+                        {/* Speed (km/h) */}
+                        <View style={styles.gridColumn}>
+                          <Text variant="caption" color="muted" style={styles.fieldLabel}>
+                            SPEED (KM/H)
+                          </Text>
+                          <TextInput
+                            testID={`exercise-speed-${item.exerciseId}`}
+                            style={styles.gridInput}
+                            keyboardType="decimal-pad"
+                            placeholder="e.g. 8.0"
+                            placeholderTextColor={colors.textMuted}
+                            value={item.targetSpeedKph !== undefined ? String(item.targetSpeedKph) : '5'}
+                            onChangeText={(val) => {
+                              const parsed = parseFloat(val);
+                              handleUpdateExercise(index, 'targetSpeedKph', isNaN(parsed) ? 0 : Math.min(40, Math.max(0, parsed)));
+                            }}
+                          />
+                        </View>
 
-                    {/* Target Weight (kg) */}
-                    <View style={styles.gridColumn}>
-                      <Text variant="caption" color="muted" style={styles.fieldLabel}>
-                        TARGET WEIGHT (KG)
-                      </Text>
-                      <TextInput
-                        testID={`exercise-weight-${item.exerciseId}`}
-                        style={styles.gridInput}
-                        keyboardType="decimal-pad"
-                        placeholder="Optional"
-                        placeholderTextColor={colors.textMuted}
-                        value={item.targetWeight !== undefined ? String(item.targetWeight) : ''}
-                        onChangeText={(val) => {
-                          if (val.trim() === '') {
-                            handleUpdateExercise(index, 'targetWeight', undefined);
-                          } else {
-                            const parsed = parseFloat(val);
-                            handleUpdateExercise(
-                              index,
-                              'targetWeight',
-                              isNaN(parsed) ? undefined : parsed,
-                            );
-                          }
-                        }}
-                      />
-                    </View>
-                  </View>
+                        {/* Time (min) */}
+                        <View style={styles.gridColumn}>
+                          <Text variant="caption" color="muted" style={styles.fieldLabel}>
+                            TIME (MIN)
+                          </Text>
+                          <TextInput
+                            testID={`exercise-duration-${item.exerciseId}`}
+                            style={styles.gridInput}
+                            keyboardType="decimal-pad"
+                            placeholder="e.g. 10"
+                            placeholderTextColor={colors.textMuted}
+                            value={
+                              item.targetDurationSeconds !== undefined
+                                ? String(Math.round((item.targetDurationSeconds / 60) * 100) / 100)
+                                : '10'
+                            }
+                            onChangeText={(val) => {
+                              const parsed = parseFloat(val);
+                              handleUpdateExercise(
+                                index,
+                                'targetDurationSeconds',
+                                isNaN(parsed) ? 0 : Math.min(86400, Math.max(0, Math.round(parsed * 60)))
+                              );
+                            }}
+                          />
+                        </View>
+                      </View>
+                    </>
+                  ) : (
+                    <>
+                      <View style={styles.gridRow}>
+                        {/* Sets */}
+                        <View style={styles.gridColumn}>
+                          <Text variant="caption" color="muted" style={styles.fieldLabel}>
+                            SETS
+                          </Text>
+                          <TextInput
+                            testID={`exercise-sets-${item.exerciseId}`}
+                            style={styles.gridInput}
+                            keyboardType="number-pad"
+                            value={String(item.sets)}
+                            onChangeText={(val) => {
+                              const parsed = parseInt(val, 10);
+                              handleUpdateExercise(index, 'sets', isNaN(parsed) ? 0 : parsed);
+                            }}
+                          />
+                        </View>
+
+                        {/* Target Reps */}
+                        <View style={styles.gridColumn}>
+                          <Text variant="caption" color="muted" style={styles.fieldLabel}>
+                            TARGET REPS
+                          </Text>
+                          <TextInput
+                            testID={`exercise-reps-${item.exerciseId}`}
+                            style={styles.gridInput}
+                            placeholder="e.g. 8-10"
+                            placeholderTextColor={colors.textMuted}
+                            value={item.targetReps}
+                            onChangeText={(val) => handleUpdateExercise(index, 'targetReps', val)}
+                          />
+                        </View>
+                      </View>
+
+                      <View style={styles.gridRow}>
+                        {/* Rest (sec) */}
+                        <View style={styles.gridColumn}>
+                          <Text variant="caption" color="muted" style={styles.fieldLabel}>
+                            REST (SEC)
+                          </Text>
+                          <TextInput
+                            testID={`exercise-rest-${item.exerciseId}`}
+                            style={styles.gridInput}
+                            keyboardType="number-pad"
+                            value={String(item.restTime)}
+                            onChangeText={(val) => {
+                              const parsed = parseInt(val, 10);
+                              handleUpdateExercise(index, 'restTime', isNaN(parsed) ? 0 : parsed);
+                            }}
+                          />
+                        </View>
+
+                        {/* Target Weight (kg) */}
+                        <View style={styles.gridColumn}>
+                          <Text variant="caption" color="muted" style={styles.fieldLabel}>
+                            TARGET WEIGHT (KG)
+                          </Text>
+                          <TextInput
+                            testID={`exercise-weight-${item.exerciseId}`}
+                            style={styles.gridInput}
+                            keyboardType="decimal-pad"
+                            placeholder="Optional"
+                            placeholderTextColor={colors.textMuted}
+                            value={item.targetWeight !== undefined ? String(item.targetWeight) : ''}
+                            onChangeText={(val) => {
+                              if (val.trim() === '') {
+                                handleUpdateExercise(index, 'targetWeight', undefined);
+                              } else {
+                                const parsed = parseFloat(val);
+                                handleUpdateExercise(
+                                  index,
+                                  'targetWeight',
+                                  isNaN(parsed) ? undefined : parsed,
+                                );
+                              }
+                            }}
+                          />
+                        </View>
+                      </View>
+                    </>
+                  )}
                 </View>
               </Card>
             );

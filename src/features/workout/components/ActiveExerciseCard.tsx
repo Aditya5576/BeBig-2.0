@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { View, StyleSheet, Pressable, LayoutChangeEvent, useWindowDimensions } from 'react-native';
 import { useAppTheme } from '../../theme';
 import { Text, Card, Button, Icon } from '../../../components/ui';
@@ -9,9 +9,15 @@ import {
   computeBestLastSetNudge,
   ProgressiveOverloadNudge,
 } from '../services/previousPerformanceService';
-import { ActiveSetRow } from './ActiveSetRow';
+import { ActiveSetRow, ActiveFocusField } from './ActiveSetRow';
 import { radii } from '../../../constants/theme';
 import { FONT_FAMILIES, NUMERIC_TABULAR_STYLE } from '../../../theme/typography';
+import {
+  isTreadmillExercise,
+  formatTreadmillSet,
+  calculateTreadmillExerciseTotals,
+  formatTreadmillDuration,
+} from '../utils/treadmillMetrics';
 
 export interface ActiveExerciseCardProps {
   exercise: WorkoutExercise;
@@ -45,16 +51,13 @@ export interface ActiveExerciseCardProps {
   style?: any;
   isCustomKeypadActive?: boolean;
   activeFocusSetId?: string | null;
-  activeFocusField?: 'weight' | 'reps' | 'rir' | null;
+  activeFocusField?: ActiveFocusField | null;
   onFocusField?: (
     exerciseId: string,
     setId: string,
-    field: 'weight' | 'reps' | 'rir',
+    field: ActiveFocusField,
     currentValue: string
   ) => void;
-  draftTarget?: { exerciseId: string; setId: string; field: 'weight' | 'reps' | 'rir' } | null;
-  draftValue?: string;
-  onSetRowLayout?: (setId: string, y: number, height: number) => void;
 }
 
 const formatShortDate = (dateStr?: string) => {
@@ -89,35 +92,39 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(function A
   activeFocusSetId,
   activeFocusField,
   onFocusField,
-  draftTarget,
-  draftValue,
-  onSetRowLayout,
 }) {
   const { colors } = useAppTheme();
   const styles = createStyles(colors);
   const { width: windowWidth } = useWindowDimensions();
   const [isLastSessionExpanded, setIsLastSessionExpanded] = useState(false);
-  const setsContainerOffsetYRef = useRef<number>(0);
-  const rawRowLayoutsRef = useRef<{ [setId: string]: { y: number; height: number } }>({});
-  const resolvedOverloadNudge =
-    overloadNudge !== undefined ? overloadNudge : computeBestLastSetNudge(lastPerformance);
+
+  const isTreadmill = isTreadmillExercise(exercise);
+  const resolvedOverloadNudge = isTreadmill
+    ? null
+    : overloadNudge !== undefined
+    ? overloadNudge
+    : computeBestLastSetNudge(lastPerformance);
+
+  const treadmillTotals = isTreadmill ? calculateTreadmillExerciseTotals(exercise) : null;
 
   const isCompact = windowWidth < 400;
   const colGap = isCompact ? 3 : 4;
-  const colSetWidth = isCompact ? 26 : 30;
-  const colPrevWidth = isCompact ? 54 : 62;
+  const colSetWidth = isCompact ? 28 : 32;
+  const colPrevWidth = isCompact ? 56 : 64;
   const colCheckWidth = isCompact ? 30 : 34;
-  const colNoteWidth = isCompact ? 28 : 30;
-  const colDeleteWidth = isCompact ? 24 : 26;
-  const minKg = isCompact ? 34 : 38;
-  const minReps = isCompact ? 30 : 36;
-  const minRir = isCompact ? 26 : 30;
+  const colNoteWidth = isCompact ? 26 : 28;
+  const minKg = isCompact ? 36 : 42;
+  const minReps = isCompact ? 32 : 38;
+  const minRir = isCompact ? 28 : 34;
 
   const hasPlannedTargets = Boolean(
     exercise.plannedSets ||
       exercise.plannedTargetReps ||
       exercise.plannedRestTime ||
-      exercise.plannedTargetWeight,
+      exercise.plannedTargetWeight ||
+      exercise.plannedTargetInclinePercent !== undefined ||
+      exercise.plannedTargetSpeedKph !== undefined ||
+      exercise.plannedTargetDurationSeconds !== undefined
   );
   const lastSessionDateText = formatShortDate(lastPerformance?.workoutDate);
 
@@ -219,6 +226,7 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(function A
               )
             )}
 
+            {/* Reorder Up / Down Controls */}
             <View style={styles.reorderControlGroup}>
               <Pressable
                 testID={`move-up-exercise-${exercise.exerciseId}`}
@@ -235,6 +243,8 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(function A
                   color={exIndex === 0 ? colors.textMuted : colors.primary}
                 />
               </Pressable>
+
+              <View style={styles.reorderDivider} />
 
               <Pressable
                 testID={`move-down-exercise-${exercise.exerciseId}`}
@@ -300,8 +310,26 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(function A
       </View>
 
       {/* Consistent Metadata Row: Best Last Badge + Collapsible History Trigger + Planned Targets */}
-      {resolvedOverloadNudge || lastPerformance || hasPlannedTargets ? (
+      {resolvedOverloadNudge || lastPerformance || hasPlannedTargets || (treadmillTotals && treadmillTotals.completedSetsCount > 0) ? (
         <View style={styles.metaBadgeRow}>
+          {/* Live Treadmill Summary Pill */}
+          {treadmillTotals && treadmillTotals.completedSetsCount > 0 ? (
+            <View
+              style={styles.overloadNudgePill}
+              testID={`treadmill-summary-pill-${exercise.exerciseId}`}
+            >
+              <Icon name="clock" size={11} strokeWidth={2.3} color={colors.primary} />
+              <Text
+                variant="caption"
+                tabularNums
+                style={styles.overloadNudgeText}
+                numberOfLines={1}
+              >
+                {`Completed: ${formatTreadmillDuration(treadmillTotals.totalDurationSeconds)} • ${treadmillTotals.totalDistanceKm.toFixed(2)} km`}
+              </Text>
+            </View>
+          ) : null}
+
           {resolvedOverloadNudge ? (
             <View
               style={styles.overloadNudgePill}
@@ -351,10 +379,11 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(function A
           {hasPlannedTargets ? (
             <View style={styles.targetsBadge}>
               <Text variant="caption" color="accent" style={styles.targetsText}>
-                Target: {exercise.plannedSets ? `${exercise.plannedSets} sets` : ''}
-                {exercise.plannedTargetReps ? ` × ${exercise.plannedTargetReps} reps` : ''}
-                {exercise.plannedTargetWeight ? ` @ ${exercise.plannedTargetWeight}kg` : ''}
-                {exercise.plannedRestTime ? ` • Rest ${exercise.plannedRestTime}s` : ''}
+                {isTreadmill ? (
+                  `Target: ${exercise.plannedTargetInclinePercent !== undefined ? `${exercise.plannedTargetInclinePercent}%` : '0%'} @ ${exercise.plannedTargetSpeedKph !== undefined ? `${exercise.plannedTargetSpeedKph} km/h` : '5 km/h'} • ${formatTreadmillDuration(exercise.plannedTargetDurationSeconds ?? 600)}`
+                ) : (
+                  `Target: ${exercise.plannedSets ? `${exercise.plannedSets} sets` : ''}${exercise.plannedTargetReps ? ` × ${exercise.plannedTargetReps} reps` : ''}${exercise.plannedTargetWeight ? ` @ ${exercise.plannedTargetWeight}kg` : ''}${exercise.plannedRestTime ? ` • Rest ${exercise.plannedRestTime}s` : ''}`
+                )}
               </Text>
             </View>
           ) : null}
@@ -375,6 +404,20 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(function A
             </View>
             <View style={styles.lastTimeSetsRow}>
               {lastPerformance.sets.map((s, idx, arr) => {
+                const separator = idx < arr.length - 1 ? '  •  ' : '';
+                if (isTreadmill) {
+                  return (
+                    <Text
+                      key={s.id || idx}
+                      variant="caption"
+                      color="secondary"
+                      style={styles.lastTimeSetChip}
+                      testID={`last-time-set-chip-${exercise.exerciseId}-${s.setNumber || idx + 1}`}
+                    >
+                      {`${formatTreadmillSet(s)}${separator}`}
+                    </Text>
+                  );
+                }
                 const tag =
                   s.setType === 'drop'
                     ? 'D '
@@ -386,7 +429,6 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(function A
                 const weightText = s.weight > 0 ? `${s.weight}kg` : 'BW';
                 const rirText = s.rir !== undefined && s.rir !== null ? ` @ RIR ${s.rir}` : '';
                 const noteText = s.notes && s.notes.trim().length > 0 ? ' 📝' : '';
-                const separator = idx < arr.length - 1 ? '  •  ' : '';
                 return (
                   <Text
                     key={s.id || idx}
@@ -413,7 +455,10 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(function A
         </View>
       )}
 
-      {/* Sets Table Header */}
+      {/* Sets Table Header:
+          Strength:  SET | PREV | KG | REPS | RIR | ✓ | NOTE | DEL
+          Treadmill: SET | PREV | INCLINE | SPEED | TIME | ✓ | NOTE | DEL
+      */}
       <View style={[styles.tableHeaderRow, { gap: colGap }]}>
         <View style={[styles.headerColSet, { width: colSetWidth }]}>
           <Text variant="caption" color="muted" style={[styles.headerLabel, isCompact && styles.headerLabelCompact]}>
@@ -422,22 +467,22 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(function A
         </View>
         <View style={[styles.headerColPrev, { width: colPrevWidth }]}>
           <Text variant="caption" color="muted" style={[styles.headerLabel, isCompact && styles.headerLabelCompact]}>
-            PREV
+            {isTreadmill ? 'PREVIOUS' : 'PREV'}
           </Text>
         </View>
         <View style={[styles.headerColKg, { minWidth: minKg }]}>
           <Text variant="caption" color="muted" style={[styles.headerLabel, isCompact && styles.headerLabelCompact]}>
-            KG
+            {isTreadmill ? 'INCLINE' : 'KG'}
           </Text>
         </View>
         <View style={[styles.headerColReps, { minWidth: minReps }]}>
           <Text variant="caption" color="muted" style={[styles.headerLabel, isCompact && styles.headerLabelCompact]}>
-            REPS
+            {isTreadmill ? 'SPEED' : 'REPS'}
           </Text>
         </View>
         <View style={[styles.headerColRir, { minWidth: minRir }]}>
           <Text variant="caption" color="muted" style={[styles.headerLabel, isCompact && styles.headerLabelCompact]}>
-            RIR
+            {isTreadmill ? 'TIME' : 'RIR'}
           </Text>
         </View>
         <View style={[styles.headerColCheck, { width: colCheckWidth }]}>
@@ -449,24 +494,11 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(function A
             NOTE
           </Text>
         </View>
-        <View style={[styles.headerColDelete, { width: colDeleteWidth, marginLeft: 4 }]}>
-          <Text variant="caption" color="muted" style={[styles.headerLabel, isCompact && styles.headerLabelCompact]}>
-            DEL
-          </Text>
-        </View>
+        <View style={styles.headerColDelete} />
       </View>
 
-      {/* Sets List */}
-      <View
-        testID={`sets-container-${exercise.exerciseId}`}
-        style={styles.setsContainer}
-        onLayout={(e) => {
-          setsContainerOffsetYRef.current = e.nativeEvent.layout.y;
-          Object.entries(rawRowLayoutsRef.current).forEach(([sId, layout]) => {
-            onSetRowLayout?.(sId, setsContainerOffsetYRef.current + layout.y, layout.height);
-          });
-        }}
-      >
+      {/* Sets List Container */}
+      <View style={styles.setsContainer}>
         {exercise.actualSets.map((set, setIndex) => (
           <ActiveSetRow
             key={set.id}
@@ -482,13 +514,7 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(function A
             onToggleCompleteSet={onToggleCompleteSet}
             isCustomKeypadActive={isCustomKeypadActive}
             activeFocusField={activeFocusSetId === set.id ? activeFocusField : null}
-            draftValue={draftTarget?.setId === set.id ? draftValue : undefined}
             onFocusField={onFocusField}
-            onLayout={(e) => {
-              const { y, height } = e.nativeEvent.layout;
-              rawRowLayoutsRef.current[set.id] = { y, height };
-              onSetRowLayout?.(set.id, setsContainerOffsetYRef.current + y, height);
-            }}
           />
         ))}
       </View>
@@ -518,15 +544,12 @@ const createStyles = (colors: any) =>
       borderWidth: 1,
     },
     exerciseCardHeader: {
-      gap: 4,
-      borderBottomWidth: 1,
-      borderBottomColor: 'rgba(255, 255, 255, 0.06)',
-      paddingBottom: 8,
+      gap: 6,
     },
     headerTopStrip: {
       flexDirection: 'row',
-      justifyContent: 'space-between',
       alignItems: 'center',
+      justifyContent: 'space-between',
       gap: 8,
     },
     metaLeftGroup: {
@@ -537,45 +560,48 @@ const createStyles = (colors: any) =>
       minWidth: 0,
     },
     categoryTag: {
-      fontSize: 12,
-      fontWeight: '500',
-      color: '#94A3B8',
+      color: '#64748B',
+      fontWeight: '600',
+      fontSize: 11,
+      letterSpacing: 0.3,
       flexShrink: 1,
     },
     exerciseNameRow: {
-      width: '100%',
-      marginTop: 4,
-    },
-    exerciseName: {
-      fontFamily: FONT_FAMILIES.display,
-      fontWeight: '700',
-      fontSize: 18,
-      lineHeight: 24,
-      color: '#F8FAFC',
-      flexShrink: 1,
-    },
-    exerciseNameTrigger: {
-      width: '100%',
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'space-between',
+    },
+    exerciseNameTrigger: {
+      flexDirection: 'row',
+      alignItems: 'center',
       gap: 6,
+      flex: 1,
+      paddingVertical: 2,
     },
     exerciseNameTriggerPressed: {
-      opacity: 0.72,
+      opacity: 0.75,
+    },
+    exerciseName: {
+      fontFamily: FONT_FAMILIES.heading,
+      fontSize: 17,
+      fontWeight: '800',
+      letterSpacing: -0.3,
+      color: '#F8FAFC',
+      lineHeight: 22,
+      flex: 1,
     },
     metaBadgeRow: {
       flexDirection: 'row',
-      flexWrap: 'wrap',
       alignItems: 'center',
-      gap: 8,
+      flexWrap: 'wrap',
+      gap: 6,
+      paddingVertical: 2,
     },
     overloadNudgePill: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 4,
       backgroundColor: 'rgba(56, 189, 248, 0.12)',
-      borderColor: 'rgba(56, 189, 248, 0.30)',
+      borderColor: 'rgba(56, 189, 248, 0.32)',
       borderWidth: 1,
       paddingHorizontal: 8,
       paddingVertical: 3,
@@ -583,7 +609,7 @@ const createStyles = (colors: any) =>
       flexShrink: 0,
     },
     overloadNudgeText: {
-      fontFamily: FONT_FAMILIES.bodySemiBold,
+      fontFamily: FONT_FAMILIES.bodyMedium,
       fontSize: 11,
       fontWeight: '700',
       color: colors.primary,

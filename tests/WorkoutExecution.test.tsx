@@ -236,15 +236,15 @@ describe('BeBig 2.0 — Milestone 5: Workout Execution', () => {
       expect(updated.exercises[0].actualSets[0].rir).toBe(1.5);
       expect(updated.exercises[0].actualSets[0].notes).toBe('Great bar path, grind on rep 8');
 
-      // RIR > 10 rejected
+      // RIR > 4 rejected
       expect(() => {
-        workoutRepository.updateSet(session, 'ex_press', setId, { rir: 11 });
-      }).toThrow(/rir must be a number between 0 and 10/i);
+        workoutRepository.updateSet(session, 'ex_press', setId, { rir: 5 });
+      }).toThrow(/rir must be a number between 0 and 4/i);
 
       // RIR < 0 rejected
       expect(() => {
         workoutRepository.updateSet(session, 'ex_press', setId, { rir: -1 });
-      }).toThrow(/rir must be a number between 0 and 10/i);
+      }).toThrow(/rir must be a number between 0 and 4/i);
     });
   });
 

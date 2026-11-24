@@ -6,11 +6,13 @@
  */
 
 import { WorkoutTemplate } from '../../templates/types';
-import { WorkoutSession, WorkoutExercise, WorkoutSet, SetType, ActiveRestTimer } from '../types';
+import { WorkoutSession, WorkoutExercise, WorkoutSet, SetType, ActiveRestTimer, ExerciseTrackingMode } from '../types';
 import { workoutStorage, SaveActiveWorkoutResult } from '../storage/workoutStorage';
 import { getCurrentUserScope, UserScope } from '../../auth/utils/userScope';
 import { syncMetadataStore, syncLifecycleManager, getRecordKey } from '../../../services/sync';
 import { nativeRestTimerService } from './nativeRestTimerService';
+import { DOMAIN_LIMITS } from '../../../constants/domainLimits';
+import { resolveExerciseTrackingMode } from '../../exercises/exerciseTracking';
 
 /**
  * Structured persistence failure error surfaced when active workout persistence fails
@@ -243,6 +245,39 @@ export function mergeSessionDeep(
 
       const setType = incSet.setType || storedSet.setType || 'normal';
 
+      // Treadmill scalar fields (allowing inclinePercent === 0 as valid):
+      const mergeScalarField = <T>(
+        baseVal: T | undefined,
+        storedVal: T | undefined,
+        incVal: T | undefined,
+      ): T | undefined => {
+        if (baseVal !== undefined) {
+          const incChanged = incVal !== baseVal;
+          const storedChanged = storedVal !== baseVal;
+          if (storedChanged && !incChanged) return storedVal;
+          if (incChanged && !storedChanged) return incVal;
+          if (incChanged && storedChanged) return incVal;
+          return incVal !== undefined ? incVal : storedVal;
+        }
+        return incVal !== undefined ? incVal : storedVal;
+      };
+
+      const inclinePercent = mergeScalarField(
+        baseSet?.inclinePercent,
+        storedSet.inclinePercent,
+        incSet.inclinePercent,
+      );
+      const speedKph = mergeScalarField(
+        baseSet?.speedKph,
+        storedSet.speedKph,
+        incSet.speedKph,
+      );
+      const durationSeconds = mergeScalarField(
+        baseSet?.durationSeconds,
+        storedSet.durationSeconds,
+        incSet.durationSeconds,
+      );
+
       mergedSets.push({
         ...storedSet,
         ...incSet,
@@ -251,6 +286,9 @@ export function mergeSessionDeep(
         rir,
         notes,
         setType,
+        ...(inclinePercent !== undefined ? { inclinePercent } : {}),
+        ...(speedKph !== undefined ? { speedKph } : {}),
+        ...(durationSeconds !== undefined ? { durationSeconds } : {}),
         completed,
         completedAt,
       });
@@ -270,9 +308,46 @@ export function mergeSessionDeep(
 
     mergedSets.sort((a, b) => a.setNumber - b.setNumber);
 
+    const helperMergeScalarEx = <T>(
+      baseVal: T | undefined,
+      storedVal: T | undefined,
+      incVal: T | undefined,
+    ): T | undefined => {
+      if (baseVal !== undefined) {
+        const incChanged = incVal !== baseVal;
+        const storedChanged = storedVal !== baseVal;
+        if (storedChanged && !incChanged) return storedVal;
+        if (incChanged && !storedChanged) return incVal;
+        if (incChanged && storedChanged) return incVal;
+        return incVal !== undefined ? incVal : storedVal;
+      }
+      return incVal !== undefined ? incVal : storedVal;
+    };
+
+    const trackingMode = incEx.trackingMode || storedEx.trackingMode || baseEx?.trackingMode;
+    const plannedTargetInclinePercent = helperMergeScalarEx(
+      baseEx?.plannedTargetInclinePercent,
+      storedEx.plannedTargetInclinePercent,
+      incEx.plannedTargetInclinePercent,
+    );
+    const plannedTargetSpeedKph = helperMergeScalarEx(
+      baseEx?.plannedTargetSpeedKph,
+      storedEx.plannedTargetSpeedKph,
+      incEx.plannedTargetSpeedKph,
+    );
+    const plannedTargetDurationSeconds = helperMergeScalarEx(
+      baseEx?.plannedTargetDurationSeconds,
+      storedEx.plannedTargetDurationSeconds,
+      incEx.plannedTargetDurationSeconds,
+    );
+
     mergedExercises.push({
       ...storedEx,
       ...incEx,
+      ...(trackingMode ? { trackingMode } : {}),
+      ...(plannedTargetInclinePercent !== undefined ? { plannedTargetInclinePercent } : {}),
+      ...(plannedTargetSpeedKph !== undefined ? { plannedTargetSpeedKph } : {}),
+      ...(plannedTargetDurationSeconds !== undefined ? { plannedTargetDurationSeconds } : {}),
       actualSets: mergedSets,
     });
   }
@@ -305,6 +380,7 @@ export class WorkoutRepository {
     if (!workout.exercises || workout.exercises.length === 0) return 0;
     let total = 0;
     for (const ex of workout.exercises) {
+      if (ex.trackingMode === 'treadmill') continue;
       if (!ex.actualSets) continue;
       for (const set of ex.actualSets) {
         if (set.completed && set.weight > 0 && set.reps > 0) {
@@ -353,6 +429,7 @@ export class WorkoutRepository {
     const now = new Date().toISOString();
 
     const exercises: WorkoutExercise[] = (template.exercises || []).map((tex, exIndex) => {
+      const isTreadmill = tex.trackingMode === 'treadmill';
       // Parse reps from targetReps string, e.g. "8-10" -> 10, "12" -> 12
       const targetRepsStr =
         typeof tex.targetReps === 'string'
@@ -366,19 +443,34 @@ export class WorkoutRepository {
         : 10;
       const defaultWeight =
         typeof tex.targetWeight === 'number' && tex.targetWeight > 0 ? tex.targetWeight : 0;
-      const numberOfSets = tex.sets > 0 ? tex.sets : 3;
+      const numberOfSets = tex.sets > 0 ? tex.sets : (isTreadmill ? 1 : 3);
 
       const actualSets: WorkoutSet[] = [];
       for (let i = 1; i <= numberOfSets; i++) {
-        actualSets.push({
-          id: `set_${Date.now()}_${Math.random().toString(36).substring(2, 8)}_${i}`,
-          setNumber: i,
-          weight: defaultWeight,
-          reps: defaultReps,
-          rir: 2,
-          setType: 'normal',
-          completed: false,
-        });
+        actualSets.push(
+          isTreadmill
+            ? {
+                id: `set_${Date.now()}_${Math.random().toString(36).substring(2, 8)}_${i}`,
+                setNumber: i,
+                weight: 0,
+                reps: 0,
+                rir: undefined,
+                inclinePercent: tex.targetInclinePercent ?? 0,
+                speedKph: tex.targetSpeedKph ?? 5,
+                durationSeconds: tex.targetDurationSeconds ?? 600,
+                setType: 'normal',
+                completed: false,
+              }
+            : {
+                id: `set_${Date.now()}_${Math.random().toString(36).substring(2, 8)}_${i}`,
+                setNumber: i,
+                weight: defaultWeight,
+                reps: defaultReps,
+                rir: 2,
+                setType: 'normal',
+                completed: false,
+              }
+        );
       }
 
       return {
@@ -386,10 +478,14 @@ export class WorkoutRepository {
         exerciseName: tex.exerciseName,
         categoryName: tex.categoryName,
         order: tex.order !== undefined ? tex.order : exIndex,
+        trackingMode: tex.trackingMode,
+        plannedTargetInclinePercent: tex.targetInclinePercent,
+        plannedTargetSpeedKph: tex.targetSpeedKph,
+        plannedTargetDurationSeconds: tex.targetDurationSeconds,
         plannedSets: tex.sets,
-        plannedTargetReps: tex.targetReps,
-        plannedRestTime: tex.restTime,
-        plannedTargetWeight: tex.targetWeight,
+        plannedTargetReps: isTreadmill ? undefined : tex.targetReps,
+        plannedRestTime: isTreadmill ? 0 : tex.restTime,
+        plannedTargetWeight: isTreadmill ? undefined : tex.targetWeight,
         actualSets,
       };
     });
@@ -575,26 +671,53 @@ export class WorkoutRepository {
    */
   addExerciseToWorkout(
     workout: WorkoutSession,
-    exercise: { id: string; name: string; categoryName?: string },
+    exercise: {
+      id: string;
+      name: string;
+      categoryName?: string;
+      trackingMode?: ExerciseTrackingMode;
+      plannedTargetInclinePercent?: number;
+      plannedTargetSpeedKph?: number;
+      plannedTargetDurationSeconds?: number;
+    },
   ): WorkoutSession {
-    const defaultSet: WorkoutSet = {
-      id: `set_${Date.now()}_${Math.random().toString(36).substring(2, 8)}_1`,
-      setNumber: 1,
-      weight: 0,
-      reps: 10,
-      rir: 2,
-      setType: 'normal',
-      completed: false,
-    };
+    const resolvedTrackingMode = exercise.trackingMode || resolveExerciseTrackingMode(exercise);
+    const isTreadmill = resolvedTrackingMode === 'treadmill';
+    const defaultSet: WorkoutSet = isTreadmill
+      ? {
+          id: `set_${Date.now()}_${Math.random().toString(36).substring(2, 8)}_1`,
+          setNumber: 1,
+          weight: 0,
+          reps: 0,
+          rir: undefined,
+          inclinePercent: exercise.plannedTargetInclinePercent ?? 0,
+          speedKph: exercise.plannedTargetSpeedKph ?? 5,
+          durationSeconds: exercise.plannedTargetDurationSeconds ?? 600,
+          setType: 'normal',
+          completed: false,
+        }
+      : {
+          id: `set_${Date.now()}_${Math.random().toString(36).substring(2, 8)}_1`,
+          setNumber: 1,
+          weight: 0,
+          reps: 10,
+          rir: 2,
+          setType: 'normal',
+          completed: false,
+        };
 
     const newExercise: WorkoutExercise = {
       exerciseId: exercise.id,
       exerciseName: exercise.name,
       categoryName: exercise.categoryName,
+      trackingMode: resolvedTrackingMode,
+      plannedTargetInclinePercent: exercise.plannedTargetInclinePercent,
+      plannedTargetSpeedKph: exercise.plannedTargetSpeedKph,
+      plannedTargetDurationSeconds: exercise.plannedTargetDurationSeconds,
       order: workout.exercises.length,
       plannedSets: 1,
-      plannedTargetReps: '10',
-      plannedRestTime: 90,
+      plannedTargetReps: isTreadmill ? undefined : '10',
+      plannedRestTime: isTreadmill ? 0 : 90,
       actualSets: [defaultSet],
     };
 
@@ -613,16 +736,41 @@ export class WorkoutRepository {
 
       const lastSet = ex.actualSets[ex.actualSets.length - 1];
       const newSetNumber = ex.actualSets.length + 1;
-      const newSet: WorkoutSet = {
-        id: `set_${Date.now()}_${Math.random().toString(36).substring(2, 8)}_${newSetNumber}`,
-        setNumber: newSetNumber,
-        weight: lastSet ? lastSet.weight : 0,
-        reps: lastSet ? lastSet.reps : 10,
-        rir: lastSet ? lastSet.rir : 2,
-        setType: 'normal',
-        notes: lastSet && lastSet.notes ? lastSet.notes : undefined,
-        completed: false,
-      };
+      const isTreadmill = ex.trackingMode === 'treadmill';
+
+      const newSet: WorkoutSet = isTreadmill
+        ? {
+            id: `set_${Date.now()}_${Math.random().toString(36).substring(2, 8)}_${newSetNumber}`,
+            setNumber: newSetNumber,
+            weight: 0,
+            reps: 0,
+            rir: undefined,
+            inclinePercent:
+              lastSet?.inclinePercent !== undefined
+                ? lastSet.inclinePercent
+                : (ex.plannedTargetInclinePercent ?? 0),
+            speedKph:
+              lastSet?.speedKph !== undefined
+                ? lastSet.speedKph
+                : (ex.plannedTargetSpeedKph ?? 5),
+            durationSeconds:
+              lastSet?.durationSeconds !== undefined
+                ? lastSet.durationSeconds
+                : (ex.plannedTargetDurationSeconds ?? 600),
+            setType: 'normal',
+            notes: lastSet && lastSet.notes ? lastSet.notes : undefined,
+            completed: false,
+          }
+        : {
+            id: `set_${Date.now()}_${Math.random().toString(36).substring(2, 8)}_${newSetNumber}`,
+            setNumber: newSetNumber,
+            weight: lastSet ? lastSet.weight : 0,
+            reps: lastSet ? lastSet.reps : 10,
+            rir: lastSet ? lastSet.rir : 2,
+            setType: 'normal',
+            notes: lastSet && lastSet.notes ? lastSet.notes : undefined,
+            completed: false,
+          };
 
       return {
         ...ex,
@@ -853,24 +1001,56 @@ export class WorkoutRepository {
 
         const nextSet = { ...set, ...updates };
 
-        // Validate weight
-        if (typeof nextSet.weight === 'number') {
-          if (isNaN(nextSet.weight) || nextSet.weight < 0) {
-            throw new Error('Weight cannot be negative.');
+        if (ex.trackingMode === 'treadmill') {
+          // Validate inclinePercent (0 to 50)
+          if (typeof nextSet.inclinePercent === 'number') {
+            if (isNaN(nextSet.inclinePercent) || nextSet.inclinePercent < 0 || nextSet.inclinePercent > 50) {
+              throw new Error('Incline must be between 0% and 50%.');
+            }
           }
-        }
-
-        // Validate reps
-        if (typeof nextSet.reps === 'number') {
-          if (isNaN(nextSet.reps) || nextSet.reps <= 0 || !Number.isInteger(nextSet.reps)) {
-            throw new Error('Reps must be a positive integer.');
+          // Validate speedKph (allow undefined or 0 when uncompleted; 0.1 to 40 on completion)
+          if (typeof nextSet.speedKph === 'number') {
+            if (isNaN(nextSet.speedKph) || nextSet.speedKph < 0 || nextSet.speedKph > 40) {
+              throw new Error('Speed must be between 0 and 40 km/h.');
+            }
           }
-        }
+          if (nextSet.completed) {
+            if (typeof nextSet.speedKph !== 'number' || isNaN(nextSet.speedKph) || nextSet.speedKph < 0.1 || nextSet.speedKph > 40) {
+              throw new Error('Completed treadmill sets require a valid speed between 0.1 and 40 km/h.');
+            }
+          }
 
-        // Validate RIR (0 to 10)
-        if (typeof nextSet.rir === 'number') {
-          if (isNaN(nextSet.rir) || nextSet.rir < 0 || nextSet.rir > 10) {
-            throw new Error('RIR must be a number between 0 and 10.');
+          // Validate durationSeconds (allow undefined or 0 when uncompleted; 1 to 86400 on completion)
+          if (typeof nextSet.durationSeconds === 'number') {
+            if (isNaN(nextSet.durationSeconds) || nextSet.durationSeconds < 0 || nextSet.durationSeconds > 86400) {
+              throw new Error('Duration must be between 0 and 86400 seconds.');
+            }
+          }
+          if (nextSet.completed) {
+            if (typeof nextSet.durationSeconds !== 'number' || isNaN(nextSet.durationSeconds) || nextSet.durationSeconds < 1 || nextSet.durationSeconds > 86400) {
+              throw new Error('Completed treadmill sets require a valid duration between 1 and 86400 seconds.');
+            }
+          }
+        } else {
+          // Validate weight
+          if (typeof nextSet.weight === 'number') {
+            if (isNaN(nextSet.weight) || nextSet.weight < 0) {
+              throw new Error('Weight cannot be negative.');
+            }
+          }
+
+          // Validate reps
+          if (typeof nextSet.reps === 'number') {
+            if (isNaN(nextSet.reps) || nextSet.reps <= 0 || !Number.isInteger(nextSet.reps)) {
+              throw new Error('Reps must be a positive integer.');
+            }
+          }
+
+          // Validate RIR (0 to 4)
+          if (typeof nextSet.rir === 'number') {
+            if (isNaN(nextSet.rir) || nextSet.rir < DOMAIN_LIMITS.RIR_MIN || nextSet.rir > DOMAIN_LIMITS.RIR_MAX) {
+              throw new Error(`RIR must be a number between ${DOMAIN_LIMITS.RIR_MIN} and ${DOMAIN_LIMITS.RIR_MAX}.`);
+            }
           }
         }
 
@@ -1328,32 +1508,74 @@ export class WorkoutRepository {
       const sourceSets = ex.actualSets || [];
       const completedSets = sourceSets.filter((s) => s.completed);
       const setsToCopy = completedSets.length > 0 ? completedSets : sourceSets;
+      const isTreadmill = ex.trackingMode === 'treadmill';
 
       const newSets: WorkoutSet[] = (
         setsToCopy.length > 0
           ? setsToCopy
-          : [{ weight: 0, reps: 10, rir: 2, completed: false } as WorkoutSet]
-      ).map((s, sIndex) => ({
-        id: `set_${Date.now()}_${Math.random().toString(36).substring(2, 8)}_${sIndex + 1}`,
-        setNumber: sIndex + 1,
-        weight: typeof s.weight === 'number' && s.weight >= 0 ? s.weight : 0,
-        reps: typeof s.reps === 'number' && s.reps > 0 ? s.reps : 10,
-        rir: typeof s.rir === 'number' ? s.rir : 2,
-        setType: s.setType || 'normal',
-        notes: s.notes ? s.notes : undefined,
-        completed: false,
-      }));
+          : [
+              isTreadmill
+                ? ({
+                    weight: 0,
+                    reps: 0,
+                    rir: undefined,
+                    inclinePercent: ex.plannedTargetInclinePercent ?? 0,
+                    speedKph: ex.plannedTargetSpeedKph ?? 5,
+                    durationSeconds: ex.plannedTargetDurationSeconds ?? 600,
+                    completed: false,
+                  } as WorkoutSet)
+                : ({ weight: 0, reps: 10, rir: 2, completed: false } as WorkoutSet),
+            ]
+      ).map((s, sIndex) =>
+        isTreadmill
+          ? {
+              id: `set_${Date.now()}_${Math.random().toString(36).substring(2, 8)}_${sIndex + 1}`,
+              setNumber: sIndex + 1,
+              weight: 0,
+              reps: 0,
+              rir: undefined,
+              inclinePercent:
+                typeof s.inclinePercent === 'number' && s.inclinePercent >= 0
+                  ? s.inclinePercent
+                  : (ex.plannedTargetInclinePercent ?? 0),
+              speedKph:
+                typeof s.speedKph === 'number' && s.speedKph > 0
+                  ? s.speedKph
+                  : (ex.plannedTargetSpeedKph ?? 5),
+              durationSeconds:
+                typeof s.durationSeconds === 'number' && s.durationSeconds > 0
+                  ? s.durationSeconds
+                  : (ex.plannedTargetDurationSeconds ?? 600),
+              setType: s.setType || 'normal',
+              notes: s.notes ? s.notes : undefined,
+              completed: false,
+            }
+          : {
+              id: `set_${Date.now()}_${Math.random().toString(36).substring(2, 8)}_${sIndex + 1}`,
+              setNumber: sIndex + 1,
+              weight: typeof s.weight === 'number' && s.weight >= 0 ? s.weight : 0,
+              reps: typeof s.reps === 'number' && s.reps > 0 ? s.reps : 10,
+              rir: typeof s.rir === 'number' ? s.rir : 2,
+              setType: s.setType || 'normal',
+              notes: s.notes ? s.notes : undefined,
+              completed: false,
+            }
+      );
 
       return {
         exerciseId: ex.exerciseId,
         exerciseName: ex.exerciseName,
         categoryName: ex.categoryName,
         order: ex.order !== undefined ? ex.order : exIndex,
+        trackingMode: ex.trackingMode,
+        plannedTargetInclinePercent: ex.plannedTargetInclinePercent,
+        plannedTargetSpeedKph: ex.plannedTargetSpeedKph,
+        plannedTargetDurationSeconds: ex.plannedTargetDurationSeconds,
         supersetGroupId: ex.supersetGroupId || null,
         plannedSets: ex.plannedSets || newSets.length,
-        plannedTargetReps: ex.plannedTargetReps,
-        plannedRestTime: ex.plannedRestTime || 90,
-        plannedTargetWeight: ex.plannedTargetWeight,
+        plannedTargetReps: isTreadmill ? undefined : ex.plannedTargetReps,
+        plannedRestTime: isTreadmill ? 0 : (ex.plannedRestTime || 90),
+        plannedTargetWeight: isTreadmill ? undefined : ex.plannedTargetWeight,
         actualSets: newSets,
       };
     });

@@ -167,6 +167,15 @@ export function computeBestLastSetNudge(
     return null;
   }
 
+  // Exclude treadmill cardio sets from strength progressive overload nudges
+  if (
+    lastPerformance.sets.some(
+      (s) => s.inclinePercent !== undefined || s.speedKph !== undefined || s.durationSeconds !== undefined
+    )
+  ) {
+    return null;
+  }
+
   const validSets = lastPerformance.sets.filter(
     (s) => (s.weight ?? 0) > 0 || (s.reps ?? 0) > 0
   );
@@ -221,7 +230,7 @@ export function buildProgressiveOverloadMap(
     const workoutDate = workout.finishedAt || workout.startedAt;
 
     for (const ex of workout.exercises) {
-      if (!hasValidExerciseId(ex.exerciseId)) continue;
+      if (!hasValidExerciseId(ex.exerciseId) || ex.trackingMode === 'treadmill') continue;
       const exKey = ex.exerciseId.trim();
       if (map[exKey]) continue;
 

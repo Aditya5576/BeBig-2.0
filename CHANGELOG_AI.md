@@ -3,6 +3,93 @@
 - Refined PR typography and history UI.
 - Stabilized Cinematic Splash Screen with BeBig Barbell Crest.
 
+## [Hotfix & Release: Close All 5 Codex v2.7.0 Audit Findings & Final Fix 1 Cleanups] — 2026-11-24 — Option A Local Verification
+
+### Problem
+- **RPE Presets Residual**: RPE chips were still conditionally displayed in `WorkoutNumericKeypad.tsx`, causing clutter and inconsistent UX in reps and treadmill keypad modes. Dead RPE props and comments remained on `WorkoutNumericKeypadProps`.
+- **RIR Domain Bound Drift**: RIR bounds were historically permitted up to 10 in some layers instead of enforcing standard `0–4` RIR.
+- **Treadmill Clearing Divergence**: Clearing `speedKph`, `durationSeconds`, or `inclinePercent` in `app/workout/active.tsx` converted empty strings to `0` instead of `undefined`, and `workoutRepository.updateSet` prematurely threw bounds errors on uncompleted sets with `0` or missing metrics.
+- **Treadmill Column Header**: Active exercise card displayed `PREV` instead of `PREVIOUS` for treadmill exercises.
+- **Implicit Treadmill Exclusion in Progress Analytics**: `progressAnalytics.ts` relied implicitly on `set.reps === 0` to exclude treadmill sets rather than explicitly checking `isStrengthExercise(exercise)`.
+- **Pre-existing LocalStorage Cache & Picker Propagation**: User devices with pre-existing `v2.6.x` cached catalogs in `localStorage` lacked `trackingMode: 'treadmill'` on the treadmill entry, and `app/workout/active.tsx:handleSelectExercises` discarded `trackingMode` when invoking `workoutRepository.addExerciseToWorkout`, causing treadmill to fall back to strength columns on add.
+- **Release Version**: Release metadata in `package.json` and `app.json` remained on `2.6.1`.
+
+### Changes
+1. **Remove Dead RPE API Completely (`WorkoutNumericKeypad.tsx`, `app/workout/active.tsx`)**:
+   - Completely removed `RPE_PRESETS`, chip row rendering, unused RPE styles, dead `rpeValue?: string`, and dead `onSelectRpe?: (rpe: number) => void` from `WorkoutNumericKeypadProps`. Removed stale Reps/RPE comment.
+   - Removed `handleKeypadSelectRpe` and stopped passing `onSelectRpe` from `app/workout/active.tsx`.
+2. **Enforce Canonical 0–4 RIR Bounds across Domain & Repository (`domainLimits.ts`, `active.tsx`, `workoutRepository.ts`, `workoutStorage.ts`, `ActiveSetRow.tsx`)**:
+   - Defined `RIR_MIN: 0` and `RIR_MAX: 4` in `DOMAIN_LIMITS` ([domainLimits.ts](file:///c:/Users/adity/Desktop/ADI/BeBig%202.0/src/constants/domainLimits.ts)).
+   - Clamped in-progress RIR to `0–4` in `app/workout/active.tsx` and validated `0–4` on set completion.
+   - Strictly validated `0 <= rir <= 4` in `workoutRepository.ts` (`updateSet`) and `workoutStorage.ts` (`isValidSet`).
+   - Guarded pending set updates in `ActiveSetRow.tsx` to `0 <= rir <= 4`.
+3. **Fixed Treadmill Clearing / Persistence Divergence (`app/workout/active.tsx`, `workoutRepository.ts`)**:
+   - In `app/workout/active.tsx`: Clearing `speedKph`, `durationMinutes`, `durationSeconds`, or `inclinePercent` assigns `undefined` (while strictly preserving `inclinePercent: 0` when explicitly input as 0).
+   - In `workoutRepository.ts:1001-1020` (`updateSet`): Allows `undefined` or in-progress `0` on uncompleted sets, and strictly validates finite positive bounds (`speedKph` between 0.1 and 40, `durationSeconds` between 1 and 86400) upon set completion (`completed: true`).
+4. **Treadmill Table Header (`ActiveExerciseCard.tsx`)**:
+   - Updated header label to render `PREVIOUS` for treadmill exercises (`{isTreadmill ? 'PREVIOUS' : 'PREV'}`).
+5. **Explicit Treadmill Exclusion in `progressAnalytics.ts`**:
+   - Added explicit `if (!isStrengthExercise(ex)) continue;` guards across all 4 exercise iteration loops in `calculatePeriodOverviewMetrics` and `calculateFocusAnalytics`.
+6. **Pre-existing LocalStorage Cache Hydration & Picker Propagation Fix (`exerciseTracking.ts`, `exerciseCacheStorage.ts`, `active.tsx`, `workoutRepository.ts`)**:
+   - Added `resolveExerciseTrackingMode(exercise)` in `exerciseTracking.ts` to deterministically resolve treadmill exercises even if `trackingMode` property is omitted.
+   - In `exerciseCacheStorage.ts`, `ensureHydrated()` and `searchCached()` merge authoritative seed exercises and normalize all treadmill entries to `trackingMode: 'treadmill'`.
+   - In `app/workout/active.tsx:handleSelectExercises`, resolved `trackingMode` and passed it into `workoutRepository.addExerciseToWorkout`.
+   - In `workoutRepository.ts:addExerciseToWorkout`, resolved `trackingMode` with fallback, correctly initializing sets as treadmill cardio without planned target reps or rest timers.
+7. **Version Bump to `2.7.0`**:
+   - Bumped `"version": "2.7.0"` in both `package.json` and `app.json`.
+8. **Regression Tests**:
+   - Updated `tests/Milestone5KeypadAndAdminUX.test.tsx` to assert RPE chip strip is NOT rendered in reps mode and added test confirming canonical `0–4` RIR bounds enforcement.
+   - Updated `tests/WorkoutExecution.test.tsx` to assert RIR > 4 is rejected with `/rir must be a number between 0 and 4/i`.
+   - Added Section 6 in `tests/TreadmillTracking.test.tsx` asserting cache hydration from pre-v2.7.0 localStorage, search ranking, and active workout card rendering with 3 columns (`INCLINE`, `SPEED`, `TIME`) and no RIR column.
+   - Verified 92/92 tests passing across all 6 suites (100%), typecheck 0 errors, lint 0 errors, build:web 45 static routes bundled.
+
+## [UX & Features: Revert v2.6.1 Keypad Buffer to v2.6.0 & Special Treadmill Exercise Tracking] — 2026-11-24 — Option A Local Verification
+
+### Problem
+- **Keypad & RPE Over-Engineering in v2.6.1**: The v2.6.1 draft-buffer pipeline, card/set-row layout measurement overrides, horizontal RPE chip strip, and RPE badge pill introduced UX regressions and complexity into active workout logging. The desired behavior is the clean, stable v2.6.0 (`e596a04`) keypad and standard RIR numeric column, while retaining 100% of the critical P0 screen-lock durability fixes.
+- **Cardio & Treadmill Tracking Gap**: Treadmill was previously logged like a strength exercise (sets × reps × weight in kg), which does not match real treadmill training (incline %, speed km/h, time mm:ss) and distorted strength volume, 1RM calculations, and PR analytics.
+
+### Changes
+1. **Reverted v2.6.1 Keypad & RPE Changes Back to v2.6.0 (`e596a04`)**:
+   - Reverted `WorkoutNumericKeypad.tsx`, `ActiveSetRow.tsx`, `ActiveExerciseCard.tsx`, and `app/workout/active.tsx` to the clean, proven `v2.6.0` architecture:
+     - Removed draft-buffer pipeline (`draftTargetRef`, `draftTextRef`, `draftTimerRef`, `commitDraftNow`, `editGenerationRef`).
+     - Removed dynamic height reporting (`onHeightChange`), value readout (`keypad-value-readout`), horizontal RPE chip strip, and overlapping `rpeBadge` pill.
+     - Restored standard RIR input column (`0–4`) and numeric keypad layout with `<Icon name="x" size={20} />` backspace.
+     - Restored standard superset link/unlink action buttons (`testID="superset-unlink-button-..."` and `testID="superset-link-button-..."`).
+   - **CRITICAL P0 Screen-Lock Durability Invariant Preserved**: Retained 100% of approved P0 screen-lock durability handlers in `workoutStorage.ts`, `workoutRepository.ts`, and `active.tsx`:
+     - Synchronous `writeSyncEmergencyMirror()` on `visibilitychange`, `pagehide`, `beforeunload`, `freeze`, and native `AppState`.
+     - Monotonic exercise preservation, shadow recovery backup (`active_session_shadow_backup`), and explicit discard tombstones.
+     - Immediate storage flushes (`flushActiveWorkout`, `updateSessionAndAutosaveImmediate`).
+2. **Special Treadmill Exercise (`Incline | Speed | Time`)**:
+   - **Canonical Domain Model (`src/features/exercises/exerciseTracking.ts`)**:
+     - Exported `ExerciseTrackingMode = 'strength' | 'treadmill'`, `TREADMILL_EXERCISE_ID = 'seed-treadmill'`, and `normalizeTrackingMode()`. Never uses fuzzy name matching.
+   - **Offline Seed Catalog & Search Deduplication (`src/features/exercises/storage/exerciseCacheStorage.ts`)**:
+     - Added `{ id: 'seed-treadmill', name: 'Treadmill', categoryName: 'Cardio', trackingMode: 'treadmill' }` to `SEED_EXERCISES`, protected from cache eviction.
+     - Filtered out legacy `wger_1615` in `searchCached()` in favor of `seed-treadmill`.
+   - **Domain Metric Bounds & Storage (`src/constants/domainLimits.ts`, `src/features/workout/types.ts`, `src/features/workout/storage/workoutStorage.ts`)**:
+     - Added finite bounds: `TREADMILL_INCLINE_MIN: 0`, `TREADMILL_INCLINE_MAX: 50` (`0` is valid), `TREADMILL_SPEED_MIN: 0.1`, `TREADMILL_SPEED_MAX: 40`, `TREADMILL_DURATION_SECONDS_MIN: 1`, `TREADMILL_DURATION_SECONDS_MAX: 86400`.
+     - Stored `inclinePercent`, `speedKph`, `durationSeconds` on `WorkoutSet`, maintaining `weight: 0, reps: 0, rir: undefined` sentinels for database and schema backwards compatibility.
+     - Preserved `0` for `inclinePercent` across sanitization and deep session merges.
+   - **Treadmill Utility Module (`src/features/workout/utils/treadmillMetrics.ts`)**:
+     - Implemented `isTreadmillExercise`, `isStrengthExercise`, `formatTreadmillDuration`, `calculateTreadmillDistanceKm`, `formatTreadmillSet`, `calculateTreadmillExerciseTotals`, `calculateWorkoutTreadmillDuration`.
+   - **Active Workout Logging UI & Keypad (`ActiveExerciseCard.tsx`, `ActiveSetRow.tsx`, `WorkoutNumericKeypad.tsx`, `active.tsx`)**:
+     - Header: `SET | PREVIOUS | INCLINE | SPEED | TIME | ✓`.
+     - Live summary pill on exercise card: `Completed: mm:ss • Distance: X.XX km`.
+     - Set rows: 3 inputs (`Incline %`, `Speed km/h`, `Time` in decimal minutes converted to `mm:ss`), hidden RIR, plain numbered set badges (`#1`, `#2`).
+     - Keypad modes: added `incline` (±0.5%, ±2%), `speed` (±0.2, ±1.0), `durationMinutes` (±1, ±5) with decimal key support; sequential `Next` key steps `Incline → Speed → Time → next set Incline`.
+     - Bypassed automatic 90-second strength rest timer upon completing treadmill sets.
+   - **Templates & Admin**:
+     - Supported treadmill targets (`targetInclinePercent`, `targetSpeedKph`, `targetDurationSeconds`) in `app/templates/new.tsx`, `app/templates/[id].tsx`, and `AdminTrainerTemplatesTab.tsx`.
+   - **Analytics & History Isolation**:
+     - Excluded treadmill sets from strength volume calculations (`calculateTotalVolume`), 1RM/PRs (`analytics.ts`, `prDetection.ts`), performance normalization, muscle group volume, and progressive overload nudges.
+     - Displayed formatted treadmill sets in `app/workout/summary.tsx`, `app/workout/history/[id].tsx`, `app/workout/history.tsx`, and PDF export (`exportService.ts`).
+3. **Verification**:
+   - Created dedicated test suite `tests/TreadmillTracking.test.tsx` (17 tests covering catalog deduplication, metrics calculations, storage validation, deep session merges, active workout UI & keypad navigation, and volume isolation).
+   - Executed full test suite: **89/89 tests passing (100% PASS)** across all 6 suites (`TreadmillTracking`, `ActiveWorkoutScreenLockDurability`, `Milestone5KeypadAndAdminUX`, `WorkoutExecution`, `WorkoutHistoryAndRecovery`, `AuditBlockersP0P1`).
+   - TypeScript verification (`npx tsc --noEmit`): **0 errors**.
+   - Production web build (`node scripts/build-web.js`): **45 static routes bundled into `dist/`**.
+
+
 ## [UX & Performance: Workout Numeric Keypad Blueprint & Pre-Release Hardening] — 2026-11-21 — True Nested Layout Auto-Scroll & Zero Stale Completion Overwrite
 
 ### Problem

@@ -42,17 +42,35 @@ export class TemplateRepository {
         throw new Error('Sets must be an integer of at least 1.');
       }
 
-      if (!ex.targetReps || typeof ex.targetReps !== 'string' || !ex.targetReps.trim()) {
-        throw new Error('Target reps are required for all exercises.');
-      }
+      if (ex.trackingMode === 'treadmill') {
+        if (ex.targetInclinePercent !== undefined) {
+          if (typeof ex.targetInclinePercent !== 'number' || isNaN(ex.targetInclinePercent) || ex.targetInclinePercent < 0 || ex.targetInclinePercent > 50) {
+            throw new Error('Target incline must be between 0% and 50%.');
+          }
+        }
+        if (ex.targetSpeedKph !== undefined) {
+          if (typeof ex.targetSpeedKph !== 'number' || isNaN(ex.targetSpeedKph) || ex.targetSpeedKph < 0.1 || ex.targetSpeedKph > 40) {
+            throw new Error('Target speed must be between 0.1 and 40 km/h.');
+          }
+        }
+        if (ex.targetDurationSeconds !== undefined) {
+          if (typeof ex.targetDurationSeconds !== 'number' || isNaN(ex.targetDurationSeconds) || ex.targetDurationSeconds < 1 || ex.targetDurationSeconds > 86400) {
+            throw new Error('Target duration must be between 1 and 86400 seconds.');
+          }
+        }
+      } else {
+        if (!ex.targetReps || typeof ex.targetReps !== 'string' || !ex.targetReps.trim()) {
+          throw new Error('Target reps are required for all exercises.');
+        }
 
-      if (typeof ex.restTime !== 'number' || isNaN(ex.restTime) || ex.restTime < 0) {
-        throw new Error('Rest time cannot be negative.');
-      }
+        if (typeof ex.restTime !== 'number' || isNaN(ex.restTime) || ex.restTime < 0) {
+          throw new Error('Rest time cannot be negative.');
+        }
 
-      if (ex.targetWeight !== undefined) {
-        if (typeof ex.targetWeight !== 'number' || isNaN(ex.targetWeight) || ex.targetWeight < 0) {
-          throw new Error('Target weight cannot be negative.');
+        if (ex.targetWeight !== undefined) {
+          if (typeof ex.targetWeight !== 'number' || isNaN(ex.targetWeight) || ex.targetWeight < 0) {
+            throw new Error('Target weight cannot be negative.');
+          }
         }
       }
     }
@@ -102,9 +120,13 @@ export class TemplateRepository {
       categoryName: ex.categoryName,
       order: index,
       sets: ex.sets,
-      targetReps: ex.targetReps.trim(),
-      restTime: ex.restTime,
-      targetWeight: ex.targetWeight,
+      targetReps: ex.trackingMode === 'treadmill' ? (ex.targetReps?.trim() || '1') : ex.targetReps.trim(),
+      restTime: ex.trackingMode === 'treadmill' ? 0 : ex.restTime,
+      targetWeight: ex.trackingMode === 'treadmill' ? undefined : ex.targetWeight,
+      trackingMode: ex.trackingMode,
+      targetInclinePercent: ex.targetInclinePercent,
+      targetSpeedKph: ex.targetSpeedKph,
+      targetDurationSeconds: ex.targetDurationSeconds,
     }));
 
     const resolvedScope = scope !== undefined ? scope : getCurrentUserScope();
@@ -167,9 +189,13 @@ export class TemplateRepository {
       categoryName: ex.categoryName,
       order: index,
       sets: ex.sets,
-      targetReps: ex.targetReps.trim(),
-      restTime: ex.restTime,
-      targetWeight: ex.targetWeight,
+      targetReps: ex.trackingMode === 'treadmill' ? (ex.targetReps?.trim() || '1') : ex.targetReps.trim(),
+      restTime: ex.trackingMode === 'treadmill' ? 0 : ex.restTime,
+      targetWeight: ex.trackingMode === 'treadmill' ? undefined : ex.targetWeight,
+      trackingMode: ex.trackingMode,
+      targetInclinePercent: ex.targetInclinePercent,
+      targetSpeedKph: ex.targetSpeedKph,
+      targetDurationSeconds: ex.targetDurationSeconds,
     }));
 
     const now = new Date().toISOString();

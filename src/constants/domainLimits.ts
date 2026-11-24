@@ -17,6 +17,14 @@ export const DOMAIN_LIMITS = {
   MAX_EXERCISES_PER_WORKOUT: 50,
   MAX_SETS_PER_EXERCISE: 30,
   MAX_AI_MESSAGE_CHARS: 4000,
+  RIR_MIN: 0,
+  RIR_MAX: 4,
+  TREADMILL_INCLINE_MIN: 0,
+  TREADMILL_INCLINE_MAX: 50,
+  TREADMILL_SPEED_MIN: 0.1,
+  TREADMILL_SPEED_MAX: 40,
+  TREADMILL_DURATION_SECONDS_MIN: 1,
+  TREADMILL_DURATION_SECONDS_MAX: 86400,
 } as const;
 
 /**
@@ -31,3 +39,6 @@ export function clampText(value: string | null | undefined, maxLength: number): 
   }
   return cleaned.slice(0, maxLength);
 }
+
+export const RIR_MIN = DOMAIN_LIMITS.RIR_MIN;
+export const RIR_MAX = DOMAIN_LIMITS.RIR_MAX;

@@ -15,6 +15,7 @@ import type { RGB } from 'pdf-lib';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { WorkoutSession } from '../../workout/types';
+import { formatTreadmillDuration } from '../../workout/utils/treadmillMetrics';
 import { WorkoutTemplate } from '../../templates/types';
 import {
   OoxmlWorkbook,
@@ -602,14 +603,21 @@ export async function exportWorkoutsToPdf(workouts: WorkoutSession[]): Promise<s
       // Collect all set rows
       const tableRows: { exercise: string; category: string; setNum: string; weight: string; reps: string; rir: string; status: string; notes: string }[] = [];
       for (const ex of w.exercises || []) {
+        const isTreadmill = ex.trackingMode === 'treadmill';
         for (const s of ex.actualSets || []) {
           tableRows.push({
             exercise: sanitizePdfText(ex.exerciseName || 'Exercise'),
             category: sanitizePdfText(ex.categoryName || '-'),
             setNum: `Set ${s.setNumber}`,
-            weight: `${s.weight} kg`,
-            reps: `${s.reps} reps`,
-            rir: s.rir !== undefined ? `${s.rir}` : '-',
+            weight: isTreadmill
+              ? (s.inclinePercent !== undefined ? `${s.inclinePercent}%` : '-')
+              : `${s.weight} kg`,
+            reps: isTreadmill
+              ? (s.speedKph !== undefined && s.durationSeconds !== undefined
+                  ? `${s.speedKph} km/h • ${formatTreadmillDuration(s.durationSeconds)}`
+                  : '-')
+              : `${s.reps} reps`,
+            rir: isTreadmill ? '-' : (s.rir !== undefined ? `${s.rir}` : '-'),
             status: s.completed ? 'Done' : 'Skipped',
             notes: sanitizePdfText(s.notes || '-'),
           });

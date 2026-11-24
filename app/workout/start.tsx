@@ -183,6 +183,10 @@ export default function StartWorkoutScreen() {
         sets: typeof ex.sets === 'number' && ex.sets > 0 ? ex.sets : 3,
         targetReps: ex.targetReps ? String(ex.targetReps) : '10',
         restTime: typeof ex.restTime === 'number' && ex.restTime > 0 ? ex.restTime : 90,
+        trackingMode: ex.trackingMode,
+        targetInclinePercent: ex.targetInclinePercent,
+        targetSpeedKph: ex.targetSpeedKph,
+        targetDurationSeconds: ex.targetDurationSeconds,
       })),
     };
 

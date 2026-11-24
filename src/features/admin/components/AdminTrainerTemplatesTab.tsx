@@ -24,6 +24,7 @@ interface SafeCatalogOption {
   id: string;
   name: string;
   categoryName: string;
+  trackingMode?: 'strength' | 'treadmill';
 }
 
 export interface AdminTrainerTemplatesTabProps {
@@ -45,6 +46,7 @@ const DEFAULT_CATALOG_OPTIONS: SafeCatalogOption[] = SEED_EXERCISES.slice(0, 12)
   id: ex.id,
   name: ex.name,
   categoryName: ex.categoryName,
+  trackingMode: ex.trackingMode,
 }));
 
 export function AdminTrainerTemplatesTab({
@@ -150,6 +152,7 @@ export function AdminTrainerTemplatesTab({
   }, [exerciseSearch, exerciseCategoryFilter]);
 
   const handleAddExercise = useCallback((option: SafeCatalogOption) => {
+    const isTreadmill = option.trackingMode === 'treadmill' || option.id === 'seed-treadmill';
     setExercises((prev) => {
       if (prev.some((row) => row.exerciseId === option.id)) {
         return prev;
@@ -160,9 +163,13 @@ export function AdminTrainerTemplatesTab({
           exerciseId: option.id,
           exerciseName: option.name,
           categoryName: option.categoryName,
+          trackingMode: isTreadmill ? 'treadmill' : 'strength',
           sets: 3,
-          targetReps: '8-12',
-          restTime: 90,
+          targetReps: isTreadmill ? '1' : '8-12',
+          restTime: isTreadmill ? 0 : 90,
+          targetInclinePercent: isTreadmill ? 0 : undefined,
+          targetSpeedKph: isTreadmill ? 5 : undefined,
+          targetDurationSeconds: isTreadmill ? 600 : undefined,
         },
       ];
     });
@@ -184,7 +191,13 @@ export function AdminTrainerTemplatesTab({
   const handleUpdateExerciseField = useCallback(
     (
       exerciseId: string,
-      field: 'sets' | 'targetReps' | 'restTime',
+      field:
+        | 'sets'
+        | 'targetReps'
+        | 'restTime'
+        | 'targetInclinePercent'
+        | 'targetSpeedKph'
+        | 'targetDurationMinutes',
       value: string,
     ) => {
       setExercises((prev) =>
@@ -198,7 +211,30 @@ export function AdminTrainerTemplatesTab({
             const parsed = parseInt(value.replace(/[^0-9]/g, ''), 10);
             return {
               ...row,
-              restTime: Number.isFinite(parsed) && parsed >= 15 ? Math.min(parsed, 600) : 60,
+              restTime: Number.isFinite(parsed) && parsed >= 0 ? Math.min(parsed, 600) : 0,
+            };
+          }
+          if (field === 'targetInclinePercent') {
+            const parsed = parseFloat(value);
+            return {
+              ...row,
+              targetInclinePercent: Number.isFinite(parsed) ? Math.min(50, Math.max(0, parsed)) : 0,
+            };
+          }
+          if (field === 'targetSpeedKph') {
+            const parsed = parseFloat(value);
+            return {
+              ...row,
+              targetSpeedKph: Number.isFinite(parsed) ? Math.min(40, Math.max(0, parsed)) : 0,
+            };
+          }
+          if (field === 'targetDurationMinutes') {
+            const parsed = parseFloat(value);
+            return {
+              ...row,
+              targetDurationSeconds: Number.isFinite(parsed)
+                ? Math.min(86400, Math.max(0, Math.round(parsed * 60)))
+                : 0,
             };
           }
           return { ...row, targetReps: value.slice(0, 24) };
@@ -454,37 +490,97 @@ export function AdminTrainerTemplatesTab({
                 </View>
 
                 <View style={styles.exerciseInputsRow}>
-                  <View style={styles.metricInputCol}>
-                    <Text style={styles.metricInputLabel}>Sets</Text>
-                    <TextInput
-                      testID={`trainer-sets-${ex.exerciseId}`}
-                      style={styles.metricInput}
-                      keyboardType="number-pad"
-                      value={String(ex.sets)}
-                      onChangeText={(v) => handleUpdateExerciseField(ex.exerciseId, 'sets', v)}
-                    />
-                  </View>
-                  <View style={styles.metricInputCol}>
-                    <Text style={styles.metricInputLabel}>Target Reps</Text>
-                    <TextInput
-                      testID={`trainer-reps-${ex.exerciseId}`}
-                      style={styles.metricInput}
-                      value={ex.targetReps}
-                      onChangeText={(v) =>
-                        handleUpdateExerciseField(ex.exerciseId, 'targetReps', v)
-                      }
-                    />
-                  </View>
-                  <View style={styles.metricInputCol}>
-                    <Text style={styles.metricInputLabel}>Rest (s)</Text>
-                    <TextInput
-                      testID={`trainer-rest-${ex.exerciseId}`}
-                      style={styles.metricInput}
-                      keyboardType="number-pad"
-                      value={String(ex.restTime)}
-                      onChangeText={(v) => handleUpdateExerciseField(ex.exerciseId, 'restTime', v)}
-                    />
-                  </View>
+                  {ex.trackingMode === 'treadmill' ? (
+                    <>
+                      <View style={styles.metricInputCol}>
+                        <Text style={styles.metricInputLabel}>Sets</Text>
+                        <TextInput
+                          testID={`trainer-sets-${ex.exerciseId}`}
+                          style={styles.metricInput}
+                          keyboardType="number-pad"
+                          value={String(ex.sets)}
+                          onChangeText={(v) => handleUpdateExerciseField(ex.exerciseId, 'sets', v)}
+                        />
+                      </View>
+                      <View style={styles.metricInputCol}>
+                        <Text style={styles.metricInputLabel}>Incline (%)</Text>
+                        <TextInput
+                          testID={`trainer-incline-${ex.exerciseId}`}
+                          style={styles.metricInput}
+                          keyboardType="decimal-pad"
+                          placeholder="0"
+                          value={ex.targetInclinePercent !== undefined ? String(ex.targetInclinePercent) : '0'}
+                          onChangeText={(v) =>
+                            handleUpdateExerciseField(ex.exerciseId, 'targetInclinePercent', v)
+                          }
+                        />
+                      </View>
+                      <View style={styles.metricInputCol}>
+                        <Text style={styles.metricInputLabel}>Speed (km/h)</Text>
+                        <TextInput
+                          testID={`trainer-speed-${ex.exerciseId}`}
+                          style={styles.metricInput}
+                          keyboardType="decimal-pad"
+                          placeholder="5"
+                          value={ex.targetSpeedKph !== undefined ? String(ex.targetSpeedKph) : '5'}
+                          onChangeText={(v) =>
+                            handleUpdateExerciseField(ex.exerciseId, 'targetSpeedKph', v)
+                          }
+                        />
+                      </View>
+                      <View style={styles.metricInputCol}>
+                        <Text style={styles.metricInputLabel}>Time (min)</Text>
+                        <TextInput
+                          testID={`trainer-duration-${ex.exerciseId}`}
+                          style={styles.metricInput}
+                          keyboardType="decimal-pad"
+                          placeholder="10"
+                          value={
+                            ex.targetDurationSeconds !== undefined
+                              ? String(Math.round((ex.targetDurationSeconds / 60) * 100) / 100)
+                              : '10'
+                          }
+                          onChangeText={(v) =>
+                            handleUpdateExerciseField(ex.exerciseId, 'targetDurationMinutes', v)
+                          }
+                        />
+                      </View>
+                    </>
+                  ) : (
+                    <>
+                      <View style={styles.metricInputCol}>
+                        <Text style={styles.metricInputLabel}>Sets</Text>
+                        <TextInput
+                          testID={`trainer-sets-${ex.exerciseId}`}
+                          style={styles.metricInput}
+                          keyboardType="number-pad"
+                          value={String(ex.sets)}
+                          onChangeText={(v) => handleUpdateExerciseField(ex.exerciseId, 'sets', v)}
+                        />
+                      </View>
+                      <View style={styles.metricInputCol}>
+                        <Text style={styles.metricInputLabel}>Target Reps</Text>
+                        <TextInput
+                          testID={`trainer-reps-${ex.exerciseId}`}
+                          style={styles.metricInput}
+                          value={ex.targetReps}
+                          onChangeText={(v) =>
+                            handleUpdateExerciseField(ex.exerciseId, 'targetReps', v)
+                          }
+                        />
+                      </View>
+                      <View style={styles.metricInputCol}>
+                        <Text style={styles.metricInputLabel}>Rest (s)</Text>
+                        <TextInput
+                          testID={`trainer-rest-${ex.exerciseId}`}
+                          style={styles.metricInput}
+                          keyboardType="number-pad"
+                          value={String(ex.restTime)}
+                          onChangeText={(v) => handleUpdateExerciseField(ex.exerciseId, 'restTime', v)}
+                        />
+                      </View>
+                    </>
+                  )}
                 </View>
               </View>
             ))}

@@ -63,7 +63,7 @@ export function calculatePersonalRecords(workouts: WorkoutSession[]): {
   for (const workout of workouts) {
     if (!workout.exercises) continue;
     for (const ex of workout.exercises) {
-      if (!ex.exerciseId || !ex.actualSets) continue;
+      if (!ex.exerciseId || !ex.actualSets || ex.trackingMode === 'treadmill') continue;
       for (const set of ex.actualSets) {
         if (set.completed && typeof set.weight === 'number' && set.weight > 0 && set.reps > 0) {
           const existing = prMap.get(ex.exerciseId);

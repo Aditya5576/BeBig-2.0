@@ -14,7 +14,7 @@ export function calculateMuscleGroupVolume(workouts: WorkoutSession[]): MuscleGr
     if (!workout.exercises) continue;
 
     for (const ex of workout.exercises) {
-      if (!ex.actualSets) continue;
+      if (!ex.actualSets || ex.trackingMode === 'treadmill') continue;
       
       const muscleGroup = ex.categoryName ? ex.categoryName.trim() : 'Unknown';
       

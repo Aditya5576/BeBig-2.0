@@ -8,6 +8,8 @@
 
 
 
+export type ExerciseTrackingMode = 'strength' | 'treadmill';
+
 export interface WorkoutSet {
   id: string;
   setNumber: number;
@@ -15,6 +17,9 @@ export interface WorkoutSet {
   reps: number; // positive whole integer (e.g. 8)
   rir?: number; // Reps In Reserve (0 to 10)
   notes?: string; // optional user notes
+  inclinePercent?: number;
+  speedKph?: number;
+  durationSeconds?: number;
   completed: boolean;
   completedAt?: string; // ISO 8601 timestamp
 }
@@ -24,11 +29,15 @@ export interface WorkoutExercise {
   exerciseName: string;
   categoryName?: string;
   order: number;
+  trackingMode?: ExerciseTrackingMode;
   // Preserved snapshot of planned targets from template (if any)
   plannedSets?: number;
   plannedTargetReps?: string;
   plannedRestTime?: number;
   plannedTargetWeight?: number;
+  plannedTargetInclinePercent?: number;
+  plannedTargetSpeedKph?: number;
+  plannedTargetDurationSeconds?: number;
   // Actual sets logged during the active workout session
   actualSets: WorkoutSet[];
 }

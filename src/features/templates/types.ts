@@ -7,6 +7,7 @@
  */
 
 import { OwnerType } from '../auth';
+import { ExerciseTrackingMode } from '../exercises/exerciseTracking';
 
 export interface TemplateExercise {
   exerciseId: string;
@@ -17,6 +18,10 @@ export interface TemplateExercise {
   targetReps: string; // e.g. "8", "8-10", "10-12"
   restTime: number; // rest interval in seconds, e.g. 90, 120
   targetWeight?: number; // planning target weight in kg, e.g. 62.5
+  trackingMode?: ExerciseTrackingMode;
+  targetInclinePercent?: number; // planning target incline %
+  targetSpeedKph?: number; // planning target speed km/h
+  targetDurationSeconds?: number; // planning target duration in seconds
 }
 
 export interface WorkoutTemplate {

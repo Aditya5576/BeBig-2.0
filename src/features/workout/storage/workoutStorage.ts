@@ -12,6 +12,8 @@
 import { getUserScopedKey, getCurrentUserScope, UserScope } from '../../auth/utils/userScope';
 import { WorkoutSession, WorkoutExercise, WorkoutSet } from '../types';
 import { platformStorage } from '../../../lib/storage';
+import { ExerciseTrackingMode, normalizeTrackingMode } from '../../exercises/exerciseTracking';
+import { DOMAIN_LIMITS } from '../../../constants/domainLimits';
 
 export const BASE_ACTIVE_WORKOUT_KEY = 'bebig.workout.active';
 export const BASE_ACTIVE_SESSION_TOKEN_KEY = 'bebig.workout.active.token';
@@ -225,15 +227,43 @@ const recordDiscardedSessionId = async (storageKey: string | null, sessionId: st
 /**
  * Validates whether an unknown object fits the WorkoutSet structure.
  */
-function isValidSet(set: any): set is WorkoutSet {
+function isValidSet(set: any, trackingMode?: ExerciseTrackingMode): set is WorkoutSet {
   if (!set || typeof set !== 'object') return false;
   if (typeof set.id !== 'string' || !set.id.trim()) return false;
   if (typeof set.setNumber !== 'number') return false;
-  if (typeof set.weight !== 'number' || isNaN(set.weight) || set.weight < 0) return false;
-  if (typeof set.reps !== 'number' || isNaN(set.reps) || set.reps < 0) return false;
+
+  const isTreadmill = trackingMode === 'treadmill';
+
+  if (isTreadmill) {
+    if (typeof set.weight !== 'number' || isNaN(set.weight) || set.weight < 0) {
+      set.weight = 0;
+    }
+    if (typeof set.reps !== 'number' || isNaN(set.reps) || set.reps < 0) {
+      set.reps = 0;
+    }
+    // Sanitize treadmill metrics while strictly preserving 0 (incline: 0 is valid!)
+    if (set.inclinePercent !== undefined && set.inclinePercent !== null) {
+      if (typeof set.inclinePercent !== 'number' || isNaN(set.inclinePercent) || set.inclinePercent < 0) {
+        delete set.inclinePercent;
+      }
+    }
+    if (set.speedKph !== undefined && set.speedKph !== null) {
+      if (typeof set.speedKph !== 'number' || isNaN(set.speedKph) || set.speedKph < 0) {
+        delete set.speedKph;
+      }
+    }
+    if (set.durationSeconds !== undefined && set.durationSeconds !== null) {
+      if (typeof set.durationSeconds !== 'number' || isNaN(set.durationSeconds) || set.durationSeconds < 0) {
+        delete set.durationSeconds;
+      }
+    }
+  } else {
+    if (typeof set.weight !== 'number' || isNaN(set.weight) || set.weight < 0) return false;
+    if (typeof set.reps !== 'number' || isNaN(set.reps) || set.reps < 0) return false;
+  }
 
   if (set.rir !== undefined && set.rir !== null) {
-    if (typeof set.rir !== 'number' || isNaN(set.rir) || set.rir < 0 || set.rir > 10) {
+    if (typeof set.rir !== 'number' || isNaN(set.rir) || set.rir < DOMAIN_LIMITS.RIR_MIN || set.rir > DOMAIN_LIMITS.RIR_MAX) {
       delete set.rir;
     }
   }
@@ -251,7 +281,8 @@ function isValidExercise(ex: any): ex is WorkoutExercise {
   if (typeof ex.exerciseName !== 'string') return false;
   if (typeof ex.order !== 'number') return false;
   if (!Array.isArray(ex.actualSets)) return false;
-  return ex.actualSets.every(isValidSet);
+  const trackingMode = normalizeTrackingMode(ex.trackingMode);
+  return ex.actualSets.every((s: any) => isValidSet(s, trackingMode));
 }
 
 /**

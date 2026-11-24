@@ -114,6 +114,10 @@ export interface TrainerExerciseSpec {
   sets: number;
   targetReps: string;
   restTime: number;
+  trackingMode?: 'strength' | 'treadmill';
+  targetInclinePercent?: number;
+  targetSpeedKph?: number;
+  targetDurationSeconds?: number;
 }
 
 export interface TrainerWorkoutTemplate {
@@ -198,8 +202,27 @@ export function sanitizeTrainerExercises(raw: unknown): TrainerExerciseSpec[] {
         : '8-12';
     const rawRest = Number(rec.restTime);
     const restTime = Number.isFinite(rawRest)
-      ? Math.min(Math.max(Math.round(rawRest), 15), 600)
+      ? Math.min(Math.max(Math.round(rawRest), 0), 600)
       : 90;
+
+    const trackingMode =
+      rec.trackingMode === 'treadmill'
+        ? ('treadmill' as const)
+        : rec.trackingMode === 'strength'
+        ? ('strength' as const)
+        : undefined;
+    const rawIncline = Number(rec.targetInclinePercent);
+    const targetInclinePercent = Number.isFinite(rawIncline)
+      ? Math.min(Math.max(rawIncline, 0), 50)
+      : undefined;
+    const rawSpeed = Number(rec.targetSpeedKph);
+    const targetSpeedKph = Number.isFinite(rawSpeed)
+      ? Math.min(Math.max(rawSpeed, 0.1), 40)
+      : undefined;
+    const rawDuration = Number(rec.targetDurationSeconds);
+    const targetDurationSeconds = Number.isFinite(rawDuration)
+      ? Math.min(Math.max(Math.round(rawDuration), 1), 86400)
+      : undefined;
 
     cleaned.push({
       exerciseId: exerciseId.slice(0, 128),
@@ -208,6 +231,10 @@ export function sanitizeTrainerExercises(raw: unknown): TrainerExerciseSpec[] {
       sets,
       targetReps,
       restTime,
+      ...(trackingMode ? { trackingMode } : {}),
+      ...(targetInclinePercent !== undefined ? { targetInclinePercent } : {}),
+      ...(targetSpeedKph !== undefined ? { targetSpeedKph } : {}),
+      ...(targetDurationSeconds !== undefined ? { targetDurationSeconds } : {}),
     });
   }
   return cleaned.slice(0, 40);

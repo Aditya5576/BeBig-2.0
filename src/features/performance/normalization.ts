@@ -81,6 +81,11 @@ export function normalizeExercisePerformance(
   const ex = rawExercise as Record<string, unknown>;
   const sess = (rawSession && typeof rawSession === 'object' ? rawSession : {}) as Record<string, unknown>;
 
+  // Exclude treadmill cardio exercises from strength performance intelligence
+  if (ex.trackingMode === 'treadmill') {
+    return null;
+  }
+
   // Exercise ID is mandatory
   const exerciseId = typeof ex.exerciseId === 'string' && ex.exerciseId.trim() ? ex.exerciseId.trim() : '';
   if (!exerciseId) {

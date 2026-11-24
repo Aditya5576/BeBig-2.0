@@ -1,4 +1,5 @@
 export * from './types';
+export * from './exerciseTracking';
 export * from './providers/types';
 export * from './providers/wger/wgerTypes';
 export * from './providers/wger/wgerMapper';

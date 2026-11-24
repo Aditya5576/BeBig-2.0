@@ -9,6 +9,8 @@ import {
   formatDuration,
   getMonthGroupKey,
   getMonthGroupLabel,
+  calculateWorkoutTreadmillDuration,
+  formatTreadmillDuration,
 } from '../../src/features/workout';
 import { spacing, radii } from '../../src/constants/theme';
 import { useEntitySyncStatus } from '../../src/services/sync';
@@ -355,18 +357,43 @@ export default function WorkoutHistoryScreen() {
                             <View style={styles.metricDivider} />
 
                             <View style={styles.metricItem}>
-                              <Text variant="caption" color="muted" style={styles.metricLabel}>
-                                VOLUME
-                              </Text>
-                              <Text
-                                variant="bodyBold"
-                                color="accent"
-                                numberOfLines={1}
-                                adjustsFontSizeToFit
-                                style={styles.metricNumericValue}
-                              >
-                                {(item.totalVolume ?? 0).toLocaleString()} kg
-                              </Text>
+                              {(() => {
+                                const tmDuration = calculateWorkoutTreadmillDuration(item);
+                                if ((item.totalVolume ?? 0) === 0 && tmDuration > 0) {
+                                  return (
+                                    <>
+                                      <Text variant="caption" color="muted" style={styles.metricLabel}>
+                                        CARDIO
+                                      </Text>
+                                      <Text
+                                        variant="bodyBold"
+                                        color="accent"
+                                        numberOfLines={1}
+                                        adjustsFontSizeToFit
+                                        style={styles.metricNumericValue}
+                                      >
+                                        {formatTreadmillDuration(tmDuration)}
+                                      </Text>
+                                    </>
+                                  );
+                                }
+                                return (
+                                  <>
+                                    <Text variant="caption" color="muted" style={styles.metricLabel}>
+                                      VOLUME
+                                    </Text>
+                                    <Text
+                                      variant="bodyBold"
+                                      color="accent"
+                                      numberOfLines={1}
+                                      adjustsFontSizeToFit
+                                      style={styles.metricNumericValue}
+                                    >
+                                      {(item.totalVolume ?? 0).toLocaleString()} kg
+                                    </Text>
+                                  </>
+                                );
+                              })()}
                             </View>
 
                             <View style={styles.metricDivider} />

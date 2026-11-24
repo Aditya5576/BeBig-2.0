@@ -6,6 +6,7 @@
  */
 
 import { OwnerType } from '../auth';
+import { ExerciseTrackingMode } from './exerciseTracking';
 
 export type ExerciseCategory =
   'abs' | 'arms' | 'back' | 'calves' | 'cardio' | 'chest' | 'legs' | 'shoulders' | 'other';
@@ -46,6 +47,7 @@ export interface Exercise {
   sourceProvider: ExerciseSourceProvider;
   sourceExerciseId?: string;
   isCustom: boolean;
+  trackingMode?: ExerciseTrackingMode;
   photoPath?: string | null;
   createdAt?: string;
   updatedAt?: string;

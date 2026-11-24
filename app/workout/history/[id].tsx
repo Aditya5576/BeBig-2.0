@@ -3,7 +3,7 @@ import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, TextInput, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ScreenContainer, Text, Button, Card, SyncStatusChip } from '../../../src/components/ui';
-import { workoutRepository, WorkoutSession, getSupersetDisplayInfo } from '../../../src/features/workout';
+import { workoutRepository, WorkoutSession, getSupersetDisplayInfo, isTreadmillExercise, formatTreadmillSet } from '../../../src/features/workout';
 import { templateRepository, WorkoutTemplate } from '../../../src/features/templates';
 import {
   WORKOUT_FOCUS_OPTIONS,
@@ -478,14 +478,22 @@ export default function WorkoutHistoryDetailScreen() {
                           </View>
 
                           <View style={styles.setMetricsGroup}>
-                            <Text variant="bodyBold" color="primary">
-                              {s.weight > 0 ? `${s.weight} kg` : 'Bodyweight'} × {s.reps} reps
-                            </Text>
-                            {typeof s.rir === 'number' ? (
-                              <Text variant="caption" color="muted">
-                                RIR {s.rir}
+                            {isTreadmillExercise(ex) ? (
+                              <Text variant="bodyBold" color="primary">
+                                {formatTreadmillSet(s)}
                               </Text>
-                            ) : null}
+                            ) : (
+                              <>
+                                <Text variant="bodyBold" color="primary">
+                                  {s.weight > 0 ? `${s.weight} kg` : 'Bodyweight'} × {s.reps} reps
+                                </Text>
+                                {typeof s.rir === 'number' ? (
+                                  <Text variant="caption" color="muted">
+                                    RIR {s.rir}
+                                  </Text>
+                                ) : null}
+                              </>
+                            )}
                           </View>
 
                           {hasNote && (
