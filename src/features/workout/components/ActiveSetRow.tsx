@@ -522,8 +522,6 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
             >
               <Text
                 variant="caption"
-                numberOfLines={1}
-                ellipsizeMode="tail"
                 style={[styles.prevText, styles.prevTextInteractive]}
               >
                 {previousText}
@@ -532,8 +530,6 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
           ) : (
             <Text
               variant="caption"
-              numberOfLines={1}
-              ellipsizeMode="tail"
               style={[
                 styles.prevText,
                 !previousSet ? styles.prevTextEmpty : null,
@@ -1017,9 +1013,9 @@ const createStyles = (colors: any, isCompact: boolean) =>
       color: colors.primary,
     },
     colPrev: {
-      width: isCompact ? 56 : 64,
+      width: isCompact ? 68 : 76,
       justifyContent: 'center',
-      paddingHorizontal: 2,
+      paddingHorizontal: 1,
     },
     prevText: {
       fontSize: isCompact ? 9 : 10,

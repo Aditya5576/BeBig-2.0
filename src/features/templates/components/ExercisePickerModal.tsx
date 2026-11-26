@@ -401,7 +401,7 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
 
   const selectedCount = selectionOrder.length;
 
-  const renderExerciseCard = useCallback((item: Exercise, testIdPrefix: string = 'picker') => {
+  const renderExerciseCard = useCallback((item: Exercise, testIdPrefix: string = 'picker', recentLabel?: string) => {
     if (!item || !item.id) return null;
     const isAlreadyAdded = selectedExerciseIds.includes(item.id);
     const isSelected = selectedExercisesMap.has(item.id);
@@ -412,6 +412,8 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
         testID={`${testIdPrefix}-exercise-${item.id}`}
         thumbnailTestID={`${testIdPrefix}-thumbnail-${item.id}`}
         exercise={item}
+        recentLabel={recentLabel}
+        recentLabelTestID={recentLabel ? `picker-recent-label-${item.id}` : undefined}
         mode="select"
         hideThumbnail={true}
         isSelected={isSelected}
@@ -439,21 +441,13 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
         </View>
 
         <View style={styles.recentItemsContainer}>
-          {cappedRecentEntries.map(({ exercise: item, lastUsedAt }) => (
-            <View key={`picker-recent-wrap-${item.id}`} style={{ position: 'relative' }}>
-              {renderExerciseCard(item, 'picker-recent')}
-              {lastUsedAt ? (
-                <Text
-                  variant="caption"
-                  color="muted"
-                  testID={`picker-recent-label-${item.id}`}
-                  style={{ position: 'absolute', top: 8, right: 44, fontSize: 11 }}
-                >
-                  {formatRelativeRecentLabel(lastUsedAt)}
-                </Text>
-              ) : null}
-            </View>
-          ))}
+          {cappedRecentEntries.map(({ exercise: item, lastUsedAt }) =>
+            renderExerciseCard(
+              item,
+              'picker-recent',
+              lastUsedAt ? formatRelativeRecentLabel(lastUsedAt) : undefined
+            )
+          )}
         </View>
 
         <View style={styles.recentDivider} />

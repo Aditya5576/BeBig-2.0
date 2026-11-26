@@ -1,6 +1,6 @@
 import { useAppTheme } from '../../features/theme';
 import React, { useMemo } from 'react';
-import { View, StyleSheet, Pressable } from 'react-native';
+import { View, StyleSheet, Pressable, Platform } from 'react-native';
 import { useRouter, useSegments } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, Icon } from '../ui';
@@ -58,9 +58,9 @@ export function BottomNavBar() {
       testID="bottom-nav-bar"
       style={[
         styles.container,
-        {
-          paddingBottom: Math.max(insets.bottom, 12),
-        },
+        Platform.OS === 'web'
+          ? ({ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 10px)' } as any)
+          : { paddingBottom: Math.max(insets.bottom, 10) },
       ]}
     >
       {/* 1. Home Tab */}
@@ -187,6 +187,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
+    marginBottom: 0,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',

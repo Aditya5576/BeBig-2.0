@@ -59,6 +59,8 @@ export interface ExerciseCardProps {
   hideThumbnail?: boolean;
   testID?: string;
   thumbnailTestID?: string;
+  recentLabel?: string;
+  recentLabelTestID?: string;
 }
 
 const stylesMap = new Map<any, ReturnType<typeof createStyles>>();
@@ -82,6 +84,8 @@ function areExerciseCardPropsEqual(prev: ExerciseCardProps, next: ExerciseCardPr
   if (prev.onRename !== next.onRename) return false;
   if (prev.testID !== next.testID) return false;
   if (prev.thumbnailTestID !== next.thumbnailTestID) return false;
+  if (prev.recentLabel !== next.recentLabel) return false;
+  if (prev.recentLabelTestID !== next.recentLabelTestID) return false;
   if (prev.exercise?.name !== next.exercise?.name) return false;
   if (prev.exercise?.photoPath !== next.exercise?.photoPath) return false;
   if (prev.exercise?.images?.[0]?.url !== next.exercise?.images?.[0]?.url) return false;
@@ -99,6 +103,8 @@ export const ExerciseCard = React.memo(function ExerciseCard({
   hideThumbnail = false,
   testID,
   thumbnailTestID,
+  recentLabel,
+  recentLabelTestID,
 }: ExerciseCardProps) {
   const { colors } = useAppTheme();
   const styles = getCardStyles(colors);
@@ -213,32 +219,46 @@ export const ExerciseCard = React.memo(function ExerciseCard({
               ) : null}
               <Icon name="chevronRight" size={18} strokeWidth={2.2} color={colors.textMuted} />
             </View>
-          ) : isAlreadyAdded ? (
-            <View style={styles.addedBadge} testID={addedBadgeTestId}>
-              <Text variant="caption" color="muted" style={styles.badgeText}>
-                ADDED
-              </Text>
-            </View>
-          ) : isMultiSelect ? (
-            <View
-              testID={checkboxTestId}
-              style={[
-                styles.checkboxContainer,
-                isSelected ? styles.checkboxSelected : styles.checkboxUnselected,
-              ]}
-            >
-              {isSelected ? (
-                <>
-                  <Icon name="check" size={16} strokeWidth={3} color={colors.primaryText} />
-                  <Text style={styles.hiddenTestText}>✓</Text>
-                </>
-              ) : null}
-            </View>
           ) : (
-            <View style={styles.selectBadge}>
-              <Text variant="caption" color="primary" style={styles.badgeText}>
-                + ADD
-              </Text>
+            <View style={styles.rightActionColumn}>
+              {recentLabel ? (
+                <Text
+                  variant="caption"
+                  color="muted"
+                  testID={recentLabelTestID}
+                  style={styles.recentLabelText}
+                >
+                  {recentLabel}
+                </Text>
+              ) : null}
+              {isAlreadyAdded ? (
+                <View style={styles.addedBadge} testID={addedBadgeTestId}>
+                  <Text variant="caption" color="muted" style={styles.badgeText}>
+                    ADDED
+                  </Text>
+                </View>
+              ) : isMultiSelect ? (
+                <View
+                  testID={checkboxTestId}
+                  style={[
+                    styles.checkboxContainer,
+                    isSelected ? styles.checkboxSelected : styles.checkboxUnselected,
+                  ]}
+                >
+                  {isSelected ? (
+                    <>
+                      <Icon name="check" size={16} strokeWidth={3} color={colors.primaryText} />
+                      <Text style={styles.hiddenTestText}>✓</Text>
+                    </>
+                  ) : null}
+                </View>
+              ) : (
+                <View style={styles.selectBadge}>
+                  <Text variant="caption" color="primary" style={styles.badgeText}>
+                    + ADD
+                  </Text>
+                </View>
+              )}
             </View>
           )}
         </View>
@@ -330,6 +350,17 @@ const createStyles = (colors: any) =>
       flexDirection: 'row',
       alignItems: 'center',
       gap: spacing.xs,
+    },
+    rightActionColumn: {
+      flexDirection: 'column',
+      alignItems: 'flex-end',
+      justifyContent: 'center',
+      gap: 4,
+      flexShrink: 0,
+    },
+    recentLabelText: {
+      fontSize: 11,
+      lineHeight: 14,
     },
     hiddenTestText: {
       position: 'absolute',

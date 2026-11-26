@@ -138,12 +138,10 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(function A
   const isCompact = windowWidth < 400;
   const colGap = isCompact ? 3 : 4;
   const colSetWidth = isCompact ? 28 : 32;
-  const colPrevWidth = isCompact ? 56 : 64;
-  const colCheckWidth = isCompact ? 30 : 34;
-  const colNoteWidth = isCompact ? 26 : 28;
-  const minKg = isCompact ? 36 : 42;
-  const minReps = isCompact ? 32 : 38;
-  const minRir = isCompact ? 28 : 34;
+  const colPrevWidth = isCompact ? 68 : 76;
+  const minKg = 0;
+  const minReps = 0;
+  const minRir = 0;
 
   const hasPlannedTargets = Boolean(
     exercise.plannedSets ||
@@ -529,16 +527,18 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(function A
             {isTreadmill ? 'TIME' : 'RIR'}
           </Text>
         </View>
-        <View style={[styles.headerColCheck, { width: colCheckWidth }]}>
-          <Icon name="check" size={12} strokeWidth={2.5} color={colors.textMuted} />
-          <Text style={styles.hiddenTestText}>✓</Text>
+        <View style={styles.headerActionButtons}>
+          <View style={styles.headerColCheck}>
+            <Icon name="check" size={12} strokeWidth={2.5} color={colors.textMuted} />
+            <Text style={styles.hiddenTestText}>✓</Text>
+          </View>
+          <View style={styles.headerColNote}>
+            <Text variant="caption" color="muted" style={[styles.headerLabel, isCompact && styles.headerLabelCompact]}>
+              NOTE
+            </Text>
+          </View>
+          <View style={styles.headerColDelete} />
         </View>
-        <View style={[styles.headerColNote, { width: colNoteWidth }]}>
-          <Text variant="caption" color="muted" style={[styles.headerLabel, isCompact && styles.headerLabelCompact]}>
-            NOTE
-          </Text>
-        </View>
-        <View style={styles.headerColDelete} />
       </View>
 
       {/* Sets List Container */}
@@ -907,16 +907,23 @@ const createStyles = (colors: any) =>
       minWidth: 34,
       alignItems: 'center',
     },
+    headerActionButtons: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      minWidth: 140,
+      flexShrink: 0,
+    },
     headerColCheck: {
-      width: 38,
+      minWidth: 44,
       alignItems: 'center',
     },
     headerColNote: {
-      width: 30,
+      minWidth: 44,
       alignItems: 'center',
     },
     headerColDelete: {
-      width: 28,
+      minWidth: 44,
       alignItems: 'center',
     },
     setsContainer: {
