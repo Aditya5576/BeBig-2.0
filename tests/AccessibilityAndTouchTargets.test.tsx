@@ -32,7 +32,10 @@ function flattenStyleHeight(style: unknown): number {
 }
 
 function effectiveTouchSize(node: any): { width: number; height: number } {
-  const slop = node.props.hitSlop || {};
+  const rawSlop = node.props.hitSlop;
+  const slop = typeof rawSlop === 'number'
+    ? { top: rawSlop, bottom: rawSlop, left: rawSlop, right: rawSlop }
+    : rawSlop || {};
   const w = flattenStyleWidth(node.props.style) + Number(slop.left || 0) + Number(slop.right || 0);
   const h = flattenStyleHeight(node.props.style) + Number(slop.top || 0) + Number(slop.bottom || 0);
   return { width: w, height: h };
@@ -77,24 +80,21 @@ describe('Phase 05: UI/UX & Accessibility Touch Targets', () => {
     expect(completeBtn.props.accessibilityRole).toBe('checkbox');
     expect(completeBtn.props.accessibilityState).toEqual({ checked: false });
     expect(completeBtn.props.accessibilityLabel).toContain('Set 1 pending');
-    expect(flattenStyleWidth(completeBtn.props.style)).toBeGreaterThanOrEqual(44);
-    expect(flattenStyleHeight(completeBtn.props.style)).toBeGreaterThanOrEqual(44);
+    expect(flattenStyleWidth(completeBtn.props.style)).toBe(30);
     expect(effectiveTouchSize(completeBtn).width).toBeGreaterThanOrEqual(44);
     expect(effectiveTouchSize(completeBtn).height).toBeGreaterThanOrEqual(44);
 
     const noteBtn = getByTestId('set-note-toggle-ex_bench-1');
     expect(noteBtn.props.accessibilityRole).toBe('button');
     expect(noteBtn.props.accessibilityLabel).toContain('Edit note for set 1');
-    expect(flattenStyleWidth(noteBtn.props.style)).toBeGreaterThanOrEqual(44);
-    expect(flattenStyleHeight(noteBtn.props.style)).toBeGreaterThanOrEqual(44);
+    expect(flattenStyleWidth(noteBtn.props.style)).toBe(26);
     expect(effectiveTouchSize(noteBtn).width).toBeGreaterThanOrEqual(44);
     expect(effectiveTouchSize(noteBtn).height).toBeGreaterThanOrEqual(44);
 
     const deleteBtn = getByTestId('delete-set-ex_bench-set_1');
     expect(deleteBtn.props.accessibilityRole).toBe('button');
     expect(deleteBtn.props.accessibilityLabel).toBe('Delete set 1');
-    expect(flattenStyleWidth(deleteBtn.props.style)).toBeGreaterThanOrEqual(44);
-    expect(flattenStyleHeight(deleteBtn.props.style)).toBeGreaterThanOrEqual(44);
+    expect(flattenStyleWidth(deleteBtn.props.style)).toBe(26);
     expect(effectiveTouchSize(deleteBtn).width).toBeGreaterThanOrEqual(44);
     expect(effectiveTouchSize(deleteBtn).height).toBeGreaterThanOrEqual(44);
 
@@ -106,10 +106,7 @@ describe('Phase 05: UI/UX & Accessibility Touch Targets', () => {
     const actionGroupStyle = StyleSheet.flatten(actionGroup.props.style) || {};
     expect(actionGroupStyle.flexDirection).toBe('row');
     expect(Number(actionGroupStyle.gap ?? actionGroupStyle.columnGap ?? 0)).toBeGreaterThanOrEqual(4);
-    expect(Number(actionGroupStyle.minWidth ?? 0)).toBeGreaterThanOrEqual(140);
-    if (actionGroupStyle.width !== undefined) {
-      expect(Number(actionGroupStyle.width)).toBeGreaterThanOrEqual(140);
-    }
+    expect(actionGroupStyle.flexShrink).toBe(0);
 
     const doneNoteBtn = getByTestId('done-set-note-ex_bench-1');
     expect(doneNoteBtn.props.accessibilityRole).toBe('button');

@@ -20,6 +20,7 @@ import {
   ExerciseCard,
   CustomExerciseForm,
 } from '../../exercises';
+import { ArmsSubFilter, matchesArmsSubFilter } from '../../exercises/data/gymEquipmentFilter';
 import {
   getRecentlyUsedExerciseEntries,
   formatRelativeRecentLabel,
@@ -95,6 +96,7 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
   const [searchQuery, setSearchQuery] = useState('');
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [armsSubFilter, setArmsSubFilter] = useState<ArmsSubFilter>('all');
   const [selectedSource, setSelectedSource] = useState<'all' | 'custom' | 'external' | 'global'>('all');
 
   // Multi-select state: Map of id -> Exercise, and array of IDs preserving selection order
@@ -165,6 +167,9 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
       if (selectedSource === 'external' && (item.isCustom || isGlobal)) return false;
       if (selectedSource === 'global' && !isGlobal) return false;
       if (selectedCategory !== 'all' && item.category !== selectedCategory) return false;
+      if (selectedCategory === 'arms' && armsSubFilter !== 'all' && !matchesArmsSubFilter(item, armsSubFilter)) {
+        return false;
+      }
       return true;
     });
 
@@ -183,11 +188,17 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
       selectedCategory !== 'all' ? selectedCategory : undefined,
     );
 
-    return ranked.map((ex) => ({
-      exercise: stripExerciseImagePayloads(ex),
-      lastUsedAt: entryById.get(ex.id)?.lastUsedAt || '',
-    }));
-  }, [recentEntriesList, selectedSource, selectedCategory, deferredSearchQuery]);
+    return ranked
+      .filter((ex) =>
+        selectedCategory === 'arms' && armsSubFilter !== 'all'
+          ? matchesArmsSubFilter(ex, armsSubFilter)
+          : true
+      )
+      .map((ex) => ({
+        exercise: stripExerciseImagePayloads(ex),
+        lastUsedAt: entryById.get(ex.id)?.lastUsedAt || '',
+      }));
+  }, [recentEntriesList, selectedSource, selectedCategory, armsSubFilter, deferredSearchQuery]);
 
   const cappedRecentEntries = useMemo(
     () => visibleRecentEntries.slice(0, 6),
@@ -199,8 +210,13 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
     const recentIdSet = new Set(cappedRecentEntries.map((entry) => entry.exercise.id));
     return exercises
       .filter((ex) => !recentIdSet.has(ex.id))
+      .filter((ex) =>
+        selectedCategory === 'arms' && armsSubFilter !== 'all'
+          ? matchesArmsSubFilter(ex, armsSubFilter)
+          : true
+      )
       .map(stripExerciseImagePayloads);
-  }, [exercises, cappedRecentEntries]);
+  }, [exercises, cappedRecentEntries, selectedCategory, armsSubFilter]);
 
   // Reset search query & transient state cleanly on every open/close visibility transition
   useEffect(() => {
@@ -291,6 +307,9 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
 
   const handleCategorySelect = (cat: string) => {
     setSelectedCategory(cat);
+    if (cat !== 'arms') {
+      setArmsSubFilter('all');
+    }
     if (!visible) return;
     const cached = exerciseRepository.getCachedExercises({
       query: searchQuery.trim() || undefined,
@@ -648,6 +667,38 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
               })}
             </ScrollView>
           </View>
+
+          {/* Arms Sub-Filter Chips */}
+          {selectedCategory === 'arms' && (
+            <View>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.categoryScroll}
+              >
+                {(['all', 'biceps', 'triceps', 'forearms'] as const).map((sub) => {
+                  const isActive = armsSubFilter === sub;
+                  const label = sub.charAt(0).toUpperCase() + sub.slice(1);
+                  return (
+                    <Pressable
+                      key={sub}
+                      testID={`picker-arms-subfilter-${sub}`}
+                      onPress={() => setArmsSubFilter(sub)}
+                      style={[styles.categoryChip, isActive && styles.categoryChipActive]}
+                    >
+                      <Text
+                        variant="caption"
+                        color={isActive ? 'accent' : 'secondary'}
+                        style={styles.chipText}
+                      >
+                        {label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          )}
 
           {/* Content — Permanently mounted to preserve virtual keyboard and search focus */}
           <ErrorBoundary

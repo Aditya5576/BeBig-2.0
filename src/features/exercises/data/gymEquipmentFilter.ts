@@ -30,7 +30,34 @@ export const NON_STANDARD_EQUIPMENT_KEYWORDS: readonly RegExp[] = Object.freeze(
   /\b(swiss\s*bar|football\s*bar)\b/i,
   /\b(atlas\s*stone|log\s*press|yoke|farmer'?s?\s*walk(\s*handles?)?)\b/i,
   /\b(reverse\s*hyper|belt\s*squat(\s*machine)?|glute\s*ham\s*developer|ghd)\b/i,
+  // Complex Olympic lifting variants
+  /\b(snatch|clean\s*(&|and)?\s*jerk|hang\s*clean|power\s*clean|overhead\s*squat)\b/i,
+  // Niche CrossFit, strongman & rehab movements
+  /\b(kipping|muscle[\s-]*up|turkish\s*get[\s-]*up|windmill|zercher|jefferson|nordic|dragon\s*flag|balance\s*pad|swiss\s*ball\s*crunch)\b/i,
 ]);
+
+export type ArmsSubFilter = 'all' | 'biceps' | 'triceps' | 'forearms';
+
+export function matchesArmsSubFilter(exercise: Exercise, subFilter: ArmsSubFilter): boolean {
+  if (subFilter === 'all') return true;
+  const muscleNames = [
+    ...(exercise.primaryMuscles || []),
+    ...(exercise.secondaryMuscles || []),
+  ]
+    .map((m) => (typeof m === 'string' ? m : m?.name || ''))
+    .join(' ');
+  const haystack = `${exercise.name || ''} ${muscleNames}`;
+
+  if (subFilter === 'biceps') {
+    return /\b(biceps?|brachialis|hammer|preacher|concentration|spider)\b/i.test(haystack);
+  }
+  if (subFilter === 'triceps') {
+    return /\b(triceps?|pushdown|skull\s*crusher|overhead\s*extension|kickback|dip)\b/i.test(haystack);
+  }
+  return /\b(forearms?|wrist\s*curl|wrist\s*extension|reverse\s*curl|brachioradialis|grip)\b/i.test(
+    haystack
+  );
+}
 
 export interface CatalogueFilterStats {
   totalReviewed: number;
@@ -50,6 +77,11 @@ export function isEligibleForIndianCommercialGym(exercise: Exercise): {
   isEligible: boolean;
   reason?: string;
 } {
+  // Custom user exercises must ALWAYS be visible regardless of equipment filter
+  if (exercise.isCustom) {
+    return { isEligible: true };
+  }
+
   // 1. Inspect equipment objects
   if (exercise.equipment && exercise.equipment.length > 0) {
     for (const eq of exercise.equipment) {

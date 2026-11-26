@@ -136,12 +136,12 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(function A
   const treadmillTotals = isTreadmill ? calculateTreadmillExerciseTotals(exercise) : null;
 
   const isCompact = windowWidth < 400;
-  const colGap = isCompact ? 3 : 4;
-  const colSetWidth = isCompact ? 28 : 32;
-  const colPrevWidth = isCompact ? 68 : 76;
-  const minKg = 0;
-  const minReps = 0;
-  const minRir = 0;
+  const colGap = 4;
+  const colSetWidth = 28;
+  const colPrevWidth = 66;
+  const minKg = 42;
+  const minReps = 38;
+  const minRir = 32;
 
   const hasPlannedTargets = Boolean(
     exercise.plannedSets ||
@@ -911,19 +911,18 @@ const createStyles = (colors: any) =>
       flexDirection: 'row',
       alignItems: 'center',
       gap: 4,
-      minWidth: 140,
       flexShrink: 0,
     },
     headerColCheck: {
-      minWidth: 44,
+      width: 30,
       alignItems: 'center',
     },
     headerColNote: {
-      minWidth: 44,
+      width: 26,
       alignItems: 'center',
     },
     headerColDelete: {
-      minWidth: 44,
+      width: 26,
       alignItems: 'center',
     },
     setsContainer: {

@@ -13,6 +13,7 @@ import {
 import { useRouter, useFocusEffect } from 'expo-router';
 import { ScreenContainer, ScreenFlatList, Text, Button, Icon, ErrorBoundary } from '../../src/components/ui';
 import { exerciseRepository, Exercise, STANDARD_CATEGORIES, ExerciseCard } from '../../src/features/exercises';
+import { ArmsSubFilter, matchesArmsSubFilter } from '../../src/features/exercises/data/gymEquipmentFilter';
 import { spacing, radii } from '../../src/constants/theme';
 import { DOMAIN_LIMITS } from '../../src/constants/domainLimits';
 
@@ -42,6 +43,7 @@ export default function ExerciseListScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [armsSubFilter, setArmsSubFilter] = useState<ArmsSubFilter>('all');
   const [selectedSource, setSelectedSource] = useState<'all' | 'custom' | 'external' | 'global'>('all');
   const [nextOffset, setNextOffset] = useState<number | undefined>(undefined);
   const [hasMore, setHasMore] = useState(false);
@@ -182,6 +184,9 @@ export default function ExerciseListScreen() {
 
   const handleCategorySelect = (categoryId: string) => {
     setSelectedCategory(categoryId);
+    if (categoryId !== 'arms') {
+      setArmsSubFilter('all');
+    }
     setHasMore(false);
     setNextOffset(undefined);
 
@@ -409,6 +414,38 @@ export default function ExerciseListScreen() {
         </ScrollView>
       </View>
 
+      {/* Arms Sub-Filter Chips */}
+      {selectedCategory === 'arms' && (
+        <View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoryScroll}
+          >
+            {(['all', 'biceps', 'triceps', 'forearms'] as const).map((sub) => {
+              const isActive = armsSubFilter === sub;
+              const label = sub.charAt(0).toUpperCase() + sub.slice(1);
+              return (
+                <Pressable
+                  key={sub}
+                  testID={`arms-subfilter-${sub}`}
+                  onPress={() => setArmsSubFilter(sub)}
+                  style={[styles.categoryChip, isActive && styles.categoryChipActive]}
+                >
+                  <Text
+                    variant="caption"
+                    color={isActive ? 'accent' : 'secondary'}
+                    style={styles.chipText}
+                  >
+                    {label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
+
       {/* Offline/Cached Subtle Banner */}
       {isCachedOnly && (
         <View testID="exercise-offline-banner" style={styles.offlineBanner}>
@@ -426,7 +463,11 @@ export default function ExerciseListScreen() {
       >
         <ScreenFlatList
           testID="exercise-list"
-          data={exercises}
+          data={
+          selectedCategory === 'arms' && armsSubFilter !== 'all'
+            ? exercises.filter((ex) => matchesArmsSubFilter(ex, armsSubFilter))
+            : exercises
+        }
           keyExtractor={keyExtractor}
           renderItem={renderItem}
           getItemLayout={(_data, index) => ({

@@ -107,6 +107,9 @@ export function WebAlertModal() {
                 >
                   <Text
                     variant="bodyBold"
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.85}
                     style={[
                       styles.buttonText,
                       isCancel && styles.cancelButtonText,
@@ -176,9 +179,9 @@ const createStyles = (colors: any) => StyleSheet.create({
     flex: 1,
   },
   buttonBase: {
-    minHeight: 44, // Meets Apple 44pt minimum touch target
+    minHeight: 48,
     paddingVertical: spacing.sm + 4,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: 10,
     borderRadius: radii.md,
     justifyContent: 'center',
     alignItems: 'center',

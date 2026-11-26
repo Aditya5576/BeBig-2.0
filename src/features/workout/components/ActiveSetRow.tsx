@@ -522,6 +522,9 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
             >
               <Text
                 variant="caption"
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.8}
                 style={[styles.prevText, styles.prevTextInteractive]}
               >
                 {previousText}
@@ -530,6 +533,9 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
           ) : (
             <Text
               variant="caption"
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.8}
               style={[
                 styles.prevText,
                 !previousSet ? styles.prevTextEmpty : null,
@@ -708,8 +714,8 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
           <Pressable
             testID={`complete-set-${exercise.exerciseId}-${set.setNumber}`}
             onPress={handleToggleComplete}
-            hitSlop={{ top: 6, bottom: 6, left: 8, right: 8 }}
-            style={styles.touchTargetBox}
+            hitSlop={7}
+            style={styles.touchTargetBoxCheck}
             accessibilityLabel={
               set.completed
                 ? `Set ${set.setNumber} completed. Tap to mark uncompleted.`
@@ -739,8 +745,8 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
           <Pressable
             testID={`set-note-toggle-${exercise.exerciseId}-${set.setNumber}`}
             onPress={() => onToggleNotes(set.id)}
-            hitSlop={{ top: 6, bottom: 6, left: 10, right: 10 }}
-            style={styles.touchTargetBox}
+            hitSlop={9}
+            style={styles.touchTargetBoxSmall}
             accessibilityLabel={
               hasExistingNote
                 ? `Edit note for set ${set.setNumber}: ${set.notes}`
@@ -775,8 +781,8 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
             <Pressable
               testID={`delete-set-${exercise.exerciseId}-${set.id}`}
               onPress={() => onDeleteSet(exercise.exerciseId, set.id)}
-              hitSlop={{ top: 8, bottom: 8, left: 10, right: 10 }}
-              style={styles.touchTargetBox}
+              hitSlop={9}
+              style={styles.touchTargetBoxSmall}
               accessibilityLabel={`Delete set ${set.setNumber}`}
               accessibilityRole="button"
             >
@@ -987,10 +993,10 @@ const createStyles = (colors: any, isCompact: boolean) =>
       flexDirection: 'row',
       alignItems: 'center',
       minHeight: 38,
-      gap: isCompact ? 3 : 4,
+      gap: 4,
     },
     colSetTouch: {
-      width: isCompact ? 28 : 32,
+      width: 28,
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -1013,12 +1019,13 @@ const createStyles = (colors: any, isCompact: boolean) =>
       color: colors.primary,
     },
     colPrev: {
-      width: isCompact ? 68 : 76,
+      width: 66,
       justifyContent: 'center',
-      paddingHorizontal: 1,
+      alignItems: 'center',
+      paddingHorizontal: 4,
     },
     prevText: {
-      fontSize: isCompact ? 9 : 10,
+      fontSize: 11,
       color: '#94A3B8',
       fontWeight: '600',
       textAlign: 'center',
@@ -1048,15 +1055,18 @@ const createStyles = (colors: any, isCompact: boolean) =>
     },
     colKg: {
       flex: 1.15,
-      minWidth: 0,
+      minWidth: 42,
+      maxWidth: 54,
     },
     colReps: {
       flex: 1.0,
-      minWidth: 0,
+      minWidth: 38,
+      maxWidth: 48,
     },
     colRir: {
       flex: 0.85,
-      minWidth: 0,
+      minWidth: 32,
+      maxWidth: 40,
       position: 'relative',
     },
     metricInput: {
@@ -1092,18 +1102,23 @@ const createStyles = (colors: any, isCompact: boolean) =>
       flexDirection: 'row',
       alignItems: 'center',
       gap: 4,
-      minWidth: 140,
       flexShrink: 0,
     },
     colCheck: {
-      minWidth: 44,
-      minHeight: 44,
+      width: 30,
+      height: 30,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    touchTargetBox: {
-      minWidth: 44,
-      minHeight: 44,
+    touchTargetBoxCheck: {
+      width: 30,
+      height: 30,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    touchTargetBoxSmall: {
+      width: 26,
+      height: 30,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -1125,8 +1140,8 @@ const createStyles = (colors: any, isCompact: boolean) =>
       borderColor: 'transparent',
     },
     colNote: {
-      minWidth: 44,
-      minHeight: 44,
+      width: 26,
+      height: 30,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -1218,8 +1233,8 @@ const createStyles = (colors: any, isCompact: boolean) =>
       fontWeight: '700',
     },
     colDelete: {
-      minWidth: 44,
-      minHeight: 44,
+      width: 26,
+      height: 30,
       alignItems: 'center',
       justifyContent: 'center',
     },
