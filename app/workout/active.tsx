@@ -1308,6 +1308,7 @@ export default function ActiveWorkoutScreen() {
               onPress={handleMinimize}
               style={styles.headerIconButton}
               hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              accessibilityRole="button"
               accessibilityLabel="Back or minimize workout"
             >
               <Icon name="chevronLeft" size={24} color={colors.primary} />
@@ -1351,6 +1352,7 @@ export default function ActiveWorkoutScreen() {
               onPress={() => setIsMenuVisible(true)}
               style={styles.headerIconButton}
               hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              accessibilityRole="button"
               accessibilityLabel="Workout actions menu"
             >
               <Icon name="moreVertical" size={20} color={colors.textPrimary} />

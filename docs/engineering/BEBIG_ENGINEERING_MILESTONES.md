@@ -7,6 +7,7 @@
 | Phase 02 | Offline Sync Engine Audit & Property-Based Testing (`fast-check`) | `IMPLEMENTED — READY FOR INDEPENDENT REVIEW` | `tests/OfflineSyncProperty.test.tsx` (`seed: 20261126`, `numRuns: 100`) |
 | Phase 03 | Cross-Platform PWA & Mobile Web Stability (iOS Safari + Android Chrome) | `IMPLEMENTED — READY FOR INDEPENDENT REVIEW` | `tests/ExercisePickerWebMemorySafety.test.tsx`, `tests/IOSWebKitExerciseCrashGuard.test.tsx`, `tests/PWAInstallation.test.tsx`, `tests/ProductionDeployment.test.tsx`, `tests/Batch2Enhancements.test.tsx` |
 | Phase 04 | Performance & Bundle Optimization (iOS Safari PWA + Android Chrome PWA + Native Parity) | `IMPLEMENTED — READY FOR INDEPENDENT REVIEW` | `npm run build:web` (`5,340.25 KB` total JS across 3 chunks), `npx --yes knip --no-exit-code` |
+| Phase 05 | UI/UX & Accessibility Polish (iOS Safari PWA + Android Chrome PWA + Native Parity) | `IMPLEMENTED — READY FOR INDEPENDENT REVIEW` | `tests/AccessibilityAndTouchTargets.test.tsx`, `ActiveSetRow.tsx`, `app/workout/active.tsx` |
 
 ## Phase 02 Acceptance Test Matrix (`SYNC-01` – `SYNC-08`)
 
@@ -43,3 +44,12 @@
 | `PERF-02` | Heavy export (`pdf-lib` + OOXML) & guest migration already dynamically imported off initial boot path; `xlsx`/`jspdf` absent | `app/settings.tsx`, `src/features/auth/store/useAuthStore.ts`, `src/features/export/services/exportService.ts` | `PASS` |
 | `PERF-03` | Report-only Knip audit (`0` unused runtime deps; `28` unused files mostly Deno/SW/scripts; `2` devDeps; `51` exports) | `npx --yes knip --no-exit-code` | `PASS` |
 | `PERF-04` | Physical Lighthouse & mobile PWA startup/TTI profiling on iOS Safari and Android Chrome | Physical device / Lighthouse CLI verification | `PENDING MANUAL` |
+
+## Phase 05 Acceptance Test Matrix (`UI-01` – `UI-04`)
+
+| ID | Invariant / Scenario | Verification Source | Status |
+|---|---|---|---|
+| `UI-01` | Gym-floor interactive controls (`ActiveSetRow`, `RestTimerOverlay`, `BottomNavBar`) meet `>=44x44` effective touch targets | `src/features/workout/components/ActiveSetRow.tsx`, `tests/AccessibilityAndTouchTargets.test.tsx` | `PASS` |
+| `UI-02` | Safe-area insets (`useSafeAreaInsets`) protect bottom navigation & active workout footer on notched iOS/Android screens | `app/workout/active.tsx`, `src/components/navigation/BottomNavBar.tsx`, `tests/AccessibilityAndTouchTargets.test.tsx` | `PASS` |
+| `UI-03` | `KeyboardAvoidingView` & custom numeric keypad avoid obscured inputs during set logging | `app/workout/active.tsx`, `tests/ActiveWorkoutConcurrency.test.tsx` | `PASS` (physical Safari/Chrome visual check `PENDING MANUAL`) |
+| `UI-04` | Icon-only buttons & set controls expose `accessibilityRole`, `accessibilityLabel`, and `accessibilityState` | `app/workout/active.tsx`, `ActiveSetRow.tsx`, `tests/AccessibilityAndTouchTargets.test.tsx` | `PASS` |

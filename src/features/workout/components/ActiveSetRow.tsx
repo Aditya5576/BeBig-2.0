@@ -702,16 +702,18 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
           </>
         )}
 
+        {/* Action Buttons Group: Complete, Note, Delete (>=44x44 non-overlapping targets) */}
+        <View
+          testID={`action-buttons-${exercise.exerciseId}-${set.id}`}
+          style={styles.actionButtons}
+        >
         {/* Compact Complete Button */}
         <View style={styles.colCheck}>
           <Pressable
             testID={`complete-set-${exercise.exerciseId}-${set.setNumber}`}
             onPress={handleToggleComplete}
-            hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
-            style={[
-              styles.checkButton,
-              set.completed ? styles.checkButtonDone : styles.checkButtonPending,
-            ]}
+            hitSlop={{ top: 6, bottom: 6, left: 8, right: 8 }}
+            style={styles.touchTargetBox}
             accessibilityLabel={
               set.completed
                 ? `Set ${set.setNumber} completed. Tap to mark uncompleted.`
@@ -720,12 +722,19 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
             accessibilityRole="checkbox"
             accessibilityState={{ checked: set.completed }}
           >
-            <Icon
-              name="check"
-              size={14}
-              strokeWidth={3}
-              color={set.completed ? colors.background : colors.textMuted}
-            />
+            <View
+              style={[
+                styles.checkButton,
+                set.completed ? styles.checkButtonDone : styles.checkButtonPending,
+              ]}
+            >
+              <Icon
+                name="check"
+                size={14}
+                strokeWidth={3}
+                color={set.completed ? colors.background : colors.textMuted}
+              />
+            </View>
           </Pressable>
         </View>
 
@@ -734,11 +743,8 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
           <Pressable
             testID={`set-note-toggle-${exercise.exerciseId}-${set.setNumber}`}
             onPress={() => onToggleNotes(set.id)}
-            hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
-            style={[
-              styles.noteButton,
-              hasExistingNote && styles.noteButtonActive,
-            ]}
+            hitSlop={{ top: 6, bottom: 6, left: 10, right: 10 }}
+            style={styles.touchTargetBox}
             accessibilityLabel={
               hasExistingNote
                 ? `Edit note for set ${set.setNumber}: ${set.notes}`
@@ -746,17 +752,24 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
             }
             accessibilityRole="button"
           >
-            <Icon
-              name="edit"
-              size={13}
-              color={hasExistingNote ? colors.primary : colors.textMuted}
-            />
-            {hasExistingNote ? (
-              <View
-                testID={`set-note-indicator-${exercise.exerciseId}-${set.setNumber}`}
-                style={styles.noteIndicatorDot}
+            <View
+              style={[
+                styles.noteButton,
+                hasExistingNote && styles.noteButtonActive,
+              ]}
+            >
+              <Icon
+                name="edit"
+                size={13}
+                color={hasExistingNote ? colors.primary : colors.textMuted}
               />
-            ) : null}
+              {hasExistingNote ? (
+                <View
+                  testID={`set-note-indicator-${exercise.exerciseId}-${set.setNumber}`}
+                  style={styles.noteIndicatorDot}
+                />
+              ) : null}
+            </View>
           </Pressable>
         </View>
 
@@ -766,14 +779,17 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
             <Pressable
               testID={`delete-set-${exercise.exerciseId}-${set.id}`}
               onPress={() => onDeleteSet(exercise.exerciseId, set.id)}
-              hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-              style={styles.deleteButton}
+              hitSlop={{ top: 8, bottom: 8, left: 10, right: 10 }}
+              style={styles.touchTargetBox}
               accessibilityLabel={`Delete set ${set.setNumber}`}
               accessibilityRole="button"
             >
-              <Icon name="close" size={13} color={colors.textMuted} />
+              <View style={styles.deleteButton}>
+                <Icon name="close" size={13} color={colors.textMuted} />
+              </View>
             </Pressable>
           ) : null}
+        </View>
         </View>
       </View>
 
@@ -817,6 +833,7 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
               onPress={() => handleNotesChange('')}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               style={styles.clearNoteButton}
+              accessibilityRole="button"
               accessibilityLabel="Clear note"
             >
               <Text style={styles.clearNoteText}>×</Text>
@@ -827,6 +844,7 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
             onPress={handleCloseNotes}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             style={styles.doneNoteButton}
+            accessibilityRole="button"
             accessibilityLabel="Done editing note"
           >
             <Text style={styles.doneNoteText}>Done</Text>
@@ -1034,15 +1052,15 @@ const createStyles = (colors: any, isCompact: boolean) =>
     },
     colKg: {
       flex: 1.15,
-      minWidth: isCompact ? 36 : 42,
+      minWidth: 0,
     },
     colReps: {
       flex: 1.0,
-      minWidth: isCompact ? 32 : 38,
+      minWidth: 0,
     },
     colRir: {
       flex: 0.85,
-      minWidth: isCompact ? 28 : 34,
+      minWidth: 0,
       position: 'relative',
     },
     metricInput: {
@@ -1074,8 +1092,22 @@ const createStyles = (colors: any, isCompact: boolean) =>
       color: colors.textSecondary,
       fontSize: isCompact ? 12 : 13,
     },
+    actionButtons: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      minWidth: 140,
+      flexShrink: 0,
+    },
     colCheck: {
-      width: isCompact ? 30 : 34,
+      minWidth: 44,
+      minHeight: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    touchTargetBox: {
+      minWidth: 44,
+      minHeight: 44,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -1097,7 +1129,8 @@ const createStyles = (colors: any, isCompact: boolean) =>
       borderColor: 'transparent',
     },
     colNote: {
-      width: isCompact ? 26 : 28,
+      minWidth: 44,
+      minHeight: 44,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -1189,8 +1222,8 @@ const createStyles = (colors: any, isCompact: boolean) =>
       fontWeight: '700',
     },
     colDelete: {
-      width: isCompact ? 24 : 26,
-      marginLeft: 4,
+      minWidth: 44,
+      minHeight: 44,
       alignItems: 'center',
       justifyContent: 'center',
     },
