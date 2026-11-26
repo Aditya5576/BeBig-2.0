@@ -10,6 +10,7 @@
 | Phase 05 | UI/UX & Accessibility Polish (iOS Safari PWA + Android Chrome PWA + Native Parity) | `IMPLEMENTED — READY FOR INDEPENDENT REVIEW` | `tests/AccessibilityAndTouchTargets.test.tsx`, `ActiveSetRow.tsx`, `app/workout/active.tsx` |
 | Phase 06 | Supabase & Backend Security Audit (RLS, Storage Policies, Edge Functions & Account Deletion) | `IMPLEMENTED — READY FOR INDEPENDENT REVIEW` | `tests/BackendSecurityAndRLS.test.tsx`, `supabase/migrations/`, `supabase/functions/delete-account/index.ts` |
 | Phase 07 | Testing, CI/CD & Sentry Observability | `IMPLEMENTED — READY FOR INDEPENDENT REVIEW` | `.github/workflows/ci.yml`, `src/services/monitoring/errorMonitoring.ts`, `tests/ObservabilityAndCIGates.test.tsx` |
+| Phase 08 | Final Release Verification & Production Sign-Off | `IMPLEMENTED — READY FOR INDEPENDENT REVIEW` | `npm audit`, `npm run build:web`, 11-suite cross-phase Jest gate |
 
 ## Phase 02 Acceptance Test Matrix (`SYNC-01` – `SYNC-08`)
 
@@ -52,7 +53,7 @@
 | ID | Invariant / Scenario | Verification Source | Status |
 |---|---|---|---|
 | `UI-01` | Gym-floor interactive controls (`ActiveSetRow`, `RestTimerOverlay`, `BottomNavBar`) meet `>=44x44` effective touch targets | `src/features/workout/components/ActiveSetRow.tsx`, `tests/AccessibilityAndTouchTargets.test.tsx` | `PASS` |
-| `UI-02` | Safe-area insets (`useSafeAreaInsets`) protect bottom navigation & active workout footer on notched iOS/Android screens | `app/workout/active.tsx`, `src/components/navigation/BottomNavBar.tsx`, `tests/AccessibilityAndTouchTargets.test.tsx` | `PASS` |
+| `UI-02` | Safe-area insets (`useSafeAreaInsets`) protect bottom navigation & active workout footer on notched iOS/Android screens | `app/workout/active.tsx`, `src/components/navigation/BottomNavBar.tsx`, `tests/AccessibilityAndTouchTargets.test.tsx` | `PENDING MANUAL` |
 | `UI-03` | `KeyboardAvoidingView` & custom numeric keypad avoid obscured inputs during set logging | `app/workout/active.tsx`, `tests/ActiveWorkoutConcurrency.test.tsx` | `PASS` (physical Safari/Chrome visual check `PENDING MANUAL`) |
 | `UI-04` | Icon-only buttons & set controls expose `accessibilityRole`, `accessibilityLabel`, and `accessibilityState` | `app/workout/active.tsx`, `ActiveSetRow.tsx`, `tests/AccessibilityAndTouchTargets.test.tsx` | `PASS` |
 
@@ -74,3 +75,19 @@
 | `QA-02` | `beforeSend` / `sanitizeString` / `sanitizeObject` scrub `Authorization` headers, Bearer/JWT tokens, query tokens, and email PII | `src/services/monitoring/errorMonitoring.ts`, `tests/ObservabilityAndCIGates.test.tsx` | `PASS` |
 | `QA-03` | `.github/workflows/ci.yml` runs pinned `checkout@v4`, `setup-node@v4`, `npm ci`, `typecheck`, `lint`, and `npx jest --maxWorkers=2` without secrets | `.github/workflows/ci.yml`, `tests/ObservabilityAndCIGates.test.tsx` | `PASS` |
 | `QA-04` | Full repository Jest suite + `typecheck` + `eslint` gate | `npm run typecheck && npx eslint app src --no-cache && npx jest --maxWorkers=2` | `PASS` |
+
+## Phase 08 Final Release Verification (`REL-01` – `REL-05`)
+
+| ID | Invariant / Scenario | Verification Source | Status |
+|---|---|---|---|
+| `REL-01` | Protected boundaries untouched across all commits since Phase 01 (`81b653a7`) | `git log 81b653a7..HEAD` | `PASS` |
+| `REL-02` | Production dependency security audit (`0` critical vulnerabilities) | `npm audit --omit=dev --audit-level=critical` | `PASS` |
+| `REL-03` | Production web export (`npm run build:web`) succeeds & temporary `dist/` cleaned | `npm run build:web` | `PASS` |
+| `REL-04` | Cross-phase automated regression gate (`typecheck`, `eslint`, `11/11 suites passed, 83/83 tests passed`) | `tests/OfflineSyncProperty.test.tsx` .. `tests/Foundation.test.tsx` | `PASS` |
+| `REL-05` | Physical device PWA, viewport/Lighthouse, and 2-account Supabase staging sign-off | Manual checklist below | `PENDING MANUAL` |
+
+### Manual Physical Device & Staging Sign-Off Checklist
+- [ ] **iPhone Safari Standalone PWA (`PWA-06`)**: Add to Home Screen, start/log offline workout, force-close & reopen PWA, verify workout hydration and mid-workout SW update deferral.
+- [ ] **Android Chrome Standalone PWA (`PWA-07`)**: Install PWA, complete offline workout, verify `navigator.storage.persist()` granted and background/foreground sync recovery.
+- [ ] **Mobile Viewport & Lighthouse (`UI-02` / `PERF-04`)**: Verify 360–390px numeric keypad & safe-area spacing with soft keyboard open, and run Lighthouse PWA/Performance audit.
+- [ ] **Supabase 2-Account Cross-Tenant Check (`SEC-05`)**: Verify User A cannot read/write/delete User B's rows or `exercise-photos` objects and `delete-account` purges User A cleanly.
