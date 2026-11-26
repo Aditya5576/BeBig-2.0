@@ -100,11 +100,25 @@ export function CustomExerciseForm({
     file?: any;
   } | null>(null);
 
+  const photoSelectionGenRef = useRef(0);
+  const objectUrlRef = useRef<string | null>(null);
+  const revokeTrackedObjectUrl = () => {
+    if (objectUrlRef.current && typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+      try {
+        URL.revokeObjectURL(objectUrlRef.current);
+      } catch {
+        // Ignore cleanup errors
+      }
+      objectUrlRef.current = null;
+    }
+  };
+
   const isMountedRef = useRef(true);
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
+      revokeTrackedObjectUrl();
     };
   }, []);
 
@@ -120,9 +134,11 @@ export function CustomExerciseForm({
 
   const handlePickPhoto = async () => {
     Keyboard.dismiss();
+    photoSelectionGenRef.current += 1;
+    const selectionGen = photoSelectionGenRef.current;
     try {
       const picked = await pickExercisePhoto();
-      if (!isMountedRef.current) return;
+      if (!isMountedRef.current || selectionGen !== photoSelectionGenRef.current) return;
       if (picked.canceled) {
         if (picked.error) {
           Alert.alert('Permission Required', picked.error);
@@ -362,6 +378,8 @@ export function CustomExerciseForm({
                   variant="ghost"
                   size="sm"
                   onPress={() => {
+                    photoSelectionGenRef.current += 1;
+                    revokeTrackedObjectUrl();
                     setPhotoUri(null);
                     setPhotoData(null);
                   }}
@@ -395,12 +413,17 @@ export function CustomExerciseForm({
                   setError(validation.error || 'Invalid photo file.');
                   return;
                 }
+                photoSelectionGenRef.current += 1;
+                const selectionGen = photoSelectionGenRef.current;
                 setError(null);
 
                 // Downscale raw web/iPhone camera images via offscreen canvas (max 800px, JPEG 0.82)
                 const downscaled = await downscaleWebImageToMaxEdge(file);
-                if (!isMountedRef.current) return;
+                if (!isMountedRef.current || selectionGen !== photoSelectionGenRef.current) {
+                  return;
+                }
                 if (downscaled) {
+                  revokeTrackedObjectUrl();
                   setPhotoUri(downscaled.dataUrl);
                   setPhotoData({
                     uri: downscaled.dataUrl,
@@ -413,17 +436,30 @@ export function CustomExerciseForm({
 
                 // Graceful fallback if canvas downscaling is unavailable
                 const mimeType = file.type || 'image/jpeg';
-                const previewUrl =
+                const localPreviewUrl =
                   typeof URL !== 'undefined' && URL.createObjectURL ? URL.createObjectURL(file) : '';
                 const reader = new FileReader();
                 reader.onloadend = () => {
-                  if (!isMountedRef.current) return;
+                  if (!isMountedRef.current || selectionGen !== photoSelectionGenRef.current) {
+                    if (localPreviewUrl && typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+                      try {
+                        URL.revokeObjectURL(localPreviewUrl);
+                      } catch {
+                        // Ignore cleanup errors
+                      }
+                    }
+                    return;
+                  }
+                  revokeTrackedObjectUrl();
+                  if (localPreviewUrl) {
+                    objectUrlRef.current = localPreviewUrl;
+                  }
                   const base64Url = reader.result as string;
                   const commaIdx = base64Url.indexOf(',');
                   const base64 = commaIdx !== -1 ? base64Url.slice(commaIdx + 1) : '';
-                  setPhotoUri(previewUrl || base64Url);
+                  setPhotoUri(localPreviewUrl || base64Url);
                   setPhotoData({
-                    uri: previewUrl || base64Url,
+                    uri: localPreviewUrl || base64Url,
                     base64,
                     mimeType,
                     file,

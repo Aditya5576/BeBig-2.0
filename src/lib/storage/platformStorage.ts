@@ -232,6 +232,25 @@ async function removeNativeValue(key: string): Promise<void> {
  * In-memory fallback map for environments without persistent storage.
  */
 const memoryStorage = new Map<string, string>();
+let webStoragePersistenceRequested = false;
+
+/**
+ * Requests persistent browser origin storage once on Web (iOS Safari + Android Chrome)
+ * to reduce silent IndexedDB eviction under storage pressure or Safari ITP heuristics.
+ */
+function requestWebStoragePersistence(): void {
+  if (webStoragePersistenceRequested) return;
+  webStoragePersistenceRequested = true;
+  if (
+    typeof navigator !== 'undefined' &&
+    navigator.storage &&
+    typeof navigator.storage.persist === 'function'
+  ) {
+    Promise.resolve(navigator.storage.persist()).catch(() => {
+      // Non-fatal: Safari/Chrome may decline outside standalone/installed context
+    });
+  }
+}
 
 /**
  * Opens or returns a connection to the IndexedDB database.
@@ -242,6 +261,7 @@ function openIDB(): Promise<IDBDatabase> {
       return reject(new Error('IndexedDB is not available in this environment.'));
     }
 
+    requestWebStoragePersistence();
     const request = indexedDB.open(DB_NAME, DB_VERSION);
 
     request.onupgradeneeded = () => {

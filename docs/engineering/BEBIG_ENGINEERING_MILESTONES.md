@@ -5,6 +5,7 @@
 | Phase 00 | Repository Baseline & Token-Saving Brain Governance | `OWNER APPROVED` | `AI_RULES.md`, `AI_BRAIN.md`, `AGENTS.md` |
 | Phase 01 | AI Skill Installation, Custom BeBig Skills & Registry Governance | `OWNER APPROVED` (`81b653a7`) | `.agents/SKILL_REGISTRY.md`, 8 skills in `.agents/skills/` |
 | Phase 02 | Offline Sync Engine Audit & Property-Based Testing (`fast-check`) | `IMPLEMENTED — READY FOR INDEPENDENT REVIEW` | `tests/OfflineSyncProperty.test.tsx` (`seed: 20261126`, `numRuns: 100`) |
+| Phase 03 | Cross-Platform PWA & Mobile Web Stability (iOS Safari + Android Chrome) | `IMPLEMENTED — READY FOR INDEPENDENT REVIEW` | `tests/ExercisePickerWebMemorySafety.test.tsx`, `tests/IOSWebKitExerciseCrashGuard.test.tsx`, `tests/PWAInstallation.test.tsx`, `tests/ProductionDeployment.test.tsx`, `tests/Batch2Enhancements.test.tsx` |
 
 ## Phase 02 Acceptance Test Matrix (`SYNC-01` – `SYNC-08`)
 
@@ -18,3 +19,17 @@
 | `SYNC-06` | Disconnect/reconnect reconciliation flushes retained outbox on recovery | `tests/OfflineSyncProperty.test.tsx`, `tests/SyncReliability.test.tsx` | `PASS` |
 | `SYNC-07` | Explicit HTTP `401`/`403` auth errors abort sync safely, retain local outbox, and recover | `tests/OfflineSyncProperty.test.tsx`, `tests/SyncReliability.test.tsx` | `PASS` |
 | `SYNC-08` | Head-of-line & Zod validation isolation / quarantine | `tests/SyncReliability.test.tsx`, `tests/Tier1ReliabilityAndZod.test.tsx` | `PASS` |
+
+## Phase 03 Acceptance Test Matrix (`PWA-01` – `PWA-07`, `MEM-01` – `MEM-02`)
+
+| ID | Invariant / Scenario | Verification Source | Status |
+|---|---|---|---|
+| `PWA-01` | Service Worker (`public/sw.js`) scopes cache deletion to `bebig-pwa-*` and preserves `bebig_db` | `public/sw.js`, `tests/IOSWebKitExerciseCrashGuard.test.tsx`, `tests/PWAInstallation.test.tsx` | `PASS` |
+| `PWA-02` | SW update coordinator blocks mid-workout reloads and binds reload authorization to session/revision | `src/lib/pwa/pwaUpdateCoordinator.ts`, `app/_layout.tsx`, `tests/Batch2Enhancements.test.tsx` | `PASS` |
+| `PWA-03` | IndexedDB origin persistence (`navigator.storage.persist()`) & `QuotaExceededError` cache eviction | `src/lib/storage/platformStorage.ts` | `PASS` |
+| `PWA-04` | Web static export, SPA rewrites (`vercel.json`), and `/sw.js` `no-store` cache headers | `app.json`, `vercel.json`, `tests/ProductionDeployment.test.tsx` | `PASS` |
+| `PWA-05` | Native Expo compatibility preserved alongside Web PWA guards (`BUILD-04`) | `npm run typecheck`, `npx eslint app src --no-cache` | `PASS` |
+| `PWA-06` | iPhone standalone Safari PWA install, offline launch, and mid-workout update deferral | Physical iOS Safari device verification | `PENDING MANUAL` |
+| `PWA-07` | Android Chrome PWA install, offline launch, and storage persistence check | Physical Android Chrome device verification | `PENDING MANUAL` |
+| `MEM-01` | Zero-`<Image>` picker + `expo-image` lazy loading (`loading="lazy"`, `cachePolicy="disk"`, `recyclingKey`) | `tests/ExercisePickerWebMemorySafety.test.tsx`, `tests/IOSWebKitExerciseCrashGuard.test.tsx` | `PASS` |
+| `MEM-02` | Bounded list virtualization (`windowSize=5` on Web) & `URL.revokeObjectURL` cleanup in `CustomExerciseForm` | `src/features/exercises/components/CustomExerciseForm.tsx`, `app/exercises/index.tsx`, `tests/ExercisePickerWebMemorySafety.test.tsx` | `PASS` |

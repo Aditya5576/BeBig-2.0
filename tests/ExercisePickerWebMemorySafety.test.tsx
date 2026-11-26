@@ -141,7 +141,8 @@ describe('ExercisePicker & Web Memory Safety', () => {
 
       const image = getByTestId('test-thumb-hybrid-image');
       expect(image).toBeTruthy();
-      expect(image.props.source.uri).toBe('https://wger.de/media/exercise-images/999/Bench_static_thumb.jpg');
+      const hybridSource = Array.isArray(image.props.source) ? image.props.source[0] : image.props.source;
+      expect(hybridSource?.uri).toBe('https://wger.de/media/exercise-images/999/Bench_static_thumb.jpg');
     });
 
     it('3. allows animated GIF demonstration when isDetailView is true', async () => {
@@ -156,10 +157,11 @@ describe('ExercisePicker & Web Memory Safety', () => {
 
       const image = getByTestId('test-thumb-detail-image');
       expect(image).toBeTruthy();
-      expect(image.props.source.uri).toBe('https://wger.de/media/exercise-images/1225/Squat-1.gif');
+      const detailSource = Array.isArray(image.props.source) ? image.props.source[0] : image.props.source;
+      expect(detailSource?.uri).toBe('https://wger.de/media/exercise-images/1225/Squat-1.gif');
     });
 
-    it('4. passes lazy loading and async decoding on Web platform', async () => {
+    it('4. passes lazy loading, disk cachePolicy, and recyclingKey on Web platform', async () => {
       const originalPlatform = Platform.OS;
       try {
         (Platform as any).OS = 'web';
@@ -173,7 +175,9 @@ describe('ExercisePicker & Web Memory Safety', () => {
 
         const image = getByTestId('test-thumb-web-image');
         expect(image.props.loading).toBe('lazy');
-        expect(image.props.decoding).toBe('async');
+        expect(image.props.decoding).toBeUndefined();
+        expect(image.props.cachePolicy).toBe('disk');
+        expect(image.props.recyclingKey).toBe('https://wger.de/media/exercise-images/999/Bench_static_thumb.jpg');
       } finally {
         (Platform as any).OS = originalPlatform;
       }

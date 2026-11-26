@@ -20,6 +20,7 @@ import {
   StyleSheet,
   StyleProp,
   ViewStyle,
+  Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useAppTheme } from '../../theme';
@@ -139,6 +140,7 @@ export const ExerciseThumbnail = React.memo(function ExerciseThumbnail({
           transition={150}
           cachePolicy="disk"
           recyclingKey={mediaUri}
+          {...(Platform.OS === 'web' ? { loading: 'lazy' as const } : {})}
           onError={() => setImageError(true)}
         />
       </View>
