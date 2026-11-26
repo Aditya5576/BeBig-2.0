@@ -18,6 +18,10 @@ Do not treat AI memory as source code. Actual project files are authoritative.
 - Escalate to Gemini Pro or Claude Sonnet/Opus only when explicitly needed for architecture or complex reasoning.
 - All agents must respect AI_RULES.md and this token-saving system.
 
+## Skill Routing & Provenance
+- Repo-local upstream and custom BeBig skills live in `.agents/skills/` and are cataloged in `.agents/SKILL_REGISTRY.md` (with source URLs, commit SHAs, licenses, and load triggers).
+- User-global engineering skills live in `C:\Users\adity\.agents\skills\`. Load only the skill relevant to the active task.
+
 ## Verified Skill Workflow
 When a task matches an installed engineering skill (located in `C:\Users\adity\.agents\skills\`):
 1. **Task-Specific Selection**: Select only the skill relevant to the task (never load multiple skills concurrently):

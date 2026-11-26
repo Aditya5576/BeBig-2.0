@@ -1,0 +1,3 @@
+﻿Source: https://github.com/getsentry/skills.git
+Commit: a582c51ee29d0f35e6ac321340796f77d43da733
+Path: skills/skill-scanner

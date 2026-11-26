@@ -1,0 +1,3 @@
+﻿Source: https://github.com/callstackincubator/agent-skills.git
+Commit: 59e9d17446a248b21d86f078fcd0bd2d36db1ca4
+Path: skills/react-native-best-practices
