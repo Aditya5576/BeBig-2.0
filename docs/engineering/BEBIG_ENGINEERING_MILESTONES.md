@@ -8,6 +8,7 @@
 | Phase 03 | Cross-Platform PWA & Mobile Web Stability (iOS Safari + Android Chrome) | `IMPLEMENTED — READY FOR INDEPENDENT REVIEW` | `tests/ExercisePickerWebMemorySafety.test.tsx`, `tests/IOSWebKitExerciseCrashGuard.test.tsx`, `tests/PWAInstallation.test.tsx`, `tests/ProductionDeployment.test.tsx`, `tests/Batch2Enhancements.test.tsx` |
 | Phase 04 | Performance & Bundle Optimization (iOS Safari PWA + Android Chrome PWA + Native Parity) | `IMPLEMENTED — READY FOR INDEPENDENT REVIEW` | `npm run build:web` (`5,340.25 KB` total JS across 3 chunks), `npx --yes knip --no-exit-code` |
 | Phase 05 | UI/UX & Accessibility Polish (iOS Safari PWA + Android Chrome PWA + Native Parity) | `IMPLEMENTED — READY FOR INDEPENDENT REVIEW` | `tests/AccessibilityAndTouchTargets.test.tsx`, `ActiveSetRow.tsx`, `app/workout/active.tsx` |
+| Phase 06 | Supabase & Backend Security Audit (RLS, Storage Policies, Edge Functions & Account Deletion) | `IMPLEMENTED — READY FOR INDEPENDENT REVIEW` | `tests/BackendSecurityAndRLS.test.tsx`, `supabase/migrations/`, `supabase/functions/delete-account/index.ts` |
 
 ## Phase 02 Acceptance Test Matrix (`SYNC-01` – `SYNC-08`)
 
@@ -53,3 +54,13 @@
 | `UI-02` | Safe-area insets (`useSafeAreaInsets`) protect bottom navigation & active workout footer on notched iOS/Android screens | `app/workout/active.tsx`, `src/components/navigation/BottomNavBar.tsx`, `tests/AccessibilityAndTouchTargets.test.tsx` | `PASS` |
 | `UI-03` | `KeyboardAvoidingView` & custom numeric keypad avoid obscured inputs during set logging | `app/workout/active.tsx`, `tests/ActiveWorkoutConcurrency.test.tsx` | `PASS` (physical Safari/Chrome visual check `PENDING MANUAL`) |
 | `UI-04` | Icon-only buttons & set controls expose `accessibilityRole`, `accessibilityLabel`, and `accessibilityState` | `app/workout/active.tsx`, `ActiveSetRow.tsx`, `tests/AccessibilityAndTouchTargets.test.tsx` | `PASS` |
+
+## Phase 06 Acceptance Test Matrix (`SEC-01` – `SEC-05`)
+
+| ID | Invariant / Scenario | Verification Source | Status |
+|---|---|---|---|
+| `SEC-01` | All user tables enable RLS with owner-scoped policies (`ai_usage_quotas` revoked from `PUBLIC`/`anon`/`authenticated`; `USING (true)` restricted to `service_role`) | `supabase/migrations/*.sql`, `tests/BackendSecurityAndRLS.test.tsx` | `PASS` |
+| `SEC-02` | Private `exercise-photos` (`public = false`) & `avatars` storage policies enforce `(storage.foldername(name))[1] = auth.uid()::text` | `supabase/migrations/20261016120000_create_exercise_photos_bucket.sql`, `20261118120500_harden_avatars_storage_privacy.sql`, `tests/BackendSecurityAndRLS.test.tsx` | `PASS` |
+| `SEC-03` | Zero `SUPABASE_SERVICE_ROLE_KEY` in `app/` or `src/`; `exercisePhotoCloudService` rejects cross-user deletes and uses signed URLs only | `src/features/exercises/services/exercisePhotoCloudService.ts`, `tests/BackendSecurityAndRLS.test.tsx` | `PASS` |
+| `SEC-04` | `delete-account` Edge Function returns `401` on missing/invalid JWTs and scopes storage, DB, and `auth.admin.deleteUser` strictly to verified `user.id` | `supabase/functions/delete-account/index.ts`, `tests/BackendSecurityAndRLS.test.tsx` | `PASS` |
+| `SEC-05` | Live 2-account staging penetration test (cross-account read/write/storage/deletion probes against remote Supabase) | Remote Supabase staging project | `PENDING MANUAL` |
