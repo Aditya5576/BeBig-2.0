@@ -1,8 +1,25 @@
 import { useAppTheme } from '../../src/features/theme';
 import React, { useState, useCallback, useMemo } from 'react';
-import { View, StyleSheet, Pressable, ActivityIndicator, Alert, TextInput } from 'react-native';
+import {
+  View,
+  StyleSheet,
+  Pressable,
+  ActivityIndicator,
+  Alert,
+  TextInput,
+  SectionList,
+  Platform,
+} from 'react-native';
 import { useRouter, useFocusEffect as routerFocusEffect } from 'expo-router';
-import { ScreenContainer, ScreenScrollView, Text, Button, Card, Icon, SyncStatusChip } from '../../src/components/ui';
+import {
+  ScreenContainer,
+  useBottomContentInset,
+  Text,
+  Button,
+  Card,
+  Icon,
+  SyncStatusChip,
+} from '../../src/components/ui';
 import {
   workoutRepository,
   WorkoutSession,
@@ -22,15 +39,253 @@ function HistorySyncStatus({ workoutId }: { workoutId: string }) {
 
 const useFocusEffect = routerFocusEffect || React.useEffect;
 
-interface MonthGroup {
+interface MonthSection {
   key: string;
   label: string;
-  workouts: WorkoutSession[];
+  data: WorkoutSession[];
 }
+
+interface HistoryWorkoutRowProps {
+  item: WorkoutSession;
+  isEditing: boolean;
+  editWorkoutName: string;
+  onEditWorkoutNameChange: (text: string) => void;
+  onPressItem: (id: string) => void;
+  onStartRename: (item: WorkoutSession) => void;
+  onSaveRename: (id: string) => void;
+  onCancelRename: () => void;
+  onDelete: (item: WorkoutSession) => void;
+  formatCompletedDate: (dateStr?: string) => string;
+  colors: any;
+  styles: any;
+}
+
+const HistoryWorkoutRow = React.memo(function HistoryWorkoutRow({
+  item,
+  isEditing,
+  editWorkoutName,
+  onEditWorkoutNameChange,
+  onPressItem,
+  onStartRename,
+  onSaveRename,
+  onCancelRename,
+  onDelete,
+  formatCompletedDate,
+  colors,
+  styles,
+}: HistoryWorkoutRowProps) {
+  const exercisesSnippet = item.exercises
+    .map((e) => e.exerciseName)
+    .slice(0, 3)
+    .join(' • ');
+
+  const notesCount = (item.exercises || []).reduce(
+    (acc, ex) =>
+      acc +
+      (ex.actualSets
+        ? ex.actualSets.filter((s) => typeof s.notes === 'string' && s.notes.trim().length > 0).length
+        : 0),
+    0
+  );
+
+  const tmDuration = calculateWorkoutTreadmillDuration(item);
+
+  return (
+    <Card style={[styles.workoutCard, { marginBottom: spacing.md }]} testID={`history-card-${item.id}`}>
+      <Pressable
+        testID={`history-item-${item.id}`}
+        onPress={() => {
+          if (isEditing) return;
+          onPressItem(item.id);
+        }}
+        style={styles.cardPressable}
+      >
+        <View style={styles.cardHeader}>
+          {isEditing ? (
+            <View style={styles.editModeContainer}>
+              <TextInput
+                style={styles.editInput}
+                value={editWorkoutName}
+                onChangeText={onEditWorkoutNameChange}
+                autoFocus
+                placeholder="Workout Name"
+                placeholderTextColor={colors.textMuted}
+              />
+              <View style={styles.editActions}>
+                <Button
+                  title="Cancel"
+                  onPress={onCancelRename}
+                  variant="outline"
+                  size="sm"
+                />
+                <Button
+                  title="Save"
+                  onPress={() => onSaveRename(item.id)}
+                  variant="primary"
+                  size="sm"
+                />
+              </View>
+            </View>
+          ) : (
+            <View style={{ gap: 4 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <Text
+                  variant="titleMedium"
+                  color="primary"
+                  style={[styles.workoutName, { flexShrink: 1 }]}
+                  numberOfLines={1}
+                >
+                  {item.name}
+                </Text>
+                <HistorySyncStatus workoutId={item.id} />
+                {notesCount > 0 && (
+                  <View style={styles.historyCardNoteBadge} testID={`history-card-notes-indicator-${item.id}`}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <Icon name="edit" size={10} color={colors.primary} />
+                      <Text style={styles.historyCardNoteText}>
+                        {notesCount} {notesCount === 1 ? 'note' : 'notes'}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+              </View>
+              <Text variant="caption" color="muted">
+                {formatCompletedDate(item.finishedAt || item.startedAt)}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {/* Metrics Row */}
+        <View style={styles.metricsRow}>
+          <View style={styles.metricItem}>
+            <Text variant="caption" color="muted" style={styles.metricLabel}>
+              DURATION
+            </Text>
+            <Text
+              variant="bodyBold"
+              color="primary"
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              style={styles.metricNumericValue}
+            >
+              {formatDuration(item.totalDuration)}
+            </Text>
+          </View>
+
+          <View style={styles.metricDivider} />
+
+          <View style={styles.metricItem}>
+            {(item.totalVolume ?? 0) === 0 && tmDuration > 0 ? (
+              <>
+                <Text variant="caption" color="muted" style={styles.metricLabel}>
+                  CARDIO
+                </Text>
+                <Text
+                  variant="bodyBold"
+                  color="accent"
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  style={styles.metricNumericValue}
+                >
+                  {formatTreadmillDuration(tmDuration)}
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text variant="caption" color="muted" style={styles.metricLabel}>
+                  VOLUME
+                </Text>
+                <Text
+                  variant="bodyBold"
+                  color="accent"
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  style={styles.metricNumericValue}
+                >
+                  {(item.totalVolume ?? 0).toLocaleString()} kg
+                </Text>
+              </>
+            )}
+          </View>
+
+          <View style={styles.metricDivider} />
+
+          <View style={styles.metricItem}>
+            <Text variant="caption" color="muted" style={styles.metricLabel}>
+              SETS
+            </Text>
+            <Text
+              variant="bodyBold"
+              color="primary"
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              style={styles.metricNumericValue}
+            >
+              {item.completedSetsCount ?? 0}
+            </Text>
+          </View>
+        </View>
+
+        {exercisesSnippet ? (
+          <Text
+            variant="caption"
+            color="secondary"
+            numberOfLines={1}
+            style={styles.exerciseList}
+          >
+            {exercisesSnippet}
+            {item.exercises.length > 3 ? '...' : ''}
+          </Text>
+        ) : null}
+      </Pressable>
+
+      {/* Card Actions Row: Rename + Delete + View Details */}
+      <View style={styles.cardActionsRow}>
+        <View style={styles.leftActions}>
+          <Pressable
+            onPress={() => onStartRename(item)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={styles.renameButton}
+          >
+            <Text variant="caption" style={styles.renameButtonText}>
+              Rename
+            </Text>
+          </Pressable>
+
+          <Pressable
+            testID={`delete-workout-${item.id}`}
+            onPress={() => onDelete(item)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={styles.deleteButton}
+            accessibilityLabel={`Delete ${item.name}`}
+            accessibilityRole="button"
+          >
+            <Text variant="caption" style={styles.deleteButtonText}>
+              Delete
+            </Text>
+          </Pressable>
+        </View>
+
+        <Pressable
+          onPress={() => onPressItem(item.id)}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          style={styles.viewDetailsButton}
+        >
+          <Text variant="caption" style={styles.viewDetailsText}>
+            View Details
+          </Text>
+          <Icon name="chevronRight" size={12} color={colors.primary} />
+        </Pressable>
+      </View>
+    </Card>
+  );
+});
 
 export default function WorkoutHistoryScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const bottomInset = useBottomContentInset();
 
   const router = useRouter();
 
@@ -47,7 +302,8 @@ export default function WorkoutHistoryScreen() {
       const data = await workoutRepository.getCompletedWorkouts();
       setWorkouts(data);
     } catch {
-      setWorkouts([]);
+      // Keep visible scoped snapshot during refresh if already loaded
+      setWorkouts((prev) => (prev.length > 0 ? prev : []));
     } finally {
       setLoading(false);
     }
@@ -114,7 +370,7 @@ export default function WorkoutHistoryScreen() {
     }
   };
 
-  const monthGroups = useMemo<MonthGroup[]>(() => {
+  const monthSections = useMemo<MonthSection[]>(() => {
     if (workouts.length === 0) return [];
 
     // Ensure workouts are sorted newest -> oldest
@@ -124,29 +380,92 @@ export default function WorkoutHistoryScreen() {
       return timeB - timeA;
     });
 
-    const groupMap = new Map<string, MonthGroup>();
-    const groups: MonthGroup[] = [];
+    const groupMap = new Map<string, MonthSection>();
+    const sections: MonthSection[] = [];
 
     for (const w of sortedWorkouts) {
       const dateStr = w.finishedAt || w.startedAt;
       const key = getMonthGroupKey(dateStr);
       const label = getMonthGroupLabel(dateStr);
 
-      let group = groupMap.get(key);
-      if (!group) {
-        group = { key, label, workouts: [] };
-        groupMap.set(key, group);
-        groups.push(group);
+      let section = groupMap.get(key);
+      if (!section) {
+        section = { key, label, data: [] };
+        groupMap.set(key, section);
+        sections.push(section);
       }
-      group.workouts.push(w);
+      section.data.push(w);
     }
 
-    return groups;
+    return sections;
   }, [workouts]);
 
-  return (
-    <ScreenContainer>
-      <ScreenScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+  const handlePressWorkout = useCallback(
+    (id: string) => {
+      router.push(`/workout/history/${id}` as any);
+    },
+    [router]
+  );
+
+  const handleStartRename = useCallback((item: WorkoutSession) => {
+    setEditingWorkoutId(item.id);
+    setEditWorkoutName(item.name);
+  }, []);
+
+  const handleCancelRename = useCallback(() => {
+    setEditingWorkoutId(null);
+  }, []);
+
+  const renderSectionHeader = useCallback(
+    ({ section }: { section: MonthSection }) => (
+      <View
+        style={[styles.monthHeader, { marginTop: spacing.md, marginBottom: spacing.sm }]}
+        testID={`history-month-header-${section.key}`}
+      >
+        <Text variant="titleMedium" color="primary" style={styles.monthTitle}>
+          {section.label}
+        </Text>
+        <View style={styles.monthBadge}>
+          <Text variant="caption" color="secondary" style={styles.monthBadgeText}>
+            {section.data.length} {section.data.length === 1 ? 'workout' : 'workouts'}
+          </Text>
+        </View>
+      </View>
+    ),
+    [styles]
+  );
+
+  const renderWorkoutItem = useCallback(
+    ({ item }: { item: WorkoutSession }) => (
+      <HistoryWorkoutRow
+        item={item}
+        isEditing={editingWorkoutId === item.id}
+        editWorkoutName={editWorkoutName}
+        onEditWorkoutNameChange={setEditWorkoutName}
+        onPressItem={handlePressWorkout}
+        onStartRename={handleStartRename}
+        onSaveRename={handleRenameWorkout}
+        onCancelRename={handleCancelRename}
+        onDelete={handleDeleteWorkout}
+        formatCompletedDate={formatCompletedDate}
+        colors={colors}
+        styles={styles}
+      />
+    ),
+    [
+      editingWorkoutId,
+      editWorkoutName,
+      handlePressWorkout,
+      handleStartRename,
+      handleCancelRename,
+      colors,
+      styles,
+    ]
+  );
+
+  const listHeader = useMemo(
+    () => (
+      <View style={{ gap: spacing.lg, marginBottom: spacing.sm }}>
         {/* Header */}
         <View style={styles.header}>
           <Pressable
@@ -207,277 +526,57 @@ export default function WorkoutHistoryScreen() {
             />
           </Card>
         ) : (
-          <>
-            {/* Weekly Performance Navigation Banner */}
-            <Pressable
-              testID="history-weekly-performance-card"
-              onPress={() => router.push('/workout/progress/weekly' as any)}
-              style={styles.weeklyPerformanceBanner}
-              accessibilityRole="button"
-              accessibilityLabel="View Weekly Performance and progressive overload"
-            >
-              <View style={styles.weeklyPerformanceBannerLeft}>
-                <View style={styles.weeklyPerformanceIconWrap}>
-                  <Icon name="chart" size={18} color={colors.primary} />
-                </View>
-                <View style={styles.weeklyPerformanceTextGroup}>
-                  <View style={styles.weeklyPerformanceBadgeRow}>
-                    <Text variant="titleMedium" color="primary" style={styles.weeklyPerformanceTitle}>
-                      Weekly Performance
-                    </Text>
-                  </View>
-                  <Text variant="caption" color="secondary" style={styles.weeklyPerformanceSubtitle}>
-                    Review your weekly training and progressive overload.
+          /* Weekly Performance Navigation Banner */
+          <Pressable
+            testID="history-weekly-performance-card"
+            onPress={() => router.push('/workout/progress/weekly' as any)}
+            style={styles.weeklyPerformanceBanner}
+            accessibilityRole="button"
+            accessibilityLabel="View Weekly Performance and progressive overload"
+          >
+            <View style={styles.weeklyPerformanceBannerLeft}>
+              <View style={styles.weeklyPerformanceIconWrap}>
+                <Icon name="chart" size={18} color={colors.primary} />
+              </View>
+              <View style={styles.weeklyPerformanceTextGroup}>
+                <View style={styles.weeklyPerformanceBadgeRow}>
+                  <Text variant="titleMedium" color="primary" style={styles.weeklyPerformanceTitle}>
+                    Weekly Performance
                   </Text>
                 </View>
+                <Text variant="caption" color="secondary" style={styles.weeklyPerformanceSubtitle}>
+                  Review your weekly training and progressive overload.
+                </Text>
               </View>
-              <Icon name="chevronRight" size={18} color={colors.primary} />
-            </Pressable>
-
-            {/* Month-Grouped Workouts List */}
-            <View style={styles.listContainer} testID="history-grouped-list">
-            {monthGroups.map((group) => (
-              <View
-                key={group.key}
-                style={styles.monthSection}
-                testID={`history-month-section-${group.key}`}
-              >
-                {/* Month Group Header */}
-                <View style={styles.monthHeader} testID={`history-month-header-${group.key}`}>
-                  <Text variant="titleMedium" color="primary" style={styles.monthTitle}>
-                    {group.label}
-                  </Text>
-                  <View style={styles.monthBadge}>
-                    <Text variant="caption" color="secondary" style={styles.monthBadgeText}>
-                      {group.workouts.length} {group.workouts.length === 1 ? 'workout' : 'workouts'}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Workouts in Month */}
-                <View style={styles.monthCardsContainer}>
-                  {group.workouts.map((item) => {
-                    const exercisesSnippet = item.exercises
-                      .map((e) => e.exerciseName)
-                      .slice(0, 3)
-                      .join(' • ');
-
-                    const notesCount = (item.exercises || []).reduce(
-                      (acc, ex) =>
-                        acc +
-                        (ex.actualSets
-                          ? ex.actualSets.filter((s) => typeof s.notes === 'string' && s.notes.trim().length > 0).length
-                          : 0),
-                      0
-                    );
-
-                    return (
-                      <Card key={item.id} style={styles.workoutCard} testID={`history-card-${item.id}`}>
-                        <Pressable
-                          testID={`history-item-${item.id}`}
-                          onPress={() => {
-                            if (editingWorkoutId === item.id) return;
-                            router.push(`/workout/history/${item.id}` as any);
-                          }}
-                          style={styles.cardPressable}
-                        >
-                          <View style={styles.cardHeader}>
-                            {editingWorkoutId === item.id ? (
-                              <View style={styles.editModeContainer}>
-                                <TextInput
-                                  style={styles.editInput}
-                                  value={editWorkoutName}
-                                  onChangeText={setEditWorkoutName}
-                                  autoFocus
-                                  placeholder="Workout Name"
-                                  placeholderTextColor={colors.textMuted}
-                                />
-                                <View style={styles.editActions}>
-                                  <Button
-                                    title="Cancel"
-                                    onPress={() => setEditingWorkoutId(null)}
-                                    variant="outline"
-                                    size="sm"
-                                  />
-                                  <Button
-                                    title="Save"
-                                    onPress={() => handleRenameWorkout(item.id)}
-                                    variant="primary"
-                                    size="sm"
-                                  />
-                                </View>
-                              </View>
-                            ) : (
-                              <View style={{ gap: 4 }}>
-                                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                                    <Text
-                                      variant="titleMedium"
-                                      color="primary"
-                                      style={[styles.workoutName, { flexShrink: 1 }]}
-                                      numberOfLines={1}
-                                    >
-                                      {item.name}
-                                    </Text>
-                                    <HistorySyncStatus workoutId={item.id} />
-                                    {notesCount > 0 && (
-                                      <View style={styles.historyCardNoteBadge} testID={`history-card-notes-indicator-${item.id}`}>
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                                          <Icon name="edit" size={10} color={colors.primary} />
-                                          <Text style={styles.historyCardNoteText}>
-                                            {notesCount} {notesCount === 1 ? 'note' : 'notes'}
-                                          </Text>
-                                        </View>
-                                      </View>
-                                    )}
-                                  </View>
-                                  <Text variant="caption" color="muted">
-                                    {formatCompletedDate(item.finishedAt || item.startedAt)}
-                                  </Text>
-                                </View>
-                            )}
-                          </View>
-
-                          {/* Metrics Row */}
-                          <View style={styles.metricsRow}>
-                            <View style={styles.metricItem}>
-                              <Text variant="caption" color="muted" style={styles.metricLabel}>
-                                DURATION
-                              </Text>
-                              <Text
-                                variant="bodyBold"
-                                color="primary"
-                                numberOfLines={1}
-                                adjustsFontSizeToFit
-                                style={styles.metricNumericValue}
-                              >
-                                {formatDuration(item.totalDuration)}
-                              </Text>
-                            </View>
-
-                            <View style={styles.metricDivider} />
-
-                            <View style={styles.metricItem}>
-                              {(() => {
-                                const tmDuration = calculateWorkoutTreadmillDuration(item);
-                                if ((item.totalVolume ?? 0) === 0 && tmDuration > 0) {
-                                  return (
-                                    <>
-                                      <Text variant="caption" color="muted" style={styles.metricLabel}>
-                                        CARDIO
-                                      </Text>
-                                      <Text
-                                        variant="bodyBold"
-                                        color="accent"
-                                        numberOfLines={1}
-                                        adjustsFontSizeToFit
-                                        style={styles.metricNumericValue}
-                                      >
-                                        {formatTreadmillDuration(tmDuration)}
-                                      </Text>
-                                    </>
-                                  );
-                                }
-                                return (
-                                  <>
-                                    <Text variant="caption" color="muted" style={styles.metricLabel}>
-                                      VOLUME
-                                    </Text>
-                                    <Text
-                                      variant="bodyBold"
-                                      color="accent"
-                                      numberOfLines={1}
-                                      adjustsFontSizeToFit
-                                      style={styles.metricNumericValue}
-                                    >
-                                      {(item.totalVolume ?? 0).toLocaleString()} kg
-                                    </Text>
-                                  </>
-                                );
-                              })()}
-                            </View>
-
-                            <View style={styles.metricDivider} />
-
-                            <View style={styles.metricItem}>
-                              <Text variant="caption" color="muted" style={styles.metricLabel}>
-                                SETS
-                              </Text>
-                              <Text
-                                variant="bodyBold"
-                                color="primary"
-                                numberOfLines={1}
-                                adjustsFontSizeToFit
-                                style={styles.metricNumericValue}
-                              >
-                                {item.completedSetsCount ?? 0}
-                              </Text>
-                            </View>
-                          </View>
-
-                          {exercisesSnippet ? (
-                            <Text
-                              variant="caption"
-                              color="secondary"
-                              numberOfLines={1}
-                              style={styles.exerciseList}
-                            >
-                              {exercisesSnippet}
-                              {item.exercises.length > 3 ? '...' : ''}
-                            </Text>
-                          ) : null}
-                        </Pressable>
-
-                        {/* Card Actions Row: Rename + Delete + View Details */}
-                        <View style={styles.cardActionsRow}>
-                          <View style={styles.leftActions}>
-                            <Pressable
-                              onPress={() => {
-                                setEditingWorkoutId(item.id);
-                                setEditWorkoutName(item.name);
-                              }}
-                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                              style={styles.renameButton}
-                            >
-                              <Text variant="caption" style={styles.renameButtonText}>
-                                Rename
-                              </Text>
-                            </Pressable>
-
-                            <Pressable
-                              testID={`delete-workout-${item.id}`}
-                              onPress={() => handleDeleteWorkout(item)}
-                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                              style={styles.deleteButton}
-                              accessibilityLabel={`Delete ${item.name}`}
-                              accessibilityRole="button"
-                            >
-                              <Text variant="caption" style={styles.deleteButtonText}>
-                                Delete
-                              </Text>
-                            </Pressable>
-                          </View>
-
-                          <Pressable
-                            onPress={() => router.push(`/workout/history/${item.id}` as any)}
-                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                            style={styles.viewDetailsButton}
-                          >
-                            <Text variant="caption" style={styles.viewDetailsText}>
-                              View Details
-                            </Text>
-                            <Icon name="chevronRight" size={12} color={colors.primary} />
-                          </Pressable>
-                        </View>
-                      </Card>
-                    );
-                  })}
-                </View>
-              </View>
-            ))}
-          </View>
-        </>
+            </View>
+            <Icon name="chevronRight" size={18} color={colors.primary} />
+          </Pressable>
         )}
-      </ScreenScrollView>
+      </View>
+    ),
+    [styles, colors, loading, workouts.length, router]
+  );
+
+  return (
+    <ScreenContainer>
+      <SectionList
+        testID="history-grouped-list"
+        sections={loading && workouts.length === 0 ? [] : monthSections}
+        keyExtractor={(item) => item.id}
+        renderItem={renderWorkoutItem}
+        renderSectionHeader={renderSectionHeader}
+        ListHeaderComponent={listHeader}
+        stickySectionHeadersEnabled={false}
+        showsVerticalScrollIndicator={false}
+        initialNumToRender={10}
+        maxToRenderPerBatch={8}
+        windowSize={7}
+        removeClippedSubviews={Platform.OS !== 'web'}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: Math.max(bottomInset, spacing.xxl) },
+        ]}
+      />
     </ScreenContainer>
   );
 }

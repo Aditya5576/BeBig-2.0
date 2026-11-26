@@ -88,7 +88,7 @@ export function ScreenContainer({
   children,
   style,
   edges = ['top', 'left', 'right'],
-  disableAnimation = false,
+  disableAnimation = true,
   noPaddingHorizontal = false,
 }: ScreenContainerProps) {
   const isTest = process.env.NODE_ENV === 'test';

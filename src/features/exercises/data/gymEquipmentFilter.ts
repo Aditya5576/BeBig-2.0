@@ -130,7 +130,8 @@ export function isEligibleForIndianCommercialGym(exercise: Exercise): {
  * Normalizes an exercise name to identify identical movements submitted by different contributors.
  */
 export function normalizeExerciseMovementKey(exercise: Exercise): string {
-  const normName = exercise.name
+  const sourceName = exercise.canonicalName ?? exercise.name;
+  const normName = sourceName
     .toLowerCase()
     .replace(/[^a-z0-9]/g, ' ')
     .replace(/\s+/g, ' ')
@@ -168,6 +169,7 @@ export function filterCatalogueForIndianGym(
     isSearchActive = false,
   } = options;
 
+  const seenIds = new Set<string>();
   const seenKeys = new Map<string, Exercise>();
   const filtered: Exercise[] = [];
   const trueDuplicates: Array<{ id: string; name: string; duplicateOf: string }> = [];
@@ -180,6 +182,13 @@ export function filterCatalogueForIndianGym(
   let eligibleIndianGymCount = 0;
 
   for (const exercise of exercises) {
+    if (exercise.id && seenIds.has(exercise.id)) {
+      continue;
+    }
+    if (exercise.id) {
+      seenIds.add(exercise.id);
+    }
+
     const { isEligible, reason } = isEligibleForIndianCommercialGym(exercise);
 
     if (isEligible) {
@@ -195,11 +204,11 @@ export function filterCatalogueForIndianGym(
       }
     }
 
-    // Check true duplicate
+    // Track canonical movement duplicates for diagnostics without dropping distinct exercise IDs during browse
     const key = normalizeExerciseMovementKey(exercise);
     const existing = seenKeys.get(key);
 
-    if (existing) {
+    if (existing && existing.id !== exercise.id) {
       trueDuplicatesCount++;
       if (trueDuplicates.length < 10) {
         trueDuplicates.push({
@@ -207,9 +216,6 @@ export function filterCatalogueForIndianGym(
           name: exercise.name,
           duplicateOf: `${existing.name} (${existing.id})`,
         });
-      }
-      if (!allowDuplicates && !isSearchActive) {
-        continue;
       }
     } else {
       seenKeys.set(key, exercise);

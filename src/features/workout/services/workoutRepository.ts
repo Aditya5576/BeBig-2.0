@@ -236,11 +236,13 @@ export function mergeSessionDeep(
         const storedChangedNotes = (storedSet.notes || '').trim() !== (baseSet.notes || '').trim();
         if (storedChangedNotes && !incChangedNotes) {
           notes = storedSet.notes;
+        } else if (incChangedNotes) {
+          notes = incSet.notes;
         } else {
-          notes = (incSet.notes && incSet.notes.trim()) ? incSet.notes : (storedSet.notes || incSet.notes);
+          notes = storedSet.notes !== undefined ? storedSet.notes : incSet.notes;
         }
       } else {
-        notes = (incSet.notes && incSet.notes.trim()) ? incSet.notes : (storedSet.notes || incSet.notes);
+        notes = incSet.notes !== undefined ? incSet.notes : storedSet.notes;
       }
 
       const setType = incSet.setType || storedSet.setType || 'normal';
@@ -325,6 +327,12 @@ export function mergeSessionDeep(
     };
 
     const trackingMode = incEx.trackingMode || storedEx.trackingMode || baseEx?.trackingMode;
+    const exerciseName =
+      helperMergeScalarEx(
+        baseEx?.exerciseName,
+        storedEx.exerciseName,
+        incEx.exerciseName,
+      ) || incEx.exerciseName || storedEx.exerciseName;
     const plannedTargetInclinePercent = helperMergeScalarEx(
       baseEx?.plannedTargetInclinePercent,
       storedEx.plannedTargetInclinePercent,
@@ -344,6 +352,7 @@ export function mergeSessionDeep(
     mergedExercises.push({
       ...storedEx,
       ...incEx,
+      exerciseName,
       ...(trackingMode ? { trackingMode } : {}),
       ...(plannedTargetInclinePercent !== undefined ? { plannedTargetInclinePercent } : {}),
       ...(plannedTargetSpeedKph !== undefined ? { plannedTargetSpeedKph } : {}),
@@ -724,6 +733,27 @@ export class WorkoutRepository {
     return {
       ...workout,
       exercises: [...workout.exercises, newExercise],
+    };
+  }
+
+  /**
+   * Renames an exercise's display name on an in-memory WorkoutSession while keeping
+   * its canonical `exerciseId` and `trackingMode` intact so PRs and history never split.
+   */
+  renameExerciseInWorkout(
+    workout: WorkoutSession,
+    exerciseId: string,
+    newName: string,
+  ): WorkoutSession {
+    const trimmed = newName.trim();
+    if (!trimmed) return workout;
+    const updatedExercises = workout.exercises.map((ex) =>
+      ex.exerciseId === exerciseId ? { ...ex, exerciseName: trimmed } : ex,
+    );
+    return {
+      ...workout,
+      exercises: updatedExercises,
+      updatedAt: new Date().toISOString(),
     };
   }
 

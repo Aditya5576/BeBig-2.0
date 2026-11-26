@@ -17,6 +17,16 @@ export interface ReleaseNoteItem {
 }
 
 export const CURRENT_RELEASE_NOTES: Record<string, ReleaseNoteItem> = {
+  '2.7.0': {
+    version: '2.7.0',
+    title: "What's New in BeBig 2.7.0",
+    highlights: [
+      'Treadmill Cardio Tracking Mode: Dedicated Incline %, Speed km/h, and Time columns isolated from strength volume & PRs.',
+      'Standard 0–4 RIR Keypad & Set Notes: Restored clean 0–4 RIR keypad and tappable collapsed set-note previews.',
+      'Rename Any Exercise & Smarter Search: User-scoped display names, gym synonyms/typos, and 14-day recent exercises.',
+      'Safe PWA Updates & Faster Navigation: Versioned update toast that flushes active workouts before reloading.',
+    ],
+  },
   '2.4.1': {
     version: '2.4.1',
     title: "What's New in BeBig 2.4.1",
@@ -105,12 +115,10 @@ export const CURRENT_RELEASE_NOTES: Record<string, ReleaseNoteItem> = {
 };
 
 export const defaultReleaseHighlights: string[] = [
-  'Verified Exercise Demonstration Media with licensing attribution',
-  'Unified Custom Exercise Creation with photo persistence',
-  'Exercise catalogue refined for Indian commercial gym equipment',
-  'Smooth exercise library navigation and stable search typing',
-  'Factual Weekly Performance and progressive overload analytics',
-  'Data Export to Excel (.xlsx) and PDF (.pdf)',
+  'Treadmill Cardio Tracking Mode with Incline %, Speed km/h, and Time',
+  'Standard 0–4 RIR numeric keypad and tappable collapsed set-note previews',
+  'Rename any exercise with user-scoped display names and smarter gym-synonym search',
+  '14-day Recent Exercises, safe versioned PWA updates, and faster navigation',
 ];
 
 export class ReleaseNotesService {

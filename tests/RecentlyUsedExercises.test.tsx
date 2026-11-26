@@ -145,83 +145,90 @@ describe('BeBig 2.0 — Recently Used Exercises Feature', () => {
 
   // 1. RECENT EXERCISE EXTRACTION & ORDERING LOGIC
   describe('1. Recent Exercise Extraction & Ordering Logic', () => {
+    const dayMs = 24 * 60 * 60 * 1000;
+    const pinnedNowMs = Date.UTC(2026, 10, 26, 12, 0, 0);
+    const daysAgoIso = (days: number) => new Date(Date.now() - days * dayMs).toISOString();
+    const completedSet = (id: string) => [
+      { id, setNumber: 1, weight: 60, reps: 10, completed: true },
+    ];
+
     it('returns empty array when history is empty or unavailable', () => {
       expect(extractRecentExerciseReferences([])).toEqual([]);
       expect(extractRecentExerciseReferences(null as any)).toEqual([]);
     });
 
     it('sorts exercises by newest workout date and deduplicates multiple occurrences', () => {
-      // Workout 1: Oldest (Oct 1)
+      // Workout 1: Oldest (9 days ago)
       const workout1: WorkoutSession = {
         id: 'w1',
         name: 'Full Body A',
         status: 'completed',
-        startedAt: '2026-10-01T10:00:00Z',
-        finishedAt: '2026-10-01T11:00:00Z',
+        startedAt: daysAgoIso(9),
+        finishedAt: daysAgoIso(9),
         exercises: [
           {
             exerciseId: 'ex_bench',
             exerciseName: 'Barbell Bench Press',
             categoryName: 'Chest',
             order: 0,
-            actualSets: [],
+            actualSets: completedSet('s_w1_1'),
           },
           {
             exerciseId: 'ex_squat',
             exerciseName: 'Barbell Back Squat',
             categoryName: 'Legs',
             order: 1,
-            actualSets: [],
+            actualSets: completedSet('s_w1_2'),
           },
         ],
       };
 
-      // Workout 2: Middle (Oct 5)
+      // Workout 2: Middle (5 days ago)
       const workout2: WorkoutSession = {
         id: 'w2',
         name: 'Legs & Pull',
         status: 'completed',
-        startedAt: '2026-10-05T10:00:00Z',
-        finishedAt: '2026-10-05T11:00:00Z',
+        startedAt: daysAgoIso(5),
+        finishedAt: daysAgoIso(5),
         exercises: [
           {
             exerciseId: 'ex_deadlift',
             exerciseName: 'Conventional Deadlift',
             categoryName: 'Back',
             order: 0,
-            actualSets: [],
+            actualSets: completedSet('s_w2_1'),
           },
           {
-            exerciseId: 'ex_squat', // Repeated squat, should not override newer Oct 5 position over Oct 1
+            exerciseId: 'ex_squat', // Repeated squat, should not override newer 5d position over 9d
             exerciseName: 'Barbell Back Squat',
             categoryName: 'Legs',
             order: 1,
-            actualSets: [],
+            actualSets: completedSet('s_w2_2'),
           },
         ],
       };
 
-      // Workout 3: Newest (Oct 10)
+      // Workout 3: Newest (1 day ago)
       const workout3: WorkoutSession = {
         id: 'w3',
         name: 'Upper Hypertrophy',
         status: 'completed',
-        startedAt: '2026-10-10T10:00:00Z',
-        finishedAt: '2026-10-10T11:00:00Z',
+        startedAt: daysAgoIso(1),
+        finishedAt: daysAgoIso(1),
         exercises: [
           {
             exerciseId: 'custom_lat_raise',
             exerciseName: 'Cable Lateral Raise',
             categoryName: 'Shoulders',
             order: 0,
-            actualSets: [],
+            actualSets: completedSet('s_w3_1'),
           },
           {
-            exerciseId: 'ex_bench', // Repeated bench, newest on Oct 10
+            exerciseId: 'ex_bench', // Repeated bench, newest 1d ago
             exerciseName: 'Barbell Bench Press',
             categoryName: 'Chest',
             order: 1,
-            actualSets: [],
+            actualSets: completedSet('s_w3_2'),
           },
         ],
       };
@@ -229,11 +236,6 @@ describe('BeBig 2.0 — Recently Used Exercises Feature', () => {
       // Pass in mixed order to verify chronological sorting
       const refs = extractRecentExerciseReferences([workout1, workout3, workout2]);
 
-      // Expected order:
-      // 1. Cable Lateral Raise (Oct 10)
-      // 2. Barbell Bench Press (Oct 10)
-      // 3. Conventional Deadlift (Oct 5)
-      // 4. Barbell Back Squat (Oct 5)
       expect(refs.map((r) => r.exerciseId)).toEqual([
         'custom_lat_raise',
         'ex_bench',
@@ -247,29 +249,29 @@ describe('BeBig 2.0 — Recently Used Exercises Feature', () => {
         id: 'w_repeat',
         name: 'Chest Focus',
         status: 'completed',
-        startedAt: '2026-10-10T10:00:00Z',
-        finishedAt: '2026-10-10T11:00:00Z',
+        startedAt: daysAgoIso(2),
+        finishedAt: daysAgoIso(2),
         exercises: [
           {
             exerciseId: 'ex_bench',
             exerciseName: 'Barbell Bench Press',
             categoryName: 'Chest',
             order: 0,
-            actualSets: [],
+            actualSets: completedSet('s_rep_1'),
           },
           {
             exerciseId: 'ex_incline_db',
             exerciseName: 'Incline Dumbbell Press',
             categoryName: 'Chest',
             order: 1,
-            actualSets: [],
+            actualSets: completedSet('s_rep_2'),
           },
           {
             exerciseId: 'ex_bench', // Repeated in same session
             exerciseName: 'Barbell Bench Press',
             categoryName: 'Chest',
             order: 2,
-            actualSets: [],
+            actualSets: completedSet('s_rep_3'),
           },
         ],
       };
@@ -285,16 +287,16 @@ describe('BeBig 2.0 — Recently Used Exercises Feature', () => {
         id: 'w_limit',
         name: 'Full Body',
         status: 'completed',
-        startedAt: '2026-10-10T10:00:00Z',
-        finishedAt: '2026-10-10T11:00:00Z',
+        startedAt: new Date(pinnedNowMs - 2 * dayMs).toISOString(),
+        finishedAt: new Date(pinnedNowMs - 2 * dayMs).toISOString(),
         exercises: [
-          { exerciseId: 'ex1', exerciseName: 'E1', categoryName: 'Chest', order: 0, actualSets: [] },
-          { exerciseId: 'ex2', exerciseName: 'E2', categoryName: 'Back', order: 1, actualSets: [] },
-          { exerciseId: 'ex3', exerciseName: 'E3', categoryName: 'Legs', order: 2, actualSets: [] },
+          { exerciseId: 'ex1', exerciseName: 'E1', categoryName: 'Chest', order: 0, actualSets: completedSet('sl1') },
+          { exerciseId: 'ex2', exerciseName: 'E2', categoryName: 'Back', order: 1, actualSets: completedSet('sl2') },
+          { exerciseId: 'ex3', exerciseName: 'E3', categoryName: 'Legs', order: 2, actualSets: completedSet('sl3') },
         ],
       };
 
-      const refs = extractRecentExerciseReferences([workout], 2);
+      const refs = extractRecentExerciseReferences([workout], 2, { nowMs: pinnedNowMs });
       expect(refs.length).toBe(2);
       expect(refs.map((r) => r.exerciseId)).toEqual(['ex1', 'ex2']);
     });
@@ -302,34 +304,37 @@ describe('BeBig 2.0 — Recently Used Exercises Feature', () => {
 
   // 2. RECENT EXERCISES SERVICE RESOLUTION
   describe('2. Recent Exercises Service Resolution', () => {
-    it('resolves full exercise models with custom and cached entries', async () => {
+    const dayMs = 24 * 60 * 60 * 1000;
+    const recentIso = new Date(Date.now() - 1 * dayMs).toISOString();
+
+    it('resolves full exercise models with custom, cached, and treadmill entries', async () => {
       const workout: WorkoutSession = {
         id: 'w_res',
         name: 'Hybrid Routine',
         status: 'completed',
-        startedAt: '2026-10-11T10:00:00Z',
-        finishedAt: '2026-10-11T11:00:00Z',
+        startedAt: recentIso,
+        finishedAt: recentIso,
         exercises: [
           {
             exerciseId: 'custom_lat_raise',
             exerciseName: 'Cable Lateral Raise',
             categoryName: 'Shoulders',
             order: 0,
-            actualSets: [],
+            actualSets: [{ id: 'sr1', setNumber: 1, weight: 12, reps: 15, completed: true }],
           },
           {
             exerciseId: 'ex_bench',
             exerciseName: 'Barbell Bench Press',
             categoryName: 'Chest',
             order: 1,
-            actualSets: [],
+            actualSets: [{ id: 'sr2', setNumber: 1, weight: 80, reps: 8, completed: true }],
           },
           {
             exerciseId: 'ex_unregistered',
             exerciseName: 'Synthesized Dip',
             categoryName: 'Chest',
             order: 2,
-            actualSets: [],
+            actualSets: [{ id: 'sr3', setNumber: 1, weight: 0, reps: 12, completed: true }],
           },
         ],
       };

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Pressable, LayoutChangeEvent, useWindowDimensions } from 'react-native';
+import { View, StyleSheet, Pressable, LayoutChangeEvent, useWindowDimensions, Modal, TextInput } from 'react-native';
 import { useAppTheme } from '../../theme';
 import { Text, Card, Button, Icon } from '../../../components/ui';
+import { DOMAIN_LIMITS } from '../../../constants/domainLimits';
 import { WorkoutExercise, WorkoutSet } from '../types';
 import { SupersetDisplayInfo } from '../utils/supersetUtils';
 import {
@@ -35,6 +36,7 @@ export interface ActiveExerciseCardProps {
   onAddSet: (exerciseId: string) => void;
   onDeleteSet: (exerciseId: string, setId: string) => void;
   onToggleNotes: (setId: string) => void;
+  onCloseNotes?: (setId: string) => void;
   onUpdateSetField: (
     exerciseId: string,
     setId: string,
@@ -47,6 +49,7 @@ export interface ActiveExerciseCardProps {
     pendingUpdates?: Partial<WorkoutSet>,
   ) => void;
   onPressExerciseDetail?: (exerciseId: string, exerciseName: string) => void;
+  onRenameExercise?: (exerciseId: string, newName: string) => Promise<void> | void;
   onLayout?: (e: LayoutChangeEvent) => void;
   style?: any;
   isCustomKeypadActive?: boolean;
@@ -83,9 +86,11 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(function A
   onAddSet,
   onDeleteSet,
   onToggleNotes,
+  onCloseNotes,
   onUpdateSetField,
   onToggleCompleteSet,
   onPressExerciseDetail,
+  onRenameExercise,
   onLayout,
   style,
   isCustomKeypadActive,
@@ -97,6 +102,29 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(function A
   const styles = createStyles(colors);
   const { width: windowWidth } = useWindowDimensions();
   const [isLastSessionExpanded, setIsLastSessionExpanded] = useState(false);
+  const [isRenameModalVisible, setIsRenameModalVisible] = useState(false);
+  const [renameText, setRenameText] = useState(exercise.exerciseName);
+  const [renameSaving, setRenameSaving] = useState(false);
+  const [renameError, setRenameError] = useState<string | null>(null);
+
+  const handleConfirmRename = async () => {
+    if (!onRenameExercise) return;
+    const trimmed = renameText.trim();
+    if (!trimmed) {
+      setRenameError('Exercise name is required.');
+      return;
+    }
+    try {
+      setRenameSaving(true);
+      setRenameError(null);
+      await onRenameExercise(exercise.exerciseId, trimmed);
+      setIsRenameModalVisible(false);
+    } catch (err: any) {
+      setRenameError(err?.message || 'Could not rename exercise.');
+    } finally {
+      setRenameSaving(false);
+    }
+  };
 
   const isTreadmill = isTreadmillExercise(exercise);
   const resolvedOverloadNudge = isTreadmill
@@ -306,6 +334,22 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(function A
               {exercise.exerciseName}
             </Text>
           )}
+          {onRenameExercise ? (
+            <Pressable
+              testID={`rename-active-exercise-${exercise.exerciseId}`}
+              onPress={() => {
+                setRenameText(exercise.exerciseName);
+                setRenameError(null);
+                setIsRenameModalVisible(true);
+              }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              style={styles.renameTriggerButton}
+              accessibilityRole="button"
+              accessibilityLabel={`Rename ${exercise.exerciseName}`}
+            >
+              <Icon name="edit" size={14} strokeWidth={2.2} color={colors.textMuted} />
+            </Pressable>
+          ) : null}
         </View>
       </View>
 
@@ -509,6 +553,7 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(function A
             canDelete={exercise.actualSets.length > 1 && !set.completed}
             isNotesExpanded={expandedNotesSetIds[set.id]}
             onToggleNotes={onToggleNotes}
+            onCloseNotes={onCloseNotes}
             onDeleteSet={onDeleteSet}
             onUpdateSetField={onUpdateSetField}
             onToggleCompleteSet={onToggleCompleteSet}
@@ -528,6 +573,56 @@ export const ActiveExerciseCard = React.memo<ActiveExerciseCardProps>(function A
         size="md"
         style={styles.addSetButton}
       />
+
+      <Modal
+        visible={isRenameModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !renameSaving && setIsRenameModalVisible(false)}
+      >
+        <View style={styles.renameModalBackdrop}>
+          <View style={styles.renameModalCard}>
+            <Text variant="titleMedium" color="primary">
+              Rename Exercise
+            </Text>
+            <TextInput
+              testID={`rename-active-exercise-input-${exercise.exerciseId}`}
+              value={renameText}
+              onChangeText={setRenameText}
+              placeholder="Exercise name"
+              placeholderTextColor={colors.textMuted}
+              maxLength={DOMAIN_LIMITS.EXERCISE_NAME_MAX_LENGTH}
+              style={styles.renameModalInput}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={() => void handleConfirmRename()}
+            />
+            {renameError ? (
+              <Text variant="caption" style={{ color: colors.error || '#EF4444' }}>
+                {renameError}
+              </Text>
+            ) : null}
+            <View style={styles.renameModalActions}>
+              <Button
+                testID={`cancel-active-exercise-rename-${exercise.exerciseId}`}
+                title="Cancel"
+                variant="outline"
+                size="sm"
+                onPress={() => setIsRenameModalVisible(false)}
+                disabled={renameSaving}
+              />
+              <Button
+                testID={`save-active-exercise-rename-${exercise.exerciseId}`}
+                title="Save"
+                variant="primary"
+                size="sm"
+                loading={renameSaving}
+                onPress={() => void handleConfirmRename()}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
     </Card>
   );
 });
@@ -840,5 +935,42 @@ const createStyles = (colors: any) =>
       opacity: 0,
       width: 0,
       height: 0,
+    },
+    renameTriggerButton: {
+      padding: 6,
+      marginLeft: 4,
+      borderRadius: 8,
+    },
+    renameModalBackdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.65)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 20,
+    },
+    renameModalCard: {
+      width: '100%',
+      maxWidth: 400,
+      backgroundColor: colors.surface,
+      borderRadius: radii.lg,
+      borderWidth: 1,
+      borderColor: colors.borderLight,
+      padding: 16,
+      gap: 12,
+    },
+    renameModalInput: {
+      backgroundColor: colors.surfaceElevated,
+      borderWidth: 1,
+      borderColor: colors.borderLight,
+      borderRadius: radii.md,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      color: colors.textPrimary,
+      fontSize: 15,
+    },
+    renameModalActions: {
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      gap: 8,
     },
   });

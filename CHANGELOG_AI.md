@@ -3,6 +3,73 @@
 - Refined PR typography and history UI.
 - Stabilized Cinematic Splash Screen with BeBig Barbell Crest.
 
+## [Final v2.7.0 Release Fixes & Verification] — 2026-11-26
+
+### Changes
+1. **PWA Cache SHA Stamp & Active-Workout Reload Race Guard (`public/sw.js`, `src/lib/pwa/pwaUpdateCoordinator.ts`, `app/_layout.tsx`, `app/workout/active.tsx`, `tests/Batch2Enhancements.test.tsx`)**:
+   - Replaced sentinel self-comparison in `public/sw.js` with `!CACHE_VERSION.startsWith('__BEBIG_')` so emitted `dist/sw.js` computes `CACHE_NAME` as `bebig-pwa-v2.7.0-<sha>`.
+   - Bound reload authorization to `{ sessionId, revision, targetVersion, targetSha, workerScriptUrl }` via `canReloadNow` / `isPwaReloadAuthorized`.
+   - Fixed active-workout reload race guard (`app/workout/active.tsx` `verifyCurrentSnapshot` + `app/_layout.tsx` deferred reload): rejects Home-authorized reload (`sessionId: null`) when a live workout opens before `controllerchange` and defers until the workout unmounts/completes.
+2. **ID-Based Browse Deduplication (`src/features/exercises/data/gymEquipmentFilter.ts`, `src/features/exercises/services/exerciseRepository.ts`, `tests/ExerciseRename.test.tsx`, `tests/IndianGymCatalogueFilter.test.ts`)**:
+   - Deduplicated `filterCatalogueForIndianGym` browse results strictly by canonical `id` (`seenIds`) while retaining movement-key diagnostic stats.
+   - Removed `customNamesLower` suppression in `exerciseRepository.ts` so global catalog and custom exercises deduplicate strictly by canonical `id`.
+
+### Verification
+- Targeted Jest suites (`11` suites, `--maxWorkers=2 --detectOpenHandles`): `128/128` passed, `0` open handles.
+- `tests/IndianGymCatalogueFilter.test.ts`: `1/1` suite, `5/5` passed.
+- `npm run typecheck`: exited `0` (`0` errors).
+- `npm run lint`: exited `0` (`0` errors, `42` warnings).
+- `npm run build:web`: exited `0` (`45` static routes exported; `dist/sw.js` stamped `SW_VERSION=2.7.0`, `CACHE_VERSION=2.7.0-6f27a38`, `sha=6f27a38`).
+
+## [Codex v2.7.0 Audit Fixes & Open Handle Cleanup] — 2026-11-26 — Option A Local Verification
+
+### Changes
+1. **Set Notes After "Done" & Open Handle Cleanup (`ActiveSetRow.tsx`, `app/workout/active.tsx`, `workoutRepository.ts`, `tests/ActiveWorkoutSetNotesHotfix.test.tsx`)**:
+   - Restored collapsed note preview pill (`set-note-preview-...`) beneath both strength and treadmill rows, synced `localNotes` with `set.notes ?? ''`, and routed `Done` / close via `closeNotesForSet` with immediate flush (`surfaceError: true`).
+   - Updated `mergeSessionDeep` so deliberate empty note (`''`) wins over `base`; guarded `flushActiveWorkout` with `isMountedRef` so unmount never calls `setSession`.
+   - Awaited async RNTL `cleanup()` in `tests/ActiveWorkoutSetNotesHotfix.test.tsx` (`beforeEach`, `afterEach`, and minimize/reopen flow), eliminating the dangling `ActiveWorkoutTimer` handle (`0` open handles).
+2. **Exercise Rename Offline Search & Deduplication (`types.ts`, `exerciseNameOverrideStorage.ts`, `exerciseRepository.ts`, `gymEquipmentFilter.ts`, `tests/ExerciseRename.test.tsx`)**:
+   - Added optional `canonicalName?: string` on `Exercise` and preserved canonical tracking mode before applying display overrides.
+   - Updated `getCachedExercises` to project `exerciseNameOverrideStorage` overrides before `filterAndRankExercises`, key memoization with `customExercisesVersion`, and retain distinct IDs with identical display names (`seenIds` in `filterCatalogueForIndianGym`; `normalizeExerciseMovementKey` uses `canonicalName ?? name`).
+3. **Recent Exercises Regression Fixtures (`tests/RecentlyUsedExercises.test.tsx`)**:
+   - Updated test fixtures to use relative timestamps (`daysAgoIso`) within the 14-day window (plus `pinnedNowMs` for `limit`) and `completed: true` sets.
+4. **PWA Update Suppression, Revision-Bound Reload & Build Cache Stamp (`pwaUpdateCoordinator.ts`, `app/_layout.tsx`, `app/workout/active.tsx`, `public/sw.js`, `scripts/build-web.js`, `tests/Batch2Enhancements.test.tsx`)**:
+   - Bound reload authorization to `{ sessionId, revision, workerScriptUrl }`, added `subscribeActiveWorkoutPresence` / `isActiveWorkoutMounted` to suppress `<PwaUpdateCard>` during active workouts, and registered `registerActiveWorkoutUpdateGuard` in `app/workout/active.tsx`.
+   - Added `SW_VERSION`, `CACHE_VERSION`, `SW_SHA`, and `SW_HIGHLIGHT` sentinels in `public/sw.js`; updated `scripts/build-web.js` to prefer `app.json` (`expo.version`) and stamp `dist/sw.js` (`SW_VERSION=2.7.0`, `CACHE_VERSION=2.7.0-6f27a38`, `sha=6f27a38`).
+5. **Home Parallel Reads & Active Card Memoization (`app/home.tsx`, `app/workout/active.tsx`)**:
+   - Launched `identityPromise` (`profileService.getProfile` / `guestStorage.getOnboardingData`) in parallel with `Promise.allSettled` local dashboard reads in `app/home.tsx`.
+   - Memoized card callbacks (`useCallback`), per-exercise `expandedNotesByExercise` (`EMPTY_NOTES_MAP` fallback), `getCardLayoutHandler`, and static `StyleSheet` margin styles in `app/workout/active.tsx`.
+
+### Verification
+- Targeted Jest suites (`11` suites, `--maxWorkers=2 --detectOpenHandles`): `125/125` passed, `0` open handles.
+- `tests/IndianGymCatalogueFilter.test.ts`: `1/1` suite, `5/5` passed.
+- `npm run typecheck`: exited `0` (`0` errors).
+- `npm run lint`: exited `0` (`0` errors, `41` warnings).
+- `npm run build:web`: exited `0` (`45` static routes exported; `dist/sw.js` stamped with `SW_VERSION=2.7.0`, `CACHE_VERSION=2.7.0-6f27a38`, `sha=6f27a38`).
+
+## [Codex-Audited 7 Fixes & Enhancements (Batch 1 & 2)] — 2026-11-25 — Option A Local Verification
+
+### Changes
+1. **Set Notes Visible After "Done" & Safe CAS Clear (`ActiveSetRow.tsx`, `ActiveExerciseCard.tsx`, `app/workout/active.tsx`, `workoutRepository.ts`)**:
+   - Restored tappable collapsed note preview row (`set-note-preview-...`) beneath both strength and treadmill rows whenever closed and nonblank.
+   - Synced `localNotes` with `set.notes ?? ''` and routed `Done` / `onSubmitEditing` to `closeNotesForSet` (immediate flush + retryable error Alert without losing draft).
+   - Fixed `mergeSessionDeep` so deliberate empty note (`''`) wins during CAS rebase when changed from `base`.
+2. **Rename Any Exercise (`exerciseNameOverrideStorage.ts`, `exerciseRepository.ts`, `exerciseTracking.ts`, `app/exercises/`, `ActiveExerciseCard.tsx`, `app/workout/active.tsx`)**:
+   - Added user-scoped `exerciseNameOverrideStorage` with serialized writes and restore-original support.
+   - Added `exerciseRepository.renameExercise(id, name, scope)` (reuses `updateCustomExercise` for custom exercises, stores override for catalog/seed exercises, enforces 80-char max).
+   - Ensured `resolveExerciseTrackingMode` resolves `trackingMode` before projecting display names (`custom_` and canonical exercises never flip `trackingMode` on rename).
+   - Added Rename UI in `app/exercises/[id].tsx`, `app/exercises/index.tsx`, and `ActiveExerciseCard.tsx` + `renameExerciseInWorkout` with 3-way scalar merge in `workoutRepository.ts`.
+3. **Mobile Keyboard Stability (`ExercisePickerModal.tsx`, `app/exercises/index.tsx`, `app/workout/active.tsx`)**:
+   - Consolidated deferred search ranking in `app/exercises/index.tsx`, passed rendered element `ListHeaderComponent={renderListHeader()}` in `ExercisePickerModal.tsx`, set `keyboardDismissMode="none"` on web, and cleared numeric keypad focus on picker open.
+4. **Fuzzy & Gym-Synonym Search (`exerciseSearch.ts`, `ExercisePickerModal.tsx`)**:
+   - Expanded `exerciseSearch.ts` with gym aliases (`bi`/`bicep`/`biceps`, `tri`/`tricep`/`triceps`, `db`/`dumbbell`, `bb`/`barbell`, `lat`/`latissimus`, `delt`/`deltoid`), phrase expansions (`rdl`, `ohp`), order-independent token-group matching, bounded typos (1 edit >= 4 chars, 2 edits >= 6 chars), WeakMap token projection cache, and canonical `seed-treadmill` priority across cached and recent results.
+5. **Recent Exercises — Last 2 Weeks (`recentExercisesService.ts`, `ExercisePickerModal.tsx`, `app/workout/active.tsx`)**:
+   - Added rolling 14-day window with injectable clock, requiring `completed` status and >= 1 completed set, returning `{ exercise, lastUsedAt }` with relative labels (`Today`, `2d ago`, `Last week`), deduplicating visible IDs, and reusing loaded history from `active.tsx`.
+6. **Versioned PWA Update Card & Safe Reload (`releaseNotesService.ts`, `public/sw.js`, `scripts/build-web.js`, `PwaUpdateCard.tsx`, `pwaUpdateCoordinator.ts`, `app/_layout.tsx`, `app/workout/active.tsx`)**:
+   - Added `2.7.0` release notes, stamped `dist/sw.js` metadata in `build-web.js`, removed eager `skipWaiting()` on install, added `GET_SW_METADATA` / `SKIP_WAITING` `MessageChannel` handlers, and added `PwaUpdateCard` with active-workout flush+verify guard before reload.
+7. **Faster Navigation & Smooth Transitions (`ScreenContainer.tsx`, `app/home.tsx`, `app/workout/active.tsx`, `app/workout/history.tsx`)**:
+   - Disabled redundant 150ms mount fade in `ScreenContainer.tsx`, deferred non-critical announcements in `app/home.tsx` until after first paint, keyed `lastPerformanceMap` on `exerciseIdentityKey` in `app/workout/active.tsx`, and virtualized `app/workout/history.tsx` with `SectionList` + `React.memo(HistoryWorkoutRow)`.
+
 ## [Hotfix & Release: Close All 5 Codex v2.7.0 Audit Findings & Final Fix 1 Cleanups] — 2026-11-24 — Option A Local Verification
 
 ### Problem

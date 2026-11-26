@@ -12,6 +12,8 @@
  */
 
 const { spawnSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
 
 function resolveGitSha() {
   if (process.env.EXPO_PUBLIC_GIT_SHA && process.env.EXPO_PUBLIC_GIT_SHA.trim()) {
@@ -51,6 +53,44 @@ const child = spawnSync(npxCmd, ['expo', 'export', '-p', 'web'], {
 if (child.error) {
   console.error('[build-web] Failed to execute expo export:', child.error);
   process.exit(1);
+}
+
+if (child.status === 0) {
+  try {
+    const appJsonPath = path.resolve(__dirname, '..', 'app.json');
+    const pkgPath = path.resolve(__dirname, '..', 'package.json');
+    let appVersion = '';
+    if (fs.existsSync(appJsonPath)) {
+      const appJson = JSON.parse(fs.readFileSync(appJsonPath, 'utf8'));
+      appVersion = String(appJson?.expo?.version || '').trim();
+    }
+    if (!appVersion && fs.existsSync(pkgPath)) {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+      appVersion = String(pkg.version || '').trim();
+    }
+    if (!appVersion) {
+      appVersion = '2.7.0';
+    }
+    const cacheVersion = `${appVersion}-${gitSha}`;
+    const highlight =
+      'Treadmill mode, 0–4 RIR keypad, exercise rename & faster navigation.';
+
+    const distSwPath = path.resolve(__dirname, '..', 'dist', 'sw.js');
+    if (fs.existsSync(distSwPath)) {
+      let swSource = fs.readFileSync(distSwPath, 'utf8');
+      swSource = swSource
+        .replace(/__BEBIG_SW_VERSION__/g, appVersion)
+        .replace(/__BEBIG_CACHE_VERSION__/g, cacheVersion)
+        .replace(/__BEBIG_SW_SHA__/g, gitSha)
+        .replace(/__BEBIG_SW_HIGHLIGHT__/g, highlight);
+      fs.writeFileSync(distSwPath, swSource, 'utf8');
+      console.log(
+        `[build-web] Stamped dist/sw.js with SW_VERSION=${appVersion}, CACHE_VERSION=${cacheVersion}, sha=${gitSha}`,
+      );
+    }
+  } catch (stampErr) {
+    console.warn('[build-web] Failed to stamp dist/sw.js metadata:', stampErr);
+  }
 }
 
 process.exit(child.status !== null ? child.status : 1);

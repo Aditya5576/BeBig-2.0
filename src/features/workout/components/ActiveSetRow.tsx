@@ -24,6 +24,7 @@ export interface ActiveSetRowProps {
   canDelete: boolean;
   isNotesExpanded?: boolean;
   onToggleNotes: (setId: string) => void;
+  onCloseNotes?: (setId: string) => void;
   onDeleteSet: (exerciseId: string, setId: string) => void;
   onUpdateSetField: (
     exerciseId: string,
@@ -54,6 +55,7 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
   canDelete,
   isNotesExpanded,
   onToggleNotes,
+  onCloseNotes,
   onDeleteSet,
   onUpdateSetField,
   onToggleCompleteSet,
@@ -148,9 +150,7 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
         }
       }
     }
-    if (set.notes !== undefined) {
-      setLocalNotes(set.notes);
-    }
+    setLocalNotes(set.notes ?? '');
   }, [
     isTreadmill,
     set.completed,
@@ -205,6 +205,14 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
     setLocalNotes(clamped);
     onUpdateSetField(exercise.exerciseId, set.id, 'notes', clamped);
   }, [exercise.exerciseId, set.id, onUpdateSetField]);
+
+  const handleCloseNotes = useCallback(() => {
+    if (onCloseNotes) {
+      onCloseNotes(set.id);
+    } else {
+      onToggleNotes(set.id);
+    }
+  }, [onCloseNotes, onToggleNotes, set.id]);
 
   const commitWeight = useCallback(() => {
     onUpdateSetField(exercise.exerciseId, set.id, 'weight', localWeight);
@@ -724,7 +732,7 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
         {/* Note Toggle Button */}
         <View style={styles.colNote}>
           <Pressable
-            testID={`set-notes-${exercise.exerciseId}-${set.setNumber}`}
+            testID={`set-note-toggle-${exercise.exerciseId}-${set.setNumber}`}
             onPress={() => onToggleNotes(set.id)}
             hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
             style={[
@@ -743,6 +751,12 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
               size={13}
               color={hasExistingNote ? colors.primary : colors.textMuted}
             />
+            {hasExistingNote ? (
+              <View
+                testID={`set-note-indicator-${exercise.exerciseId}-${set.setNumber}`}
+                style={styles.noteIndicatorDot}
+              />
+            ) : null}
           </Pressable>
         </View>
 
@@ -763,11 +777,31 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
         </View>
       </View>
 
+      {/* Collapsed Note Preview Row (visible beneath both strength & treadmill rows) */}
+      {!isExpanded && hasExistingNote ? (
+        <Pressable
+          testID={`set-note-preview-${exercise.exerciseId}-${set.setNumber}`}
+          onPress={() => onToggleNotes(set.id)}
+          style={styles.notePreviewRow}
+          accessibilityLabel={`Note for set ${set.setNumber}: ${localNotes || set.notes}`}
+          accessibilityRole="button"
+        >
+          <Icon name="edit" size={11} color={colors.primary} />
+          <Text
+            variant="caption"
+            numberOfLines={2}
+            style={styles.notePreviewText}
+          >
+            {(localNotes || set.notes || '').trim()}
+          </Text>
+        </Pressable>
+      ) : null}
+
       {/* Expanded Inline Notes Row */}
       {isExpanded ? (
         <View style={styles.inlineNotesRow} testID={`inline-notes-${set.id}`}>
           <TextInput
-            testID={`set-notes-input-${set.id}`}
+            testID={`set-notes-${exercise.exerciseId}-${set.setNumber}`}
             value={localNotes}
             placeholder="Add note for this set (e.g. paused at bottom, felt easy)..."
             placeholderTextColor={colors.textMuted}
@@ -775,11 +809,11 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
             maxLength={DOMAIN_LIMITS.SET_NOTES_MAX_LENGTH}
             style={styles.notesInput}
             returnKeyType="done"
-            onSubmitEditing={() => onToggleNotes(set.id)}
+            onSubmitEditing={handleCloseNotes}
           />
           {localNotes.length > 0 ? (
             <Pressable
-              testID={`clear-note-${set.id}`}
+              testID={`clear-set-note-${exercise.exerciseId}-${set.setNumber}`}
               onPress={() => handleNotesChange('')}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               style={styles.clearNoteButton}
@@ -789,8 +823,8 @@ export const ActiveSetRow = React.memo<ActiveSetRowProps>(function ActiveSetRow(
             </Pressable>
           ) : null}
           <Pressable
-            testID={`save-note-${set.id}`}
-            onPress={() => onToggleNotes(set.id)}
+            testID={`done-set-note-${exercise.exerciseId}-${set.setNumber}`}
+            onPress={handleCloseNotes}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             style={styles.doneNoteButton}
             accessibilityLabel="Done editing note"
@@ -1077,6 +1111,33 @@ const createStyles = (colors: any, isCompact: boolean) =>
     },
     noteButtonActive: {
       backgroundColor: 'rgba(56, 189, 248, 0.12)',
+    },
+    noteIndicatorDot: {
+      position: 'absolute',
+      top: 4,
+      right: 3,
+      width: 5,
+      height: 5,
+      borderRadius: 2.5,
+      backgroundColor: colors.primary,
+    },
+    notePreviewRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginTop: 4,
+      marginHorizontal: 2,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 8,
+      backgroundColor: 'rgba(56, 189, 248, 0.08)',
+      borderWidth: 1,
+      borderColor: 'rgba(56, 189, 248, 0.2)',
+    },
+    notePreviewText: {
+      flex: 1,
+      color: colors.textSecondary,
+      fontSize: 12,
     },
     inlineNotesRow: {
       flexDirection: 'row',

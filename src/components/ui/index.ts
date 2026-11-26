@@ -7,6 +7,7 @@ export * from './Input';
 export * from './Icon';
 export * from './WebAlertModal';
 export * from './ReleaseNotesModal';
+export * from './PwaUpdateCard';
 export * from './SyncStatusChip';
 export * from './BrandLogoBadge';
 export * from './ErrorBoundary';

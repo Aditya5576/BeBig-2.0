@@ -7,6 +7,10 @@ import {
   resolveExerciseScopeNamespace,
 } from '../storage/customExerciseStorage';
 import { exerciseCacheStorage, SEED_EXERCISES } from '../storage/exerciseCacheStorage';
+import {
+  exerciseNameOverrideStorage,
+  normalizeExerciseRename,
+} from '../storage/exerciseNameOverrideStorage';
 import { exercisePhotoStorage } from '../storage/exercisePhotoStorage';
 import { exercisePhotoCloudService } from './exercisePhotoCloudService';
 import { normalizeCategory } from '../providers/wger/wgerMapper';
@@ -137,6 +141,7 @@ export class ExerciseRepository {
     const isFirstPage = !options.offset || options.offset === 0;
     const rawQuery = options.query?.trim();
     const hasQuery = Boolean(rawQuery && rawQuery.length > 0);
+    await exerciseNameOverrideStorage.ensureHydrated(scope);
 
     // If source is strictly 'global', return only active global catalog exercises
     if (options.source === 'global') {
@@ -354,15 +359,13 @@ export class ExerciseRepository {
       options.source !== 'custom';
 
     const combinedMap = new Map<string, Exercise>();
-    const customNamesLower = new Set<string>();
     if (isFirstPage) {
       customMatches.forEach((e) => {
         combinedMap.set(e.id, e);
-        customNamesLower.add(e.name.trim().toLowerCase());
       });
       globalCatalogMatches.forEach((e) => {
-        // Strictly never overwrite a user's custom exercise by ID or exact name
-        if (!combinedMap.has(e.id) && !customNamesLower.has(e.name.trim().toLowerCase())) {
+        // Deduplicate global vs. custom exercises strictly by canonical ID (never drop by shared name)
+        if (!combinedMap.has(e.id)) {
           combinedMap.set(e.id, e);
         }
       });
@@ -379,7 +382,10 @@ export class ExerciseRepository {
         combinedMap.set(e.id, e);
       }
     });
-    const combined = Array.from(combinedMap.values());
+    const combined = exerciseNameOverrideStorage.projectExercises(
+      Array.from(combinedMap.values()),
+      scope,
+    );
 
     const rankedExercises = hasQuery && isFirstPage
       ? filterAndRankExercises(combined, rawQuery, options.category)
@@ -387,19 +393,17 @@ export class ExerciseRepository {
 
     const finalExercises = filterCatalogueForIndianGym(rankedExercises, {
       includeNonStandardEquipment: options.equipment === 'all' || options.equipment === 'non-standard',
-      allowDuplicates: false,
+      allowDuplicates: true,
       isSearchActive: hasQuery,
     }).filtered;
 
     // Ensure active curated global exercises are never dropped by regional equipment filters
     const finalIds = new Set(finalExercises.map((e) => e.id));
     for (const gEx of globalCatalogMatches) {
-      if (
-        !finalIds.has(gEx.id) &&
-        !customNamesLower.has(gEx.name.trim().toLowerCase())
-      ) {
-        finalExercises.push(gEx);
-        finalIds.add(gEx.id);
+      const projectedGlobal = exerciseNameOverrideStorage.projectExercise(gEx, scope);
+      if (!finalIds.has(projectedGlobal.id)) {
+        finalExercises.push(projectedGlobal);
+        finalIds.add(projectedGlobal.id);
       }
     }
 
@@ -416,6 +420,8 @@ export class ExerciseRepository {
   }
 
   async getExerciseById(id: string, scope?: UserScope | null): Promise<Exercise | null> {
+    await exerciseNameOverrideStorage.ensureHydrated(scope);
+
     // Check custom exercises first
     if (id.startsWith('custom_')) {
       const customs = await customExerciseStorage.getCustomExercises(scope);
@@ -442,20 +448,20 @@ export class ExerciseRepository {
     if (id.startsWith(GLOBAL_EXERCISE_ID_PREFIX)) {
       const globalMatch = await globalExerciseCatalogService.getGlobalExerciseById(id);
       if (globalMatch) {
-        return globalMatch;
+        return exerciseNameOverrideStorage.projectExercise(globalMatch, scope);
       }
     }
 
     // Check local exercise cache first
     const cached = await exerciseCacheStorage.getCachedExerciseById(id, scope);
     if (cached) {
-      return cached;
+      return exerciseNameOverrideStorage.projectExercise(cached, scope);
     }
 
     // Also allow lookup by raw global exercise UUID if not cached
     const globalFallback = await globalExerciseCatalogService.getGlobalExerciseById(id);
     if (globalFallback) {
-      return globalFallback;
+      return exerciseNameOverrideStorage.projectExercise(globalFallback, scope);
     }
 
     // Fall back to external provider with timeout
@@ -463,8 +469,9 @@ export class ExerciseRepository {
       const exercise = await withTimeout(this.provider.getExerciseById(id), 4000);
       if (exercise) {
         void exerciseCacheStorage.saveToCatalog([exercise]);
+        return exerciseNameOverrideStorage.projectExercise(exercise, scope);
       }
-      return exercise;
+      return null;
     } catch {
       return null;
     }
@@ -478,13 +485,15 @@ export class ExerciseRepository {
     if (!id) return null;
     const scopeMap = this.getScopeMemoryMap(scope, false);
     if (scopeMap?.has(id)) {
-      return scopeMap.get(id) || null;
+      const found = scopeMap.get(id) || null;
+      return found ? exerciseNameOverrideStorage.projectExercise(found, scope) : null;
     }
     const globalSync = globalExerciseCatalogService.getCachedGlobalExerciseByIdSync(id);
     if (globalSync) {
-      return globalSync;
+      return exerciseNameOverrideStorage.projectExercise(globalSync, scope);
     }
-    return exerciseCacheStorage.getCachedExerciseByIdSync(id, scope);
+    const cached = exerciseCacheStorage.getCachedExerciseByIdSync(id, scope);
+    return cached ? exerciseNameOverrideStorage.projectExercise(cached, scope) : null;
   }
 
   /**
@@ -495,10 +504,13 @@ export class ExerciseRepository {
   }
 
   /**
-   * Hydrates exercise cache and custom exercises from storage on cold start for the active/provided scope.
+   * Hydrates exercise cache, custom exercises, and name overrides from storage on cold start for the active/provided scope.
    */
   async hydrate(scope?: UserScope | null, forceRefreshCustom: boolean = true): Promise<void> {
-    await exerciseCacheStorage.ensureHydrated(scope, forceRefreshCustom);
+    await Promise.all([
+      exerciseCacheStorage.ensureHydrated(scope, forceRefreshCustom),
+      exerciseNameOverrideStorage.ensureHydrated(scope),
+    ]);
     const customs = exerciseCacheStorage.getCustomExercisesSync(scope);
     const scopeMap = this.getScopeMemoryMap(scope, true)!;
     scopeMap.clear();
@@ -507,7 +519,7 @@ export class ExerciseRepository {
 
   /**
    * Returns cached exercises synchronously or locally without network delay.
-   * Merges active user's custom exercises into unified cache search index.
+   * Merges active user's custom exercises and name overrides into unified cache search index.
    */
   getCachedExercises(options: ExerciseFilterOptions = {}, scope?: UserScope | null): Exercise[] {
     const scopeKey = resolveExerciseScopeNamespace(scope);
@@ -525,15 +537,15 @@ export class ExerciseRepository {
 
     const cached = exerciseCacheStorage.searchCached(
       {
-        query: options.query,
         category: options.category,
-        limit: options.limit,
         source: options.source,
       },
       scope,
     );
 
-    const optionsKey = `${options.equipment || 'standard'}::${Boolean(options.query && options.query.trim().length > 0)}`;
+    const projectedCached = exerciseNameOverrideStorage.projectExercises(cached, scope);
+    const trimmedQuery = options.query?.trim() || '';
+    const optionsKey = `${this.customExercisesVersion}::${options.source || 'all'}::${options.category || 'all'}::${options.equipment || 'standard'}::${options.limit || 'none'}::${trimmedQuery.toLowerCase()}`;
     if (
       this.lastFilteredCacheRef === cached &&
       this.lastFilteredOptionsKey === optionsKey &&
@@ -542,11 +554,19 @@ export class ExerciseRepository {
       return this.lastFilteredResult;
     }
 
-    const result = filterCatalogueForIndianGym(cached, {
+    const ranked = trimmedQuery
+      ? filterAndRankExercises(projectedCached, trimmedQuery, options.category)
+      : projectedCached;
+
+    let result = filterCatalogueForIndianGym(ranked, {
       includeNonStandardEquipment: options.equipment === 'all' || options.equipment === 'non-standard',
-      allowDuplicates: false,
-      isSearchActive: Boolean(options.query && options.query.trim().length > 0),
+      allowDuplicates: true,
+      isSearchActive: Boolean(trimmedQuery),
     }).filtered;
+
+    if (options.limit && options.limit > 0) {
+      result = result.slice(0, options.limit);
+    }
 
     this.lastFilteredCacheRef = cached;
     this.lastFilteredOptionsKey = optionsKey;
@@ -612,6 +632,7 @@ export class ExerciseRepository {
       photoPath: input.photoPath || null,
       sourceProvider: 'custom',
       isCustom: true,
+      trackingMode: 'strength',
       createdAt: now,
       updatedAt: now,
     };
@@ -706,6 +727,7 @@ export class ExerciseRepository {
       images: input.images !== undefined ? input.images : existing.images,
       photoPath: input.photoPath !== undefined ? input.photoPath : existing.photoPath,
       isCustom: true,
+      trackingMode: existing.trackingMode || 'strength',
       updatedAt: now,
     };
 
@@ -737,6 +759,70 @@ export class ExerciseRepository {
     }
 
     return updated;
+  }
+
+  /**
+   * Renames any exercise (custom, catalog, or seed) for the active/provided user scope.
+   * - Owned custom exercises are updated via `updateCustomExercise`.
+   * - Catalog/seed exercises store a user-scoped display-name override without mutating
+   *   canonical exercise IDs or `trackingMode`.
+   */
+  async renameExercise(
+    id: string,
+    name: string,
+    scope?: UserScope | null,
+  ): Promise<Exercise> {
+    const trimmedName = normalizeExerciseRename(name);
+    const resolvedScope = scope !== undefined ? scope : getCurrentUserScope();
+
+    if (id.startsWith('custom_')) {
+      const customs = await customExerciseStorage.getCustomExercises(resolvedScope);
+      if (customs.some((c) => c.id === id)) {
+        return this.updateCustomExercise({ id, name: trimmedName }, resolvedScope);
+      }
+    }
+
+    await exerciseNameOverrideStorage.setOverride(id, trimmedName, resolvedScope);
+    this.customExercisesVersion++;
+    this.candidateCache.clear();
+    this.lastFilteredCacheRef = null;
+    this.lastFilteredResult = [];
+
+    const existing = await this.getExerciseById(id, resolvedScope);
+    if (existing) {
+      return exerciseNameOverrideStorage.projectExercise(existing, resolvedScope);
+    }
+
+    return exerciseNameOverrideStorage.projectExercise(
+      {
+        id,
+        name: trimmedName,
+        description: '',
+        category: 'other',
+        categoryName: 'Other',
+        primaryMuscles: [],
+        secondaryMuscles: [],
+        equipment: [],
+        images: [],
+        sourceProvider: 'system',
+        sourceExerciseId: id,
+        isCustom: false,
+      },
+      resolvedScope,
+    );
+  }
+
+  async restoreExerciseName(
+    id: string,
+    scope?: UserScope | null,
+  ): Promise<Exercise | null> {
+    const resolvedScope = scope !== undefined ? scope : getCurrentUserScope();
+    await exerciseNameOverrideStorage.removeOverride(id, resolvedScope);
+    this.customExercisesVersion++;
+    this.candidateCache.clear();
+    this.lastFilteredCacheRef = null;
+    this.lastFilteredResult = [];
+    return this.getExerciseById(id, resolvedScope);
   }
 
   /**

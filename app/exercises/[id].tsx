@@ -1,10 +1,11 @@
 import { useAppTheme } from '../../src/features/theme';
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, ScrollView, ActivityIndicator, Alert, Platform, Pressable } from 'react-native';
+import { View, StyleSheet, ScrollView, ActivityIndicator, Alert, Platform, Pressable, Modal, TextInput } from 'react-native';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ScreenContainer, Text, Button, Card, useBottomContentInset, SyncStatusChip, Icon } from '../../src/components/ui';
 import * as FileSystem from 'expo-file-system/legacy';
+import { DOMAIN_LIMITS } from '../../src/constants/domainLimits';
 import {
   exerciseRepository,
   exercisePhotoStorage,
@@ -107,6 +108,25 @@ export default function ExerciseDetailScreen() {
   const fileInputRef = useRef<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [detailImageError, setDetailImageError] = useState(false);
+  const [isRenameModalOpen, setIsRenameModalOpen] = useState(false);
+  const [renameInput, setRenameInput] = useState('');
+  const [renameSaving, setRenameSaving] = useState(false);
+  const [renameError, setRenameError] = useState<string | null>(null);
+
+  const handleSaveRename = async () => {
+    if (!exercise) return;
+    try {
+      setRenameSaving(true);
+      setRenameError(null);
+      const updated = await exerciseRepository.renameExercise(exercise.id, renameInput);
+      setExercise(updated);
+      setIsRenameModalOpen(false);
+    } catch (err: any) {
+      setRenameError(err?.message || 'Could not rename exercise.');
+    } finally {
+      setRenameSaving(false);
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -598,9 +618,22 @@ export default function ExerciseDetailScreen() {
             ) : null}
           </View>
 
-          <Text variant="display" color="primary" testID="exercise-detail-name">
-            {exercise.name}
-          </Text>
+          <View style={styles.nameHeaderRow}>
+            <Text variant="display" color="primary" testID="exercise-detail-name" style={{ flex: 1 }}>
+              {exercise.name}
+            </Text>
+            <Button
+              testID="detail-rename-exercise-button"
+              title="Rename"
+              onPress={() => {
+                setRenameInput(exercise.name);
+                setRenameError(null);
+                setIsRenameModalOpen(true);
+              }}
+              variant="outline"
+              size="sm"
+            />
+          </View>
 
           <Button
             testID="exercise-detail-view-progression-button"
@@ -688,6 +721,56 @@ export default function ExerciseDetailScreen() {
           </View>
         ) : null}
       </ScrollView>
+
+      <Modal
+        visible={isRenameModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !renameSaving && setIsRenameModalOpen(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.renameModalCard}>
+            <Text variant="titleMedium" color="primary">
+              Rename Exercise
+            </Text>
+            <TextInput
+              testID="detail-rename-exercise-input"
+              value={renameInput}
+              onChangeText={setRenameInput}
+              placeholder="Exercise name"
+              placeholderTextColor={colors.textMuted}
+              maxLength={DOMAIN_LIMITS.EXERCISE_NAME_MAX_LENGTH}
+              style={styles.renameInput}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={() => void handleSaveRename()}
+            />
+            {renameError ? (
+              <Text variant="caption" style={{ color: colors.error || '#EF4444' }}>
+                {renameError}
+              </Text>
+            ) : null}
+            <View style={styles.renameActions}>
+              <Button
+                testID="detail-cancel-rename-button"
+                title="Cancel"
+                variant="outline"
+                size="sm"
+                onPress={() => setIsRenameModalOpen(false)}
+                disabled={renameSaving}
+              />
+              <Button
+                testID="detail-save-rename-button"
+                title="Save"
+                variant="primary"
+                size="sm"
+                loading={renameSaving}
+                onPress={() => void handleSaveRename()}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScreenContainer>
   );
 }
@@ -812,5 +895,42 @@ const createStyles = (colors: any) => StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm,
     alignItems: 'center',
+  },
+  nameHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.lg,
+  },
+  renameModalCard: {
+    width: '100%',
+    maxWidth: 400,
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  renameInput: {
+    backgroundColor: colors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    color: colors.textPrimary,
+    fontSize: 15,
+  },
+  renameActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.sm,
   },
 });

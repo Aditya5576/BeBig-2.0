@@ -1,17 +1,20 @@
 /**
  * BeBig 2.0 — Tolerant Exercise Search & Matching
  *
- * Lightweight, zero-dependency fuzzy matching and normalization utility for exercises.
+ * Lightweight, zero-dependency fuzzy matching, gym-synonym expansion, and normalization utility.
  * Tolerates:
- * - Capitalization differences ("LAT PULLDOWN" vs "Lat Pulldown")
- * - Extra or missing spaces ("lat  pulldown", "lat pull down" vs "Lat Pulldown")
- * - Punctuation differences ("pull-up" vs "pull up", "t-bar row" vs "t bar row")
- * - Common typos & character transpositions ("lat pulldwon", "lat pul down")
+ * - Capitalization, extra spaces, and punctuation differences ("pull-up" vs "pull up")
+ * - Whole-token gym aliases ("bi"/"bicep"/"biceps", "tri"/"tricep"/"triceps", "db"/"dumbbell",
+ *   "bb"/"barbell", "lat"/"latissimus", "delt"/"deltoid")
+ * - Phrase expansions ("rdl" -> "romanian deadlift", "ohp" -> "overhead press")
+ * - Order-independent multi-word matching ("curl bi" -> "Bicep Curl" / "Dumbbell Bicep Curl")
+ * - Bounded Damerau-Levenshtein typos (1 edit for >=4 chars, 2 edits for >=6 chars, e.g. "biseps", "bicp")
  *
  * Exact and strong matches are strictly prioritized over fuzzy matches.
  */
 
 import { Exercise } from '../types';
+import { TREADMILL_EXERCISE_ID } from '../exerciseTracking';
 
 /**
  * Remove all non-alphanumeric characters and lowercase.
@@ -31,6 +34,31 @@ export function normalizeString(str: string): string {
     .replace(/[^a-z0-9\s]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+const SYNONYM_GROUPS: readonly (readonly string[])[] = [
+  ['bi', 'bicep', 'biceps'],
+  ['tri', 'tricep', 'triceps'],
+  ['db', 'dumbbell', 'dumbbells'],
+  ['bb', 'barbell', 'barbells'],
+  ['lat', 'latissimus'],
+  ['delt', 'delts', 'deltoid', 'deltoids'],
+];
+
+const SYNONYM_LOOKUP = new Map<string, readonly string[]>();
+for (const group of SYNONYM_GROUPS) {
+  for (const token of group) {
+    SYNONYM_LOOKUP.set(token, group);
+  }
+}
+
+const PHRASE_EXPANSIONS: Record<string, readonly string[]> = {
+  rdl: ['romanian', 'deadlift'],
+  ohp: ['overhead', 'press'],
+};
+
+function getTokenVariants(token: string): readonly string[] {
+  return SYNONYM_LOOKUP.get(token) || [token];
 }
 
 /**
@@ -87,91 +115,196 @@ export function damerauLevenshtein(a: string, b: string): number {
   return d[al * cols + bl];
 }
 
+function scoreTokenAgainstTargets(
+  qToken: string,
+  targetTokens: readonly string[],
+): number {
+  const variants = getTokenVariants(qToken);
+  let best = 0;
+
+  for (const tToken of targetTokens) {
+    for (const variant of variants) {
+      const isDirect = variant === qToken;
+      if (tToken === variant) {
+        best = Math.max(best, isDirect ? 30 : 27);
+        continue;
+      }
+      if (variant.length >= 2 && tToken.startsWith(variant)) {
+        best = Math.max(best, isDirect ? 22 : 20);
+        continue;
+      }
+      if (variant.length >= 3 && tToken.includes(variant)) {
+        best = Math.max(best, isDirect ? 16 : 14);
+        continue;
+      }
+
+      // Bounded edit-distance check: 1 edit for >=4 chars, 2 edits for >=6 chars
+      const maxEdits = variant.length >= 6 ? 2 : variant.length >= 4 ? 1 : 0;
+      if (maxEdits > 0 && Math.abs(tToken.length - variant.length) <= maxEdits) {
+        const dist = damerauLevenshtein(tToken, variant);
+        if (dist <= maxEdits) {
+          const fuzzyScore = 13 - dist * 4; // 9 for dist=1, 5 for dist=2
+          best = Math.max(best, isDirect ? fuzzyScore : fuzzyScore - 1);
+        }
+      }
+    }
+  }
+
+  return best;
+}
+
+/**
+ * Evaluates a query token list (including phrase expansions) against targetTokens.
+ * Requires ALL query token groups to match in any order.
+ */
+function scoreTokenGroupsAgainstTargets(
+  queryTokens: readonly string[],
+  targetTokens: readonly string[],
+): number {
+  if (queryTokens.length === 0 || targetTokens.length === 0) return 0;
+
+  let totalScore = 0;
+  let matchedGroups = 0;
+
+  for (const qToken of queryTokens) {
+    const phraseWords = PHRASE_EXPANSIONS[qToken];
+    if (phraseWords) {
+      // Match either literal abbreviation token (e.g. "rdl") OR all expanded phrase tokens ("romanian", "deadlift")
+      const directScore = scoreTokenAgainstTargets(qToken, targetTokens);
+      let expandedSum = 0;
+      let allPhraseMatched = true;
+      for (const word of phraseWords) {
+        const wordScore = scoreTokenAgainstTargets(word, targetTokens);
+        if (wordScore === 0) {
+          allPhraseMatched = false;
+          break;
+        }
+        expandedSum += wordScore;
+      }
+      const groupScore = Math.max(
+        directScore,
+        allPhraseMatched ? Math.round(expandedSum / phraseWords.length) + 4 : 0,
+      );
+      if (groupScore === 0) return 0;
+      totalScore += groupScore;
+      matchedGroups++;
+    } else {
+      const groupScore = scoreTokenAgainstTargets(qToken, targetTokens);
+      if (groupScore === 0) return 0;
+      totalScore += groupScore;
+      matchedGroups++;
+    }
+  }
+
+  const avgTokenScore = totalScore / matchedGroups;
+  // Reward concise canonical names (fewer extra unmatched tokens)
+  const extraTokenPenalty = Math.min(8, Math.max(0, targetTokens.length - matchedGroups) * 1.5);
+  return Math.max(1, Math.round(45 + avgTokenScore - extraTokenPenalty));
+}
+
 /**
  * Evaluates how well a query matches an exercise name.
  * Returns a score:
  * > 0: Match (higher is better)
  * 0: No match
  */
-export function calculateExerciseMatchScore(targetName: string, query: string): number {
+export function calculateExerciseMatchScore(
+  targetName: string,
+  query: string,
+  precomputed?: { normName: string; colName: string; nameTokens: readonly string[] },
+): number {
   const qTrim = query.trim().toLowerCase();
   const tTrim = targetName.trim().toLowerCase();
 
   if (!qTrim) return 1; // Empty query matches all
 
   // 1. Exact string match (case-insensitive)
-  if (tTrim === qTrim) return 100;
+  if (tTrim === qTrim) return 120;
 
   // 2. Exact prefix match
-  if (tTrim.startsWith(qTrim)) return 90;
+  if (tTrim.startsWith(qTrim)) return 105;
 
   // 3. Substring match
-  if (tTrim.includes(qTrim)) return 80;
+  if (tTrim.includes(qTrim)) return 92;
 
   // 4. Normalized space & punctuation match (e.g. "pull up" vs "pull-up")
-  const normTarget = normalizeString(targetName);
+  const normTarget = precomputed ? precomputed.normName : normalizeString(targetName);
   const normQuery = normalizeString(query);
 
-  if (normTarget === normQuery) return 78;
-  if (normTarget.startsWith(normQuery)) return 75;
-  if (normTarget.includes(normQuery)) return 72;
+  if (normTarget === normQuery) return 90;
+  if (normTarget.startsWith(normQuery)) return 86;
+  if (normTarget.includes(normQuery)) return 82;
 
   // 5. Collapsed match (spaces & punctuation completely removed)
-  // E.g. "lat pull down" -> "latpulldown" matches "Lat Pulldown" -> "latpulldown"
-  const colTarget = collapseString(targetName);
+  const colTarget = precomputed ? precomputed.colName : collapseString(targetName);
   const colQuery = collapseString(query);
 
-  if (colTarget === colQuery) return 70;
-  if (colTarget.startsWith(colQuery)) return 65;
-  if (colTarget.includes(colQuery)) return 60;
+  if (colTarget === colQuery) return 80;
+  if (colTarget.startsWith(colQuery)) return 76;
+  if (colTarget.includes(colQuery)) return 72;
 
-  // 6. Token-by-token comparison (multi-word, order-independent keyword matching)
-  const targetTokens = normTarget.split(' ').filter(Boolean);
+  // 6. Token-group comparison (gym aliases, phrase expansions, order-independent & bounded typos)
+  const targetTokens = precomputed ? precomputed.nameTokens : normTarget.split(' ').filter(Boolean);
   const queryTokens = normQuery.split(' ').filter(Boolean);
 
   if (queryTokens.length > 0) {
-    let matchedTokens = 0;
-    for (const qToken of queryTokens) {
-      const match = targetTokens.some((tToken) => {
-        if (tToken === qToken) return true;
-        if (tToken.startsWith(qToken) || qToken.startsWith(tToken)) return true;
-        if (tToken.includes(qToken)) return true;
-        // Allow 1 typo for tokens of length >= 4
-        if (qToken.length >= 4 && damerauLevenshtein(tToken, qToken) <= 1) return true;
-        return false;
-      });
-      if (match) matchedTokens++;
-    }
-
-    if (matchedTokens === queryTokens.length) {
-      return queryTokens.length > 1 ? 65 : 60;
+    const tokenGroupScore = scoreTokenGroupsAgainstTargets(queryTokens, targetTokens);
+    if (tokenGroupScore > 0) {
+      return tokenGroupScore;
     }
   }
 
-  // 7. Damerau-Levenshtein distance for small typos and transpositions
-  // E.g. "lat pulldwon" vs "latpulldown" (distance 1 transposition)
-  // "lat pul down" -> "latpuldown" vs "latpulldown" (distance 1 deletion)
-  if (colQuery.length >= 5) {
-    const maxAllowedDist = colQuery.length >= 9 ? 2 : 1;
-
-    // Direct collapsed distance
-    const dist = damerauLevenshtein(colTarget, colQuery);
-    if (dist <= maxAllowedDist) {
-      return 50 - dist * 5; // 45 for dist 1, 40 for dist 2
-    }
-
-    // Direct token distance check against individual words (e.g. target "Barbell Lat Pulldown", query "pulldwon")
-    for (const tToken of targetTokens) {
-      if (Math.abs(tToken.length - normQuery.length) <= maxAllowedDist) {
-        const tokenDist = damerauLevenshtein(tToken, normQuery);
-        if (tokenDist <= maxAllowedDist) {
-          return 45 - tokenDist * 5;
-        }
+  // 7. Whole-string collapsed Damerau-Levenshtein fallback (e.g. "lat pulldwon" vs "latpulldown")
+  if (colQuery.length >= 4) {
+    const maxAllowedDist = colQuery.length >= 6 ? 2 : 1;
+    if (Math.abs(colTarget.length - colQuery.length) <= maxAllowedDist) {
+      const dist = damerauLevenshtein(colTarget, colQuery);
+      if (dist <= maxAllowedDist) {
+        return 50 - dist * 5;
       }
     }
   }
 
-  return 0; // No match
+  return 0;
+}
+
+interface CachedExerciseProjection {
+  revisionKey: string;
+  normName: string;
+  colName: string;
+  nameTokens: string[];
+  allTokens: string[];
+}
+
+const projectionCache = new WeakMap<Exercise, CachedExerciseProjection>();
+
+function getExerciseProjection(ex: Exercise): CachedExerciseProjection {
+  const revisionKey = `${ex.id}::${ex.name || ''}::${ex.updatedAt || ''}`;
+  const existing = projectionCache.get(ex);
+  if (existing && existing.revisionKey === revisionKey) {
+    return existing;
+  }
+
+  const normName = normalizeString(ex.name || '');
+  const colName = collapseString(ex.name || '');
+  const nameTokens = normName.split(' ').filter(Boolean);
+
+  const metaString = `${ex.name || ''} ${ex.categoryName || ''} ${(ex.equipment || [])
+    .map((eq) => (typeof eq === 'string' ? eq : eq?.name || ''))
+    .join(' ')} ${(ex.primaryMuscles || [])
+    .map((m) => (typeof m === 'string' ? m : m?.name || ''))
+    .join(' ')}`;
+  const allTokens = normalizeString(metaString).split(' ').filter(Boolean);
+
+  const projected: CachedExerciseProjection = {
+    revisionKey,
+    normName,
+    colName,
+    nameTokens,
+    allTokens,
+  };
+  projectionCache.set(ex, projected);
+  return projected;
 }
 
 export interface ScoredExercise {
@@ -182,6 +315,7 @@ export interface ScoredExercise {
 /**
  * Filters and ranks a list of exercises against a search query using tolerant matching.
  * Exact and strong matches appear first; weak or unrelated items are excluded.
+ * Preserves canonical `seed-treadmill` priority when matching treadmill queries.
  */
 export function filterAndRankExercises(
   exercises: Exercise[],
@@ -196,6 +330,8 @@ export function filterAndRankExercises(
   }
 
   const q = query.trim();
+  const normQ = normalizeString(q);
+  const qTokens = normQ.split(' ').filter(Boolean);
   const scored: ScoredExercise[] = [];
 
   for (const ex of exercises) {
@@ -203,42 +339,26 @@ export function filterAndRankExercises(
       continue;
     }
 
+    const proj = getExerciseProjection(ex);
+
     // 1. Primary score based on exercise name
-    let score = calculateExerciseMatchScore(ex.name, q);
+    let score = calculateExerciseMatchScore(ex.name, q, proj);
 
-    // 2. Secondary fallback: check description, category, equipment, and muscles
+    // 2. Secondary fallback: check combined tokens (name + category + equipment + primaryMuscles) & description
     if (score === 0) {
-      const qLower = q.toLowerCase();
-      const descMatch = ex.description ? ex.description.toLowerCase().includes(qLower) : false;
-      const catMatch = ex.categoryName ? ex.categoryName.toLowerCase().includes(qLower) : false;
-      const muscleMatch = ex.primaryMuscles
-        ? ex.primaryMuscles.some((m) => m.name.toLowerCase().includes(qLower))
-        : false;
-
-      if (descMatch || catMatch || muscleMatch) {
-        score = 15; // Low score ensures name matches always rank above metadata
-      } else {
-        // Multi-word keyword tokenization across combined exercise metadata
-        const normQ = normalizeString(q);
-        const qTokens = normQ.split(/\s+/).filter(Boolean);
-        if (qTokens.length > 1) {
-          const combinedText = normalizeString(
-            `${ex.name} ${ex.categoryName || ''} ${ex.description || ''} ${(ex.equipment || []).map((eq) => eq.name).join(' ')} ${(ex.primaryMuscles || []).map((m) => m.name).join(' ')}`,
-          );
-          const combinedTokens = combinedText.split(/\s+/).filter(Boolean);
-          const allMatched = qTokens.every((qT) =>
-            combinedTokens.some((cT) => cT === qT || cT.startsWith(qT) || qT.startsWith(cT) || cT.includes(qT)),
-          );
-          if (allMatched) {
-            score = 25;
-          }
-        }
+      const metaScore = scoreTokenGroupsAgainstTargets(qTokens, proj.allTokens);
+      if (metaScore > 0) {
+        score = Math.max(15, Math.round(metaScore * 0.45));
+      } else if (ex.description && ex.description.toLowerCase().includes(q.toLowerCase())) {
+        score = 12;
       }
     }
 
     if (score > 0) {
-      // Prioritize user custom exercises slightly on match ties
-      const finalScore = ex.isCustom ? score + 1 : score;
+      const isCanonicalTreadmill = ex.id === TREADMILL_EXERCISE_ID;
+      const finalScore =
+        (ex.isCustom ? score + 1 : score) +
+        (isCanonicalTreadmill && q.toLowerCase().includes('tread') ? 200 : 0);
       scored.push({ exercise: ex, score: finalScore });
     }
   }

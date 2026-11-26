@@ -1,5 +1,5 @@
 import { useAppTheme } from '../../src/features/theme';
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, useDeferredValue } from 'react';
 import {
   View,
   StyleSheet,
@@ -8,11 +8,13 @@ import {
   ActivityIndicator,
   ScrollView,
   Platform,
+  Modal,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { ScreenContainer, ScreenFlatList, Text, Button, Icon, ErrorBoundary } from '../../src/components/ui';
 import { exerciseRepository, Exercise, STANDARD_CATEGORIES, ExerciseCard } from '../../src/features/exercises';
 import { spacing, radii } from '../../src/constants/theme';
+import { DOMAIN_LIMITS } from '../../src/constants/domainLimits';
 
 
 export default function ExerciseListScreen() {
@@ -38,12 +40,17 @@ export default function ExerciseListScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const deferredSearchQuery = useDeferredValue(searchQuery);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedSource, setSelectedSource] = useState<'all' | 'custom' | 'external' | 'global'>('all');
   const [nextOffset, setNextOffset] = useState<number | undefined>(undefined);
   const [hasMore, setHasMore] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [isCachedOnly, setIsCachedOnly] = useState(false);
+  const [renameTarget, setRenameTarget] = useState<Exercise | null>(null);
+  const [renameInput, setRenameInput] = useState('');
+  const [renameSaving, setRenameSaving] = useState(false);
+  const [renameError, setRenameError] = useState<string | null>(null);
   const searchReqIdRef = useRef(0);
   const searchQueryRef = useRef(searchQuery);
   searchQueryRef.current = searchQuery;
@@ -93,10 +100,12 @@ export default function ExerciseListScreen() {
     }, [selectedCategory, selectedSource])
   );
 
-  // 1. Instant local search against cache whenever query, category, or source changes
+  // 1. Consolidated local cache search + background API refresh (deferred to keep typing synchronous)
   useEffect(() => {
-    const trimmedQuery = searchQuery.trim();
-    // Immediately reset pagination state on filter/query transitions so stale browse offsets cannot trigger
+    let isMounted = true;
+    const reqId = ++searchReqIdRef.current;
+    const trimmedQuery = deferredSearchQuery.trim();
+
     setHasMore(false);
     setNextOffset(undefined);
 
@@ -109,28 +118,9 @@ export default function ExerciseListScreen() {
     if (cached.length > 0) {
       setLoading(false);
       setError(null);
-    }
-  }, [searchQuery, selectedCategory, selectedSource]);
-
-  // 2. Background API refresh with debounce and request sequencing
-  useEffect(() => {
-    let isMounted = true;
-    const reqId = ++searchReqIdRef.current;
-    const trimmedQuery = searchQuery.trim();
-
-    // If we have cached results for this query, skip redundant network calls.
-    // The in-memory cache is authoritative for rapid keystroke search.
-    const cached = exerciseRepository.getCachedExercises({
-      query: trimmedQuery || undefined,
-      category: selectedCategory !== 'all' ? selectedCategory : undefined,
-      source: selectedSource,
-    });
-
-    if (cached.length > 0 && trimmedQuery) {
-      setExercises(cached);
-      setLoading(false);
-      setError(null);
-      return;
+      if (trimmedQuery) {
+        return;
+      }
     }
 
     const timeoutId = setTimeout(async () => {
@@ -181,27 +171,13 @@ export default function ExerciseListScreen() {
       isMounted = false;
       clearTimeout(timeoutId);
     };
-  }, [searchQuery, selectedCategory, refreshTrigger, selectedSource]);
+  }, [deferredSearchQuery, selectedCategory, refreshTrigger, selectedSource]);
 
   const handleSearchChange = (text: string) => {
     setSearchQuery(text);
     searchQueryRef.current = text;
     setHasMore(false);
     setNextOffset(undefined);
-
-    // Instant synchronous local search against cache on keystroke (0ms)
-    const trimmed = text.trim();
-    const cached = exerciseRepository.getCachedExercises({
-      query: trimmed || undefined,
-      category: selectedCategory !== 'all' ? selectedCategory : undefined,
-      source: selectedSource,
-    });
-
-    setExercises(cached);
-    if (cached.length > 0) {
-      setLoading(false);
-      setError(null);
-    }
   };
 
   const handleCategorySelect = (categoryId: string) => {
@@ -279,16 +255,41 @@ export default function ExerciseListScreen() {
     [router]
   );
 
+  const handleOpenRename = useCallback((ex: Exercise) => {
+    setRenameTarget(ex);
+    setRenameInput(ex.name);
+    setRenameError(null);
+  }, []);
+
+  const handleSaveRename = useCallback(async () => {
+    if (!renameTarget) return;
+    try {
+      setRenameSaving(true);
+      setRenameError(null);
+      const updated = await exerciseRepository.renameExercise(renameTarget.id, renameInput);
+      setExercises((prev) =>
+        prev.map((item) => (item.id === updated.id ? { ...item, name: updated.name } : item))
+      );
+      setRenameTarget(null);
+      setRefreshTrigger((c) => c + 1);
+    } catch (err: any) {
+      setRenameError(err?.message || 'Could not rename exercise.');
+    } finally {
+      setRenameSaving(false);
+    }
+  }, [renameTarget, renameInput]);
+
   const renderItem = useCallback(
     ({ item }: { item: Exercise }) => (
       <ExerciseCard
         exercise={item}
         onPress={handleItemPress}
+        onRename={handleOpenRename}
         mode="browse"
         hideThumbnail={true}
       />
     ),
-    [handleItemPress]
+    [handleItemPress, handleOpenRename]
   );
 
   const keyExtractor = useCallback((item: Exercise) => item.id, []);
@@ -492,7 +493,7 @@ export default function ExerciseListScreen() {
           ]}
           onEndReached={handleLoadMore}
           onEndReachedThreshold={0.5}
-          keyboardDismissMode="on-drag"
+          keyboardDismissMode={Platform.OS === 'web' ? 'none' : 'on-drag'}
           keyboardShouldPersistTaps="handled"
           ListFooterComponent={
             loadingMore ? (
@@ -503,6 +504,56 @@ export default function ExerciseListScreen() {
           }
         />
       </ErrorBoundary>
+
+      <Modal
+        visible={Boolean(renameTarget)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !renameSaving && setRenameTarget(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.renameModalCard}>
+            <Text variant="titleMedium" color="primary">
+              Rename Exercise
+            </Text>
+            <TextInput
+              testID="library-rename-exercise-input"
+              value={renameInput}
+              onChangeText={setRenameInput}
+              placeholder="Exercise name"
+              placeholderTextColor={colors.textMuted}
+              maxLength={DOMAIN_LIMITS.EXERCISE_NAME_MAX_LENGTH}
+              style={styles.renameInput}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={() => void handleSaveRename()}
+            />
+            {renameError ? (
+              <Text variant="caption" style={{ color: colors.error || '#EF4444' }}>
+                {renameError}
+              </Text>
+            ) : null}
+            <View style={styles.renameActions}>
+              <Button
+                testID="library-cancel-rename-button"
+                title="Cancel"
+                variant="outline"
+                size="sm"
+                onPress={() => setRenameTarget(null)}
+                disabled={renameSaving}
+              />
+              <Button
+                testID="library-save-rename-button"
+                title="Save"
+                variant="primary"
+                size="sm"
+                loading={renameSaving}
+                onPress={() => void handleSaveRename()}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScreenContainer>
   );
 }
@@ -661,6 +712,38 @@ const createStyles = (colors: any) => StyleSheet.create({
   offlineBannerText: {
     fontWeight: '600',
     letterSpacing: 0.3,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.lg,
+  },
+  renameModalCard: {
+    width: '100%',
+    maxWidth: 400,
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  renameInput: {
+    backgroundColor: colors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    color: colors.textPrimary,
+    fontSize: 15,
+  },
+  renameActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.sm,
   },
 });
 

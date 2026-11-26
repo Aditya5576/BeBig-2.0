@@ -20,7 +20,13 @@ import {
   ExerciseCard,
   CustomExerciseForm,
 } from '../../exercises';
-import { getRecentlyUsedExercises } from '../../workout/services/recentExercisesService';
+import {
+  getRecentlyUsedExerciseEntries,
+  formatRelativeRecentLabel,
+  RecentExerciseEntry,
+} from '../../workout/services/recentExercisesService';
+import { filterAndRankExercises } from '../../exercises/utils/exerciseSearch';
+import { WorkoutSession } from '../../workout/types';
 import { spacing, radii } from '../../../constants/theme';
 
 export interface ExercisePickerModalProps {
@@ -31,6 +37,7 @@ export interface ExercisePickerModalProps {
   selectedExerciseIds?: string[];
   multiSelect?: boolean;
   recentExercises?: Exercise[];
+  completedWorkouts?: WorkoutSession[];
   showRecentlyUsed?: boolean;
 }
 
@@ -64,6 +71,7 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
   selectedExerciseIds = [],
   multiSelect,
   recentExercises: propsRecentExercises,
+  completedWorkouts,
   showRecentlyUsed = true,
 }: ExercisePickerModalProps) {
   const { colors } = useAppTheme();
@@ -96,39 +104,46 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
   // Custom exercise creation state inside picker
   const [isCreatingCustom, setIsCreatingCustom] = useState(false);
 
-  // Recently used exercises state derived from workout history
-  const [recentExercisesList, setRecentExercisesList] = useState<Exercise[]>(
-    propsRecentExercises || [],
+  // Recently used exercises state derived from workout history (Last 2 Weeks)
+  const [recentEntriesList, setRecentEntriesList] = useState<RecentExerciseEntry[]>(() =>
+    propsRecentExercises
+      ? propsRecentExercises.map((exercise) => ({ exercise, lastUsedAt: '' }))
+      : [],
   );
 
   useEffect(() => {
     if (!visible) {
       if (!propsRecentExercises) {
-        setRecentExercisesList([]);
+        setRecentEntriesList([]);
       }
       return;
     }
 
     if (propsRecentExercises) {
-      setRecentExercisesList(propsRecentExercises);
+      setRecentEntriesList(
+        propsRecentExercises.map((exercise) => ({ exercise, lastUsedAt: '' })),
+      );
       return;
     }
 
     if (!showRecentlyUsed) {
-      setRecentExercisesList([]);
+      setRecentEntriesList([]);
       return;
     }
 
     let isMounted = true;
     async function loadRecent() {
       try {
-        const recent = await getRecentlyUsedExercises({ limit: 10 });
+        const recent = await getRecentlyUsedExerciseEntries({
+          limit: 10,
+          completedWorkouts,
+        });
         if (isMounted) {
-          setRecentExercisesList(recent);
+          setRecentEntriesList(recent);
         }
       } catch {
         if (isMounted) {
-          setRecentExercisesList([]);
+          setRecentEntriesList([]);
         }
       }
     }
@@ -138,38 +153,54 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
     return () => {
       isMounted = false;
     };
-  }, [visible, propsRecentExercises, showRecentlyUsed]);
+  }, [visible, propsRecentExercises, completedWorkouts, showRecentlyUsed]);
 
-  // Lightweight picker projections with image payloads stripped so FlatList never diffs multi-MB base64 strings
-  const lightweightExercises = useMemo(
-    () => exercises.map(stripExerciseImagePayloads),
-    [exercises]
-  );
+  // Filter recently used exercises using shared fuzzy/synonym scorer
+  const visibleRecentEntries = useMemo(() => {
+    if (recentEntriesList.length === 0) return [];
 
-  // Filter recently used exercises matching current deferred search & category filters
-  const visibleRecentExercises = useMemo(() => {
-    if (recentExercisesList.length === 0) return [];
+    const sourceFiltered = recentEntriesList.filter(({ exercise: item }) => {
+      const isGlobal = Boolean(item.id && (item.id.startsWith('global_ex_') || item.sourceProvider === 'system'));
+      if (selectedSource === 'custom' && !item.isCustom) return false;
+      if (selectedSource === 'external' && (item.isCustom || isGlobal)) return false;
+      if (selectedSource === 'global' && !isGlobal) return false;
+      if (selectedCategory !== 'all' && item.category !== selectedCategory) return false;
+      return true;
+    });
 
     const trimmedQuery = deferredSearchQuery.trim();
-    return recentExercisesList
-      .filter((item) => {
-        const isGlobal = Boolean(item.id && (item.id.startsWith('global_ex_') || item.sourceProvider === 'system'));
-        if (selectedSource === 'custom' && !item.isCustom) return false;
-        if (selectedSource === 'external' && (item.isCustom || isGlobal)) return false;
-        if (selectedSource === 'global' && !isGlobal) return false;
-        if (selectedCategory !== 'all' && item.category !== selectedCategory) return false;
+    if (!trimmedQuery) {
+      return sourceFiltered.map((entry) => ({
+        ...entry,
+        exercise: stripExerciseImagePayloads(entry.exercise),
+      }));
+    }
 
-        if (trimmedQuery.length > 0) {
-          const query = trimmedQuery.toLowerCase();
-          const matchesName = (item.name || '').toLowerCase().includes(query);
-          const matchesCat = (item.categoryName || '').toLowerCase().includes(query);
-          if (!matchesName && !matchesCat) return false;
-        }
+    const entryById = new Map(sourceFiltered.map((e) => [e.exercise.id, e]));
+    const ranked = filterAndRankExercises(
+      sourceFiltered.map((e) => e.exercise),
+      trimmedQuery,
+      selectedCategory !== 'all' ? selectedCategory : undefined,
+    );
 
-        return true;
-      })
+    return ranked.map((ex) => ({
+      exercise: stripExerciseImagePayloads(ex),
+      lastUsedAt: entryById.get(ex.id)?.lastUsedAt || '',
+    }));
+  }, [recentEntriesList, selectedSource, selectedCategory, deferredSearchQuery]);
+
+  const cappedRecentEntries = useMemo(
+    () => visibleRecentEntries.slice(0, 6),
+    [visibleRecentEntries],
+  );
+
+  // Lightweight picker projections with image payloads stripped & recent IDs deduplicated
+  const lightweightExercises = useMemo(() => {
+    const recentIdSet = new Set(cappedRecentEntries.map((entry) => entry.exercise.id));
+    return exercises
+      .filter((ex) => !recentIdSet.has(ex.id))
       .map(stripExerciseImagePayloads);
-  }, [recentExercisesList, selectedSource, selectedCategory, deferredSearchQuery]);
+  }, [exercises, cappedRecentEntries]);
 
   // Reset search query & transient state cleanly on every open/close visibility transition
   useEffect(() => {
@@ -397,28 +428,36 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
   );
 
   const renderListHeader = () => {
-    if (visibleRecentExercises.length === 0) return null;
-
-    // Cap recently used items to 6 max to bound unvirtualized list header memory
-    const cappedRecent = visibleRecentExercises.slice(0, 6);
+    if (cappedRecentEntries.length === 0) return null;
 
     return (
       <View style={styles.recentSection} testID="picker-recent-section">
         <View style={styles.recentHeaderRow}>
           <Text variant="caption" color="secondary" style={styles.recentSectionTitle}>
-            RECENTLY USED
-          </Text>
-          <Text variant="caption" color="muted">
-            Based on workout history
+            Recent (Last 2 Weeks)
           </Text>
         </View>
 
         <View style={styles.recentItemsContainer}>
-          {cappedRecent.map((item) => renderExerciseCard(item, 'picker-recent'))}
+          {cappedRecentEntries.map(({ exercise: item, lastUsedAt }) => (
+            <View key={`picker-recent-wrap-${item.id}`} style={{ position: 'relative' }}>
+              {renderExerciseCard(item, 'picker-recent')}
+              {lastUsedAt ? (
+                <Text
+                  variant="caption"
+                  color="muted"
+                  testID={`picker-recent-label-${item.id}`}
+                  style={{ position: 'absolute', top: 8, right: 44, fontSize: 11 }}
+                >
+                  {formatRelativeRecentLabel(lastUsedAt)}
+                </Text>
+              ) : null}
+            </View>
+          ))}
         </View>
 
         <View style={styles.recentDivider} />
-        {exercises.length > 0 ? (
+        {lightweightExercises.length > 0 ? (
           <Text variant="caption" color="secondary" style={styles.librarySectionTitle}>
             ALL EXERCISES
           </Text>
@@ -625,10 +664,10 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
           <FlatList
             testID="picker-exercise-list"
             data={lightweightExercises}
-            extraData={`${selectedCount}_${visibleRecentExercises.length}`}
+            extraData={`${selectedCount}_${cappedRecentEntries.length}`}
             keyExtractor={(item) => item.id}
             renderItem={renderItem}
-            ListHeaderComponent={renderListHeader}
+            ListHeaderComponent={renderListHeader()}
             ListEmptyComponent={
               loading ? (
                 <View style={styles.centerContainer}>
@@ -652,9 +691,9 @@ export const ExercisePickerModal = React.memo(function ExercisePickerModal({
             contentContainerStyle={[
               styles.listContent,
               isMultiSelect ? { paddingBottom: 110 } : null,
-              exercises.length === 0 && visibleRecentExercises.length === 0 && { flexGrow: 1, justifyContent: 'center' },
+              exercises.length === 0 && cappedRecentEntries.length === 0 && { flexGrow: 1, justifyContent: 'center' },
             ]}
-            keyboardDismissMode="on-drag"
+            keyboardDismissMode={Platform.OS === 'web' ? 'none' : 'on-drag'}
             keyboardShouldPersistTaps="handled"
             initialNumToRender={Platform.OS === 'web' ? 8 : 12}
             maxToRenderPerBatch={Platform.OS === 'web' ? 6 : 10}

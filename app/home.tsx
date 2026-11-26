@@ -59,47 +59,49 @@ export default function HomeScreen() {
       const currentUser = useAuthStore.getState().user;
       const isGuestUser = useAuthStore.getState().isGuest;
 
-      if (currentUser?.id) {
-        try {
-          const profile = await profileService.getProfile(currentUser.id);
-          setProfileDisplayName(profile?.display_name ?? null);
-          setProfileAvatarUrl(profile?.avatar_url ?? null);
-          setAvatarLoadError(false);
-          if (!useOnboardingStore.getState().hasCompletedOnboarding && profile && profile.onboarding_completed) {
-            const store = useOnboardingStore.getState();
-            if (profile.goal) store.setGoal(profile.goal);
-            if (profile.experience_level) store.setExperienceLevel(profile.experience_level);
-            if (profile.days_per_week) store.setDaysPerWeek(profile.days_per_week);
-            if (profile.workout_duration) store.setWorkoutDuration(profile.workout_duration);
-            if (profile.equipment) store.setEquipment(profile.equipment);
-            if (profile.workout_style) store.setWorkoutStyle(profile.workout_style);
-            store.completeOnboarding();
-          }
-        } catch {
-          // Silently handled
-        }
-      } else if (isGuestUser) {
-        setProfileDisplayName(null);
-        setProfileAvatarUrl(null);
-        setAvatarLoadError(false);
-        try {
-          const guestData = await guestStorage.getOnboardingData();
-          if (guestData) {
-            const store = useOnboardingStore.getState();
-            if (guestData.goal) store.setGoal(guestData.goal);
-            if (guestData.experienceLevel) store.setExperienceLevel(guestData.experienceLevel);
-            if (guestData.daysPerWeek) store.setDaysPerWeek(guestData.daysPerWeek);
-            if (guestData.workoutDuration) store.setWorkoutDuration(guestData.workoutDuration);
-            if (guestData.equipment) store.setEquipment(guestData.equipment);
-            if (guestData.workoutStyle) store.setWorkoutStyle(guestData.workoutStyle);
-            if (guestData.hasCompletedOnboarding) {
+      const identityPromise = (async () => {
+        if (currentUser?.id) {
+          try {
+            const profile = await profileService.getProfile(currentUser.id);
+            setProfileDisplayName(profile?.display_name ?? null);
+            setProfileAvatarUrl(profile?.avatar_url ?? null);
+            setAvatarLoadError(false);
+            if (!useOnboardingStore.getState().hasCompletedOnboarding && profile && profile.onboarding_completed) {
+              const store = useOnboardingStore.getState();
+              if (profile.goal) store.setGoal(profile.goal);
+              if (profile.experience_level) store.setExperienceLevel(profile.experience_level);
+              if (profile.days_per_week) store.setDaysPerWeek(profile.days_per_week);
+              if (profile.workout_duration) store.setWorkoutDuration(profile.workout_duration);
+              if (profile.equipment) store.setEquipment(profile.equipment);
+              if (profile.workout_style) store.setWorkoutStyle(profile.workout_style);
               store.completeOnboarding();
             }
+          } catch {
+            // Silently handled
           }
-        } catch {
-          // Silently handled
+        } else if (isGuestUser) {
+          setProfileDisplayName(null);
+          setProfileAvatarUrl(null);
+          setAvatarLoadError(false);
+          try {
+            const guestData = await guestStorage.getOnboardingData();
+            if (guestData) {
+              const store = useOnboardingStore.getState();
+              if (guestData.goal) store.setGoal(guestData.goal);
+              if (guestData.experienceLevel) store.setExperienceLevel(guestData.experienceLevel);
+              if (guestData.daysPerWeek) store.setDaysPerWeek(guestData.daysPerWeek);
+              if (guestData.workoutDuration) store.setWorkoutDuration(guestData.workoutDuration);
+              if (guestData.equipment) store.setEquipment(guestData.equipment);
+              if (guestData.workoutStyle) store.setWorkoutStyle(guestData.workoutStyle);
+              if (guestData.hasCompletedOnboarding) {
+                store.completeOnboarding();
+              }
+            }
+          } catch {
+            // Silently handled
+          }
         }
-      }
+      })();
 
       const [workoutsResult, activeResult, templatesResult] = await Promise.allSettled([
         workoutRepository.getCompletedWorkouts(),
@@ -111,17 +113,25 @@ export default function HomeScreen() {
       setActiveWorkout(activeResult.status === 'fulfilled' ? activeResult.value : null);
       setTemplates(templatesResult.status === 'fulfilled' ? templatesResult.value : []);
 
-      // Non-blocking hydration of active announcements so local dashboard renders immediately
-      void Promise.allSettled([
-        adminService.getActiveAnnouncements(),
-        adminService.getDismissedAnnouncementIds(),
-      ]).then(([announcementsResult, dismissedResult]) => {
-        setActiveAnnouncements(
-          announcementsResult.status === 'fulfilled' ? announcementsResult.value : [],
-        );
-        setDismissedAnnouncementIds(
-          dismissedResult.status === 'fulfilled' ? dismissedResult.value : [],
-        );
+      void identityPromise;
+
+      // Defer non-critical announcements until after first paint
+      const scheduleAfterPaint =
+        typeof requestAnimationFrame === 'function'
+          ? requestAnimationFrame
+          : (cb: () => void) => setTimeout(cb, 0);
+      scheduleAfterPaint(() => {
+        void Promise.allSettled([
+          adminService.getActiveAnnouncements(),
+          adminService.getDismissedAnnouncementIds(),
+        ]).then(([announcementsResult, dismissedResult]) => {
+          setActiveAnnouncements(
+            announcementsResult.status === 'fulfilled' ? announcementsResult.value : [],
+          );
+          setDismissedAnnouncementIds(
+            dismissedResult.status === 'fulfilled' ? dismissedResult.value : [],
+          );
+        });
       });
     } catch {
       setCompletedWorkouts([]);

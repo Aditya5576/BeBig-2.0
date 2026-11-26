@@ -1,11 +1,21 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
 import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useSyncLifecycle } from '../src/services/sync';
 import { useAuthStore, resolveAuthenticatedUserRoute } from '../src/features/auth';
-import { WebAlertModal, ReleaseNotesModal, StartupSplash } from '../src/components/ui';
+import { WebAlertModal, ReleaseNotesModal, PwaUpdateCard, StartupSplash } from '../src/components/ui';
+import { getAppVersionInfo } from '../src/config/version';
+import { CURRENT_RELEASE_NOTES, defaultReleaseHighlights } from '../src/lib/releaseNotes/releaseNotesService';
+import {
+  authorizeAndApplyPwaUpdate,
+  canReloadNow,
+  getAuthorizedPwaReload,
+  isActiveWorkoutMounted,
+  PwaControllerCheckTarget,
+  subscribeActiveWorkoutPresence,
+} from '../src/lib/pwa/pwaUpdateCoordinator';
 import { BottomNavBar } from '../src/components/navigation';
 import { initErrorMonitoring, wrapRootLayout, setUserContext } from '../src/services/monitoring/errorMonitoring';
 import { errorTelemetryService } from '../src/features/admin/services/errorTelemetryService';
@@ -105,41 +115,213 @@ export default wrapRootLayout(function RootLayout() {
   const { colors, activeMode } = useAppTheme();
   const isHydrated = useThemeStore((state) => state.isHydrated);
 
-  // Web Service Worker auto-update check + session-guarded single reload on controllerchange (v2.4.3)
+  const [pendingSwUpdate, setPendingSwUpdate] = useState<{
+    worker: ServiceWorker;
+    version: string;
+    sha: string;
+    highlight: string;
+  } | null>(null);
+  const [isApplyingSwUpdate, setIsApplyingSwUpdate] = useState(false);
+  const [swUpdateError, setSwUpdateError] = useState<string | null>(null);
+  const [dismissedSwVersion, setDismissedSwVersion] = useState<string | null>(null);
+  const [isActiveWorkoutOpen, setIsActiveWorkoutOpen] = useState<boolean>(() =>
+    isActiveWorkoutMounted(),
+  );
+  const lastAppliedSwRef = useRef<{ worker: ServiceWorker; version: string; sha: string } | null>(null);
+  const deferredReloadTargetRef = useRef<PwaControllerCheckTarget | null>(null);
+
+  const RELOAD_GUARD_KEY = 'bebig_sw_reloaded_v270';
+
+  const executeDeferredReloadIfAuthorized = (target: PwaControllerCheckTarget | null) => {
+    if (!target) return false;
+    if (!canReloadNow(target)) return false;
+    deferredReloadTargetRef.current = null;
+    try {
+      if (typeof sessionStorage !== 'undefined') {
+        if (sessionStorage.getItem(RELOAD_GUARD_KEY)) {
+          return false;
+        }
+        sessionStorage.setItem(RELOAD_GUARD_KEY, '1');
+      }
+      if (typeof window !== 'undefined' && typeof window.location?.reload === 'function') {
+        window.location.reload();
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  useEffect(() => {
+    return subscribeActiveWorkoutPresence((isOpen) => {
+      setIsActiveWorkoutOpen(isOpen);
+      if (!isOpen && deferredReloadTargetRef.current) {
+        executeDeferredReloadIfAuthorized(deferredReloadTargetRef.current);
+      }
+    });
+  }, []);
+
+  // Web Service Worker update detection + MessageChannel metadata + authorized reload
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined' || !('serviceWorker' in navigator)) {
       return;
     }
 
-    const RELOAD_GUARD_KEY = 'bebig_sw_reloaded_v243';
+    let isMounted = true;
+
+    const queryWorkerMetadata = (worker: ServiceWorker) => {
+      const appVer = getAppVersionInfo().version;
+      const fallbackHighlight =
+        CURRENT_RELEASE_NOTES[appVer]?.highlights?.[0] ||
+        defaultReleaseHighlights[0] ||
+        'New improvements and stability fixes.';
+
+      if (typeof MessageChannel === 'undefined') {
+        if (isMounted) {
+          setPendingSwUpdate({ worker, version: appVer, sha: '', highlight: fallbackHighlight });
+        }
+        return;
+      }
+
+      try {
+        const channel = new MessageChannel();
+        const timer = setTimeout(() => {
+          if (isMounted) {
+            setPendingSwUpdate({ worker, version: appVer, sha: '', highlight: fallbackHighlight });
+          }
+        }, 800);
+
+        channel.port1.onmessage = (evt) => {
+          clearTimeout(timer);
+          const data = evt.data;
+          const ver =
+            data?.version && !String(data.version).startsWith('__BEBIG_')
+              ? String(data.version)
+              : appVer;
+          const sha =
+            data?.sha && !String(data.sha).startsWith('__BEBIG_') ? String(data.sha) : '';
+          const hl =
+            data?.highlight && !String(data.highlight).startsWith('__BEBIG_')
+              ? String(data.highlight)
+              : CURRENT_RELEASE_NOTES[ver]?.highlights?.[0] || fallbackHighlight;
+          if (isMounted) {
+            setPendingSwUpdate({ worker, version: ver, sha, highlight: hl });
+          }
+        };
+
+        worker.postMessage({ type: 'GET_SW_METADATA' }, [channel.port2]);
+      } catch {
+        if (isMounted) {
+          setPendingSwUpdate({ worker, version: appVer, sha: '', highlight: fallbackHighlight });
+        }
+      }
+    };
+
+    const readControllerMetadata = (
+      controller: ServiceWorker | null,
+    ): Promise<PwaControllerCheckTarget> => {
+      if (!controller) return Promise.resolve({});
+      const base: PwaControllerCheckTarget = { scriptUrl: controller.scriptURL };
+      if (lastAppliedSwRef.current && lastAppliedSwRef.current.worker === controller) {
+        return Promise.resolve({
+          ...base,
+          version: lastAppliedSwRef.current.version,
+          sha: lastAppliedSwRef.current.sha,
+        });
+      }
+      if (typeof MessageChannel === 'undefined') {
+        return Promise.resolve(base);
+      }
+      return new Promise((resolve) => {
+        try {
+          const channel = new MessageChannel();
+          const timer = setTimeout(() => resolve(base), 200);
+          channel.port1.onmessage = (evt) => {
+            clearTimeout(timer);
+            const data = evt.data;
+            resolve({
+              ...base,
+              version:
+                data?.version && !String(data.version).startsWith('__BEBIG_')
+                  ? String(data.version)
+                  : undefined,
+              sha:
+                data?.sha && !String(data.sha).startsWith('__BEBIG_')
+                  ? String(data.sha)
+                  : undefined,
+            });
+          };
+          controller.postMessage({ type: 'GET_SW_METADATA' }, [channel.port2]);
+        } catch {
+          resolve(base);
+        }
+      });
+    };
 
     const handleControllerChange = () => {
-      try {
-        if (typeof sessionStorage !== 'undefined') {
-          if (sessionStorage.getItem(RELOAD_GUARD_KEY)) {
-            return;
+      const controller = navigator.serviceWorker.controller;
+      void readControllerMetadata(controller).then((target) => {
+        if (!isMounted) return;
+        if (!executeDeferredReloadIfAuthorized(target)) {
+          const auth = getAuthorizedPwaReload();
+          if (auth && auth.sessionId === null && isActiveWorkoutMounted()) {
+            deferredReloadTargetRef.current = target;
           }
-          sessionStorage.setItem(RELOAD_GUARD_KEY, '1');
         }
-        window.location.reload();
-      } catch {
-        // Ignore storage/reload restrictions
-      }
+      });
     };
 
     navigator.serviceWorker.addEventListener?.('controllerchange', handleControllerChange);
 
+    let activeReg: ServiceWorkerRegistration | undefined;
+    const handleUpdateFound = () => {
+      const installing = activeReg?.installing;
+      if (!installing) return;
+      installing.addEventListener('statechange', () => {
+        if (installing.state === 'installed' && navigator.serviceWorker.controller) {
+          queryWorkerMetadata(installing);
+        }
+      });
+    };
+
     navigator.serviceWorker
       .getRegistration()
       .then((reg) => {
-        reg?.update().catch(() => {});
+        if (!reg || !isMounted) return;
+        activeReg = reg;
+        if (reg.waiting && navigator.serviceWorker.controller) {
+          queryWorkerMetadata(reg.waiting);
+        }
+        reg.addEventListener?.('updatefound', handleUpdateFound);
+        reg.update().catch(() => {});
       })
       .catch(() => {});
 
     return () => {
+      isMounted = false;
+      activeReg?.removeEventListener?.('updatefound', handleUpdateFound);
       navigator.serviceWorker.removeEventListener?.('controllerchange', handleControllerChange);
     };
   }, []);
+
+  const handleApplyPwaUpdate = async () => {
+    if (!pendingSwUpdate) return;
+    setIsApplyingSwUpdate(true);
+    setSwUpdateError(null);
+    lastAppliedSwRef.current = {
+      worker: pendingSwUpdate.worker,
+      version: pendingSwUpdate.version,
+      sha: pendingSwUpdate.sha,
+    };
+    const result = await authorizeAndApplyPwaUpdate(pendingSwUpdate.worker, {
+      version: pendingSwUpdate.version,
+      sha: pendingSwUpdate.sha,
+    });
+    if (!result.ok) {
+      setIsApplyingSwUpdate(false);
+      setSwUpdateError(result.error || 'Could not apply update yet.');
+    }
+  };
 
   // Professional athletic typography: 7 lightweight static TTF weights (Plus Jakarta Sans + Inter)
   const [fontsLoaded, fontError] = useFonts({
@@ -247,6 +429,20 @@ export default wrapRootLayout(function RootLayout() {
       )}
       <WebAlertModal />
       {!showColdBootSplash && <ReleaseNotesModal />}
+      {!showColdBootSplash &&
+        !isActiveWorkoutOpen &&
+        pendingSwUpdate &&
+        dismissedSwVersion !== pendingSwUpdate.version && (
+        <PwaUpdateCard
+          visible={true}
+          version={pendingSwUpdate.version}
+          highlight={pendingSwUpdate.highlight}
+          updating={isApplyingSwUpdate}
+          errorMessage={swUpdateError}
+          onUpdateNow={() => void handleApplyPwaUpdate()}
+          onLater={() => setDismissedSwVersion(pendingSwUpdate.version)}
+        />
+      )}
     </SafeAreaProvider>
   );
 });

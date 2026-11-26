@@ -35,13 +35,14 @@ import {
   buildProgressiveOverloadMap,
 } from '../../src/features/workout/services/previousPerformanceService';
 import { useAuthStore } from '../../src/features/auth';
-import { Exercise } from '../../src/features/exercises';
+import { Exercise, exerciseRepository } from '../../src/features/exercises';
 import { normalizeTrackingMode, resolveExerciseTrackingMode } from '../../src/features/exercises/exerciseTracking';
 import { spacing, radii } from '../../src/constants/theme';
 import { DOMAIN_LIMITS } from '../../src/constants/domainLimits';
 import { RestTimerOverlay } from '../../src/features/workout/components/RestTimerOverlay';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ActiveFocusField } from '../../src/features/workout/components/ActiveSetRow';
+import { registerActiveWorkoutUpdateGuard } from '../../src/lib/pwa/pwaUpdateCoordinator';
 
 const useFocusEffect =
   typeof routerFocusEffect === 'function' ? routerFocusEffect : (fn: any) => fn();
@@ -71,6 +72,7 @@ export default function ActiveWorkoutScreen() {
     [session?.exercises],
   );
   const sessionRef = useRef<WorkoutSession | null>(null);
+  const isMountedRef = useRef(true);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Guard: true once the workout is completed or discarded so that the
   // component cleanup / AppState background handler never re-saves a stale
@@ -79,6 +81,24 @@ export default function ActiveWorkoutScreen() {
   const scrollViewRef = useRef<ScrollView>(null);
   const currentScrollY = useRef(0);
   const cardLayoutsRef = useRef<{ [exerciseId: string]: { y: number; height: number } }>({});
+  const cardLayoutHandlersRef = useRef<Record<string, (e: any) => void>>({});
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  const getCardLayoutHandler = useCallback((exerciseId: string) => {
+    if (!cardLayoutHandlersRef.current[exerciseId]) {
+      cardLayoutHandlersRef.current[exerciseId] = (e: any) => {
+        const { y, height } = e.nativeEvent.layout;
+        cardLayoutsRef.current[exerciseId] = { y, height };
+      };
+    }
+    return cardLayoutHandlersRef.current[exerciseId];
+  }, []);
 
   const [keypadFocus, setKeypadFocus] = useState<{
     exerciseId: string;
@@ -102,28 +122,33 @@ export default function ActiveWorkoutScreen() {
   const flushActiveWorkout = useCallback(
     async (
       targetSession?: WorkoutSession,
-      options?: { allowEmptyOverwrites?: boolean; allowExerciseRemoval?: boolean }
-    ) => {
+      options?: { allowEmptyOverwrites?: boolean; allowExerciseRemoval?: boolean; surfaceError?: boolean }
+    ): Promise<WorkoutSession | null | undefined> => {
       // Do not autosave after the workout has been completed or discarded.
       // This prevents the unmount cleanup from resurrecting a cleared active draft.
-      if (workoutCompletedRef.current) return;
+      if (workoutCompletedRef.current) return null;
       cancelDebouncedSave();
       const sessionToSave = targetSession || sessionRef.current;
-      if (!sessionToSave) return;
+      if (!sessionToSave) return null;
       try {
         // Discard tombstone check: prevent resurrecting discarded session
         const isDiscarded = await workoutRepository.isSessionDiscarded(sessionToSave.id);
         if (isDiscarded) {
           workoutCompletedRef.current = true;
-          return;
+          return null;
         }
         const saved = await workoutRepository.updateActiveWorkout(sessionToSave, undefined, options);
-        if (saved && !workoutCompletedRef.current) {
+        if (saved && !workoutCompletedRef.current && isMountedRef.current) {
           sessionRef.current = saved;
           setSession(saved);
         }
-      } catch {
+        return saved || sessionToSave;
+      } catch (err) {
+        if (options?.surfaceError) {
+          throw err;
+        }
         // Background autosave failure caught gracefully
+        return null;
       }
     },
     [cancelDebouncedSave]
@@ -233,6 +258,44 @@ export default function ActiveWorkoutScreen() {
     };
   }, [flushActiveWorkout]);
 
+  // Register active workout revision-bound flush+verify guard so PWA updates never interrupt mid-edit
+  useEffect(() => {
+    const getRev = (s: WorkoutSession | null | undefined) =>
+      Number(s?.revision ?? s?.version ?? 0);
+
+    return registerActiveWorkoutUpdateGuard({
+      flushAndReadSnapshot: async () => {
+        const current = sessionRef.current;
+        if (!current || workoutCompletedRef.current) {
+          return { sessionId: null, revision: 0 };
+        }
+        const flushed = await flushActiveWorkout(current, { surfaceError: true });
+        const latest = flushed || sessionRef.current;
+        if (!latest) return null;
+        return { sessionId: latest.id, revision: getRev(latest) };
+      },
+      verifyPersistedSnapshot: async (expected) => {
+        if (!expected.sessionId) return true;
+        const verified = await workoutRepository.getActiveWorkout();
+        return Boolean(
+          verified &&
+            verified.id === expected.sessionId &&
+            getRev(verified) === expected.revision,
+        );
+      },
+      verifyCurrentSnapshot: (expected) => {
+        const live = sessionRef.current;
+        const hasLiveActiveWorkout = Boolean(live && !workoutCompletedRef.current);
+        // If authorized outside an active workout (e.g. from Home), reject while a live workout is mounted
+        if (!expected.sessionId) {
+          return !hasLiveActiveWorkout;
+        }
+        if (!hasLiveActiveWorkout) return true;
+        return live!.id === expected.sessionId && getRev(live) === expected.revision;
+      },
+    });
+  }, [flushActiveWorkout]);
+
   useFocusEffect(
     useCallback(() => {
       let isFocused = true;
@@ -318,6 +381,18 @@ export default function ActiveWorkoutScreen() {
     setSelectedDetailExercise({ id: exerciseId, name: exerciseName });
   }, []);
 
+  const handleRenameExercise = useCallback(async (exerciseId: string, newName: string) => {
+    const updatedEx = await exerciseRepository.renameExercise(exerciseId, newName);
+    const current = sessionRef.current;
+    if (!current) return;
+    const renamedSession = workoutRepository.renameExerciseInWorkout(
+      current,
+      exerciseId,
+      updatedEx.name,
+    );
+    await updateSessionAndAutosaveImmediate(renamedSession);
+  }, [updateSessionAndAutosaveImmediate]);
+
   const handleCloseExerciseDetail = useCallback(() => {
     setSelectedDetailExercise(null);
   }, []);
@@ -330,7 +405,7 @@ export default function ActiveWorkoutScreen() {
       : 'guest'
   );
 
-  const toggleNotesForSet = (setId: string) => {
+  const toggleNotesForSet = useCallback((setId: string) => {
     setExpandedNotesSetIds((prev) => {
       let isCurrentlyExpanded = prev[setId];
       if (isCurrentlyExpanded === undefined) {
@@ -342,7 +417,58 @@ export default function ActiveWorkoutScreen() {
       }
       return { ...prev, [setId]: !isCurrentlyExpanded };
     });
-  };
+  }, [session]);
+
+  const closeNotesForSet = useCallback(async (setId: string) => {
+    setExpandedNotesSetIds((prev) => ({ ...prev, [setId]: false }));
+    try {
+      await flushActiveWorkout(sessionRef.current || undefined, { surfaceError: true });
+    } catch (err: any) {
+      Alert.alert(
+        'Note Not Saved Yet',
+        err?.message || 'Could not save your set note to storage. Please tap Done again to retry.'
+      );
+    }
+  }, [flushActiveWorkout]);
+
+  const EMPTY_NOTES_MAP: Record<string, boolean> = useMemo(() => ({}), []);
+  const prevExerciseNotesRef = useRef<Record<string, Record<string, boolean>>>({});
+
+  const expandedNotesByExercise = useMemo(() => {
+    const nextByEx: Record<string, Record<string, boolean>> = {};
+    const prevByEx = prevExerciseNotesRef.current;
+
+    for (const ex of session?.exercises || []) {
+      const slice: Record<string, boolean> = {};
+      let hasAny = false;
+      for (const s of ex.actualSets || []) {
+        if (s.id in expandedNotesSetIds) {
+          slice[s.id] = expandedNotesSetIds[s.id];
+          hasAny = true;
+        }
+      }
+
+      if (!hasAny) {
+        nextByEx[ex.exerciseId] = EMPTY_NOTES_MAP;
+        continue;
+      }
+
+      const prevSlice = prevByEx[ex.exerciseId];
+      const sliceKeys = Object.keys(slice);
+      if (
+        prevSlice &&
+        Object.keys(prevSlice).length === sliceKeys.length &&
+        sliceKeys.every((k) => prevSlice[k] === slice[k])
+      ) {
+        nextByEx[ex.exerciseId] = prevSlice;
+      } else {
+        nextByEx[ex.exerciseId] = slice;
+      }
+    }
+
+    prevExerciseNotesRef.current = nextByEx;
+    return nextByEx;
+  }, [session?.exercises, expandedNotesSetIds, EMPTY_NOTES_MAP]);
 
   // Load user-scoped completed workout history ONCE on mount / user scope change (zero per-keystroke queries)
   useEffect(() => {
@@ -367,13 +493,23 @@ export default function ActiveWorkoutScreen() {
     };
   }, [activeUserScopeKey]);
 
-  const lastPerformanceMap = useMemo(
+  const exerciseIdentityKey = useMemo(
     () =>
-      session?.exercises && session.exercises.length > 0
-        ? buildLastPerformanceMap(session.exercises, completedWorkoutsHistory, session.id)
-        : {},
-    [session?.exercises, session?.id, completedWorkoutsHistory]
+      (session?.exercises || [])
+        .map((e, i) => `${e.exerciseId}:${e.order ?? i}`)
+        .join('|'),
+    [session?.exercises]
   );
+
+  const exercisesForLastPerfRef = useRef(session?.exercises);
+  exercisesForLastPerfRef.current = session?.exercises;
+
+  const lastPerformanceMap = useMemo(() => {
+    const exList = exercisesForLastPerfRef.current;
+    return exList && exList.length > 0 && exerciseIdentityKey
+      ? buildLastPerformanceMap(exList, completedWorkoutsHistory, session?.id)
+      : {};
+  }, [exerciseIdentityKey, session?.id, completedWorkoutsHistory]);
 
   const progressiveOverloadMap = useMemo(
     () => buildProgressiveOverloadMap(completedWorkoutsHistory, session?.id),
@@ -466,7 +602,7 @@ export default function ActiveWorkoutScreen() {
   };
 
   // Remove exercise
-  const handleRemoveExercise = (exercise: WorkoutExercise) => {
+  const handleRemoveExercise = useCallback((exercise: WorkoutExercise) => {
     Alert.alert(
       'Remove Exercise',
       `Remove "${exercise.exerciseName}" and all of its logged sets from this active workout?`,
@@ -476,10 +612,8 @@ export default function ActiveWorkoutScreen() {
           text: 'Remove',
           style: 'destructive',
           onPress: async () => {
-            if (keypadFocus?.exerciseId === exercise.exerciseId) {
-              setKeypadFocus(null);
-            }
-            const current = sessionRef.current || session;
+            setKeypadFocus((prev) => (prev?.exerciseId === exercise.exerciseId ? null : prev));
+            const current = sessionRef.current;
             if (!current) return;
             const updated = workoutRepository.removeExerciseFromWorkout(
               current,
@@ -493,12 +627,11 @@ export default function ActiveWorkoutScreen() {
         },
       ],
     );
-  };
+  }, [updateSessionAndAutosaveImmediate]);
 
   // Reorder exercise move up
-  const handleMoveUpExercise = async (index: number) => {
-    if (finishing) return;
-    const current = sessionRef.current || session;
+  const handleMoveUpExercise = useCallback(async (index: number) => {
+    const current = sessionRef.current;
     if (!current || index <= 0) return;
 
     // Calculate vertical height of the item we are swapping with (above us)
@@ -515,12 +648,11 @@ export default function ActiveWorkoutScreen() {
 
     const updated = workoutRepository.moveExerciseUp(current, index);
     await updateSessionAndAutosaveImmediate(updated);
-  };
+  }, [updateSessionAndAutosaveImmediate]);
 
   // Reorder exercise move down
-  const handleMoveDownExercise = async (index: number) => {
-    if (finishing) return;
-    const current = sessionRef.current || session;
+  const handleMoveDownExercise = useCallback(async (index: number) => {
+    const current = sessionRef.current;
     if (!current || index >= current.exercises.length - 1) return;
 
     // Calculate vertical height of the item we are swapping with (below us)
@@ -537,38 +669,36 @@ export default function ActiveWorkoutScreen() {
 
     const updated = workoutRepository.moveExerciseDown(current, index);
     await updateSessionAndAutosaveImmediate(updated);
-  };
+  }, [updateSessionAndAutosaveImmediate]);
 
   // Link exercise with next into Superset or Giant Set
-  const handleLinkSuperset = async (index: number) => {
-    const current = sessionRef.current || session;
+  const handleLinkSuperset = useCallback(async (index: number) => {
+    const current = sessionRef.current;
     if (!current) return;
     const updated = workoutRepository.linkSupersetWithNext(current, index);
     await updateSessionAndAutosaveImmediate(updated);
-  };
+  }, [updateSessionAndAutosaveImmediate]);
 
   // Unlink exercise from Superset or Giant Set
-  const handleUnlinkSuperset = async (index: number) => {
-    const current = sessionRef.current || session;
+  const handleUnlinkSuperset = useCallback(async (index: number) => {
+    const current = sessionRef.current;
     if (!current) return;
     const updated = workoutRepository.unlinkSuperset(current, index);
     await updateSessionAndAutosaveImmediate(updated);
-  };
+  }, [updateSessionAndAutosaveImmediate]);
 
   // Add set to exercise (0ms optimistic UI)
-  const handleAddSet = (exerciseId: string) => {
-    const current = sessionRef.current || session;
+  const handleAddSet = useCallback((exerciseId: string) => {
+    const current = sessionRef.current;
     if (!current) return;
     const updated = workoutRepository.addSetToExercise(current, exerciseId);
     void updateSessionAndAutosaveImmediate(updated);
-  };
+  }, [updateSessionAndAutosaveImmediate]);
 
   // Delete set (0ms optimistic UI)
-  const handleDeleteSet = (exerciseId: string, setId: string) => {
-    if (keypadFocus?.setId === setId) {
-      setKeypadFocus(null);
-    }
-    const current = sessionRef.current || session;
+  const handleDeleteSet = useCallback((exerciseId: string, setId: string) => {
+    setKeypadFocus((prev) => (prev?.setId === setId ? null : prev));
+    const current = sessionRef.current;
     if (!current) return;
     const targetEx = current.exercises.find((e) => e.exerciseId === exerciseId);
     if (!targetEx || targetEx.actualSets.length <= 1) return;
@@ -577,7 +707,7 @@ export default function ActiveWorkoutScreen() {
 
     const updated = workoutRepository.removeSetFromExercise(current, exerciseId, setId);
     void updateSessionAndAutosaveImmediate(updated);
-  };
+  }, [updateSessionAndAutosaveImmediate]);
 
   // Update set field (weight, reps, rir, inclinePercent, speedKph, durationSeconds, notes)
   const handleUpdateSetField = useCallback(
@@ -839,15 +969,13 @@ export default function ActiveWorkoutScreen() {
   }, []);
 
   // Toggle complete set
-  const handleToggleCompleteSet = async (
+  const handleToggleCompleteSet = useCallback(async (
     exercise: WorkoutExercise,
     set: WorkoutSet,
     pendingUpdates?: Partial<WorkoutSet>,
   ) => {
-    if (keypadFocus?.setId === set.id) {
-      setKeypadFocus(null);
-    }
-    const current = sessionRef.current || session;
+    setKeypadFocus((prev) => (prev?.setId === set.id ? null : prev));
+    const current = sessionRef.current;
     if (!current) return;
 
     const latestExercise =
@@ -950,7 +1078,7 @@ export default function ActiveWorkoutScreen() {
       });
       await updateSessionAndAutosaveImmediate(updated);
     }
-  };
+  }, [updateSessionAndAutosaveImmediate]);
 
   // Extend active rest timer
   const handleExtendRest = async (addedSeconds: number) => {
@@ -1238,7 +1366,7 @@ export default function ActiveWorkoutScreen() {
                     supersetInfo={getSupersetDisplayInfo(session.exercises, ex.exerciseId)}
                     lastPerformance={lastPerformanceMap[`${ex.exerciseId}_${ex.order}`] ?? lastPerformanceMap[ex.exerciseId]}
                     overloadNudge={progressiveOverloadMap[ex.exerciseId] ?? null}
-                    expandedNotesSetIds={expandedNotesSetIds}
+                    expandedNotesSetIds={expandedNotesByExercise[ex.exerciseId] || EMPTY_NOTES_MAP}
                     onMoveUp={handleMoveUpExercise}
                     onMoveDown={handleMoveDownExercise}
                     onLinkSuperset={handleLinkSuperset}
@@ -1247,24 +1375,23 @@ export default function ActiveWorkoutScreen() {
                     onAddSet={handleAddSet}
                     onDeleteSet={handleDeleteSet}
                     onToggleNotes={toggleNotesForSet}
+                    onCloseNotes={closeNotesForSet}
                     onUpdateSetField={handleUpdateSetField}
                     onToggleCompleteSet={handleToggleCompleteSet}
                     onPressExerciseDetail={handleOpenExerciseDetail}
+                    onRenameExercise={handleRenameExercise}
                     isCustomKeypadActive={Boolean(keypadFocus) && !useNativeKeyboard}
                     activeFocusSetId={keypadFocus?.setId}
                     activeFocusField={keypadFocus?.field}
                     onFocusField={handleFocusField}
-                    style={{
-                      marginBottom: isLinkedWithNext
-                        ? 8
+                    style={
+                      isLinkedWithNext
+                        ? styles.cardMarginSuperset
                         : exIndex === session.exercises.length - 1
-                        ? 0
-                        : 14,
-                    }}
-                    onLayout={(e) => {
-                      const { y, height } = e.nativeEvent.layout;
-                      cardLayoutsRef.current[ex.exerciseId] = { y, height };
-                    }}
+                        ? styles.cardMarginLast
+                        : styles.cardMarginStandard
+                    }
+                    onLayout={getCardLayoutHandler(ex.exerciseId)}
                   />
                 );
               })}
@@ -1280,6 +1407,7 @@ export default function ActiveWorkoutScreen() {
                 if (sessionRef.current) {
                   void flushActiveWorkout();
                 }
+                setKeypadFocus(null);
                 setIsPickerVisible(true);
               }}
               variant="secondary"
@@ -1328,6 +1456,7 @@ export default function ActiveWorkoutScreen() {
         onSelectExercise={handleSelectExercise}
         onSelectExercises={handleSelectExercises}
         selectedExerciseIds={activeExerciseIds}
+        completedWorkouts={completedWorkoutsHistory}
         multiSelect={true}
       />
 
@@ -2061,5 +2190,14 @@ const createStyles = (colors: any, insets: { bottom: number }) => StyleSheet.cre
     minHeight: 38,
     borderRadius: 10,
     borderColor: colors.error,
+  },
+  cardMarginStandard: {
+    marginBottom: 14,
+  },
+  cardMarginSuperset: {
+    marginBottom: 8,
+  },
+  cardMarginLast: {
+    marginBottom: 0,
   },
 });

@@ -38,15 +38,18 @@ export function resolveExerciseTrackingMode(
   exercise?: {
     id?: string;
     name?: string;
+    canonicalName?: string;
     trackingMode?: ExerciseTrackingMode | string | null;
     sourceProvider?: string;
+    isCustom?: boolean;
   } | null
 ): ExerciseTrackingMode {
   if (!exercise) return 'strength';
   if (exercise.trackingMode === 'treadmill') return 'treadmill';
   if (exercise.trackingMode === 'strength') return 'strength';
   if (exercise.id === TREADMILL_EXERCISE_ID) return 'treadmill';
-  const name = (exercise.name || '').trim().toLowerCase();
+  if (exercise.isCustom || exercise.id?.startsWith('custom_')) return 'strength';
+  const name = (exercise.canonicalName ?? exercise.name ?? '').trim().toLowerCase();
   if (name === 'treadmill') {
     return 'treadmill';
   }

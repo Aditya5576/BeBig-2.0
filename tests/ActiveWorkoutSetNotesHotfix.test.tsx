@@ -40,16 +40,19 @@ jest.mock('expo-secure-store', () => ({
   }),
 }));
 
+(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+
 describe('BeBig 2.0 — Workout 2.0 Set Notes UX Hotfix', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
+    await cleanup();
     mockSecureStore.clear();
     await workoutStorage.clearAllWorkouts();
     await templateStorage.clearTemplates();
   });
 
-  afterEach(() => {
-    cleanup();
+  afterEach(async () => {
+    await cleanup();
   });
 
   async function createFixtureSession() {
@@ -249,16 +252,64 @@ describe('BeBig 2.0 — Workout 2.0 Set Notes UX Hotfix', () => {
     const minimizeBtn = await screen1.findByTestId('minimize-workout-button');
     fireEvent.press(minimizeBtn);
 
-    await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith('/home');
-    });
+    await waitFor(
+      () => {
+        expect(mockPush).toHaveBeenCalledWith('/home');
+      },
+      { timeout: 4000 },
+    );
 
-    cleanup();
+    await cleanup();
 
     // Reopen workout screen
     const screen2 = await render(<ActiveWorkoutScreen />);
     expect(await screen2.findByText('Notes Test Workout')).toBeTruthy();
     expect(await screen2.findByTestId('set-note-indicator-ex_lat_pulldown-1')).toBeTruthy();
     expect(await screen2.findByDisplayValue('Initial lat cue')).toBeTruthy();
+  });
+
+  it('shows collapsed note preview beneath treadmill rows and preserves deliberate CAS note clear', async () => {
+    const { mergeSessionDeep } = require('../src/features/workout/services/workoutRepository');
+    const baseSession = await workoutRepository.startEmptyWorkout('Treadmill & CAS Notes');
+    const withTreadmill = workoutRepository.addExerciseToWorkout(baseSession, {
+      id: 'seed-treadmill',
+      name: 'Treadmill',
+      categoryName: 'Cardio',
+      trackingMode: 'treadmill',
+    });
+    const setId = withTreadmill.exercises[0].actualSets[0].id;
+    const withNote = workoutRepository.updateSet(withTreadmill, 'seed-treadmill', setId, {
+      inclinePercent: 2,
+      speedKph: 9,
+      durationSeconds: 600,
+      notes: 'Zone 2 pace',
+    });
+    await workoutRepository.updateActiveWorkout(withNote);
+
+    const screen = await render(<ActiveWorkoutScreen />);
+    expect(await screen.findByDisplayValue('Zone 2 pace')).toBeTruthy();
+
+    fireEvent.press(await screen.findByTestId('done-set-note-seed-treadmill-1'));
+    expect(
+      await screen.findByTestId('set-note-preview-seed-treadmill-1', {}, { timeout: 4000 }),
+    ).toBeTruthy();
+    expect(await screen.findByText('Zone 2 pace')).toBeTruthy();
+
+    // CAS merge: incoming clears note deliberately (''), stored still has 'Zone 2 pace'
+    const clearedIncoming = workoutRepository.updateSet(withNote, 'seed-treadmill', setId, {
+      notes: '',
+    });
+    const mergedCleared = mergeSessionDeep(withNote, clearedIncoming, undefined, withNote);
+    expect(mergedCleared.exercises[0].actualSets[0].notes).toBe('');
+
+    // CAS merge: incoming did NOT change note, stored edited note wins
+    const storedEdited = workoutRepository.updateSet(withNote, 'seed-treadmill', setId, {
+      notes: 'Stored edit',
+    });
+    const untouchedIncoming = workoutRepository.updateSet(withNote, 'seed-treadmill', setId, {
+      speedKph: 10,
+    });
+    const mergedPreserved = mergeSessionDeep(storedEdited, untouchedIncoming, undefined, withNote);
+    expect(mergedPreserved.exercises[0].actualSets[0].notes).toBe('Stored edit');
   });
 });

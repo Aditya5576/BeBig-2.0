@@ -36,6 +36,7 @@ export interface Exercise {
   ownerId?: string;
   ownerType?: OwnerType;
   name: string;
+  canonicalName?: string;
   description: string;
   category: ExerciseCategory;
   categoryName: string;

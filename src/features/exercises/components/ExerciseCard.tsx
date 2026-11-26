@@ -51,6 +51,7 @@ function CustomExerciseSyncStatus({ exerciseId }: { exerciseId: string }) {
 export interface ExerciseCardProps {
   exercise: Exercise;
   onPress: (exercise: Exercise) => void;
+  onRename?: (exercise: Exercise) => void;
   mode?: 'browse' | 'select';
   isSelected?: boolean;
   isAlreadyAdded?: boolean;
@@ -78,6 +79,7 @@ function areExerciseCardPropsEqual(prev: ExerciseCardProps, next: ExerciseCardPr
   if (prev.isMultiSelect !== next.isMultiSelect) return false;
   if (prev.hideThumbnail !== next.hideThumbnail) return false;
   if (prev.onPress !== next.onPress) return false;
+  if (prev.onRename !== next.onRename) return false;
   if (prev.testID !== next.testID) return false;
   if (prev.thumbnailTestID !== next.thumbnailTestID) return false;
   if (prev.exercise?.name !== next.exercise?.name) return false;
@@ -89,6 +91,7 @@ function areExerciseCardPropsEqual(prev: ExerciseCardProps, next: ExerciseCardPr
 export const ExerciseCard = React.memo(function ExerciseCard({
   exercise,
   onPress,
+  onRename,
   mode = 'browse',
   isSelected = false,
   isAlreadyAdded = false,
@@ -193,6 +196,21 @@ export const ExerciseCard = React.memo(function ExerciseCard({
           {mode === 'browse' ? (
             <View style={styles.browseActionRow}>
               {exercise?.isCustom && <CustomExerciseSyncStatus exerciseId={exerciseId} />}
+              {onRename ? (
+                <Pressable
+                  testID={`rename-exercise-${exerciseId}`}
+                  onPress={(e) => {
+                    e?.stopPropagation?.();
+                    onRename(exercise);
+                  }}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Rename ${exerciseName}`}
+                  style={{ padding: 4 }}
+                >
+                  <Icon name="edit" size={16} strokeWidth={2.1} color={colors.textMuted} />
+                </Pressable>
+              ) : null}
               <Icon name="chevronRight" size={18} strokeWidth={2.2} color={colors.textMuted} />
             </View>
           ) : isAlreadyAdded ? (

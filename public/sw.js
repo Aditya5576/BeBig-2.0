@@ -13,7 +13,14 @@
  * - NEVER force-reloads client pages (active workouts are never disrupted)
  */
 
-const CACHE_NAME = 'bebig-pwa-v2.6.0'; // CACHE_NAME = 'bebig-pwa-v1'
+const SW_VERSION = '__BEBIG_SW_VERSION__';
+const CACHE_VERSION = '__BEBIG_CACHE_VERSION__';
+const SW_SHA = '__BEBIG_SW_SHA__';
+const SW_HIGHLIGHT = '__BEBIG_SW_HIGHLIGHT__';
+const CACHE_NAME =
+  CACHE_VERSION && !CACHE_VERSION.startsWith('__BEBIG_')
+    ? `bebig-pwa-v${CACHE_VERSION}`
+    : 'bebig-pwa-v2.7.0';
 
 // Minimal core static app-shell assets precached on install
 const PRECACHE_ASSETS = [
@@ -38,7 +45,7 @@ function isNonCacheableResponse(response) {
 }
 
 self.addEventListener('install', (event) => {
-  self.skipWaiting();
+  // Let upgrades wait cleanly instead of forcing skipWaiting() mid-session
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(PRECACHE_ASSETS).catch((err) => {
@@ -49,13 +56,35 @@ self.addEventListener('install', (event) => {
   );
 });
 
+self.addEventListener('message', (event) => {
+  const data = event.data;
+  if (!data || typeof data !== 'object') return;
+
+  if (data.type === 'GET_SW_METADATA' && event.ports && event.ports[0]) {
+    event.ports[0].postMessage({
+      type: 'SW_METADATA',
+      version: SW_VERSION,
+      cacheVersion: CACHE_VERSION,
+      sha: SW_SHA,
+      highlight: SW_HIGHLIGHT,
+      cacheName: CACHE_NAME,
+    });
+    return;
+  }
+
+  if (data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
+
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
         keys.map((key) => {
-          if (key !== CACHE_NAME) {
-            console.log('[SW] Purging stale/non-shell cache:', key);
+          // Scope cache cleanup strictly to BeBig cache keys
+          if (key !== CACHE_NAME && key.startsWith('bebig-pwa-')) {
+            console.log('[SW] Purging stale BeBig shell cache:', key);
             return caches.delete(key);
           }
         })

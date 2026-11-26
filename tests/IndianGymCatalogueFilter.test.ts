@@ -146,11 +146,13 @@ describe('Indian Commercial Gym Catalogue Filter & Audit', () => {
     expect(isEligibleForIndianCommercialGym(sampleExercises[6]).isEligible).toBe(false); // Balance board
   });
 
-  it('2. Suppresses true duplicates during default browsing', () => {
-    const { filtered, stats } = filterCatalogueForIndianGym(sampleExercises);
+  it('2. Deduplicates browse results strictly by canonical id while tracking movement-key stats', () => {
+    const withExactIdDup = [...sampleExercises, { ...sampleExercises[0] }];
+    const { filtered, stats } = filterCatalogueForIndianGym(withExactIdDup);
 
-    // ex_4_dup should be suppressed
-    expect(filtered.some((e) => e.id === 'ex_4_dup')).toBe(false);
+    // Exact duplicate ID is deduplicated while distinct IDs (ex_4_dup) remain available
+    expect(filtered.filter((e) => e.id === 'ex_1')).toHaveLength(1);
+    expect(filtered.some((e) => e.id === 'ex_4_dup')).toBe(true);
     expect(stats.trueDuplicatesCount).toBe(1);
     expect(stats.trueDuplicates[0].name).toBe('Barbell Bench Press');
   });
