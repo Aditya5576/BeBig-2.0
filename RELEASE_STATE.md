@@ -1,11 +1,11 @@
 # BeBig 2.0 — Release State
 
-## Production (Live Release — `v2.7.0`)
+## Production Release — `v2.7.1`
 
 - **URL**: https://be-big-2-0.vercel.app
-- **Live Version**: `v2.7.0` (`package.json`, `app.json`, `/sw.js` `SW_VERSION='2.7.0'`, `CACHE_VERSION='2.7.0-c4b6a1072336b6aacf864425a6ebd8034561c860'`)
-- **Live Release Commit**: `c4b6a10` (`tag: bebig-pwa-v2.7.0`)
-- **Vercel Production Deployment**: `GvyRayNKD3zJ61VWH7Y4VM7od3Gy` (`be-big-2-0`, `success`, 45 static routes, entry bundle `entry-f9f9b7b8c601c3f96dc656a2d83f265a.js`, `/sw.js` build-stamped `bebig-pwa-v2.7.0-c4b6a1072336b6aacf864425a6ebd8034561c860`)
+- **Configured Version**: `v2.7.1` in `package.json` and `app.json`. Web builds stamp `/sw.js` with `SW_VERSION='2.7.1'` and `CACHE_VERSION='2.7.1-<sha>'`.
+- **Tagged Release Commit**: `1c1a2a60` (`bebig-pwa-v2.7.1`). Vercel served this commit with HTTP 200 on `/` and `/sw.js` before the version string bump.
+- **Previous v2.7.0 Deployment**: `c4b6a10` (`bebig-pwa-v2.7.0`), Vercel deployment `GvyRayNKD3zJ61VWH7Y4VM7od3Gy`.
 - **Previous Verified Releases**: `v2.6.1` (`79ff62f`), `v2.6.0` (`e596a04`), `v2.5.2` (`96849ee`), `v2.5.1` (`2d74de3`), `v2.5.0` (`68c7c38`), `v2.4.4` (`6be31bb`), `v2.4.3` (`2f88fd2`), `v2.4.2` (`0afb94b`)
 - **Supabase Production Project**: `BeBig 2.0` (`gkkvxfroxthvbiecramm`, `ap-northeast-1`)
   - Applied SQL Migrations:
