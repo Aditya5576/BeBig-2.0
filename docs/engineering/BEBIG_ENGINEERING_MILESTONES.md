@@ -6,6 +6,7 @@
 | Phase 01 | AI Skill Installation, Custom BeBig Skills & Registry Governance | `OWNER APPROVED` (`81b653a7`) | `.agents/SKILL_REGISTRY.md`, 8 skills in `.agents/skills/` |
 | Phase 02 | Offline Sync Engine Audit & Property-Based Testing (`fast-check`) | `IMPLEMENTED — READY FOR INDEPENDENT REVIEW` | `tests/OfflineSyncProperty.test.tsx` (`seed: 20261126`, `numRuns: 100`) |
 | Phase 03 | Cross-Platform PWA & Mobile Web Stability (iOS Safari + Android Chrome) | `IMPLEMENTED — READY FOR INDEPENDENT REVIEW` | `tests/ExercisePickerWebMemorySafety.test.tsx`, `tests/IOSWebKitExerciseCrashGuard.test.tsx`, `tests/PWAInstallation.test.tsx`, `tests/ProductionDeployment.test.tsx`, `tests/Batch2Enhancements.test.tsx` |
+| Phase 04 | Performance & Bundle Optimization (iOS Safari PWA + Android Chrome PWA + Native Parity) | `IMPLEMENTED — READY FOR INDEPENDENT REVIEW` | `npm run build:web` (`5,340.25 KB` total JS across 3 chunks), `npx --yes knip --no-exit-code` |
 
 ## Phase 02 Acceptance Test Matrix (`SYNC-01` – `SYNC-08`)
 
@@ -33,3 +34,12 @@
 | `PWA-07` | Android Chrome PWA install, offline launch, and storage persistence check | Physical Android Chrome device verification | `PENDING MANUAL` |
 | `MEM-01` | Zero-`<Image>` picker + `expo-image` lazy loading (`loading="lazy"`, `cachePolicy="disk"`, `recyclingKey`) | `tests/ExercisePickerWebMemorySafety.test.tsx`, `tests/IOSWebKitExerciseCrashGuard.test.tsx` | `PASS` |
 | `MEM-02` | Bounded list virtualization (`windowSize=5` on Web) & `URL.revokeObjectURL` cleanup in `CustomExerciseForm` | `src/features/exercises/components/CustomExerciseForm.tsx`, `app/exercises/index.tsx`, `tests/ExercisePickerWebMemorySafety.test.tsx` | `PASS` |
+
+## Phase 04 Acceptance Test Matrix (`PERF-01` – `PERF-04`)
+
+| ID | Invariant / Scenario | Verification Source | Status |
+|---|---|---|---|
+| `PERF-01` | Web production bundle measured (`entry`: `4,801.20 KB`, lazy `export`: `536.45 KB`, lazy `guestMigrationService`: `2.59 KB`, total: `5,340.25 KB`) | `npm run build:web` (`dist/_expo/static/js/web/`) | `PASS` |
+| `PERF-02` | Heavy export (`pdf-lib` + OOXML) & guest migration already dynamically imported off initial boot path; `xlsx`/`jspdf` absent | `app/settings.tsx`, `src/features/auth/store/useAuthStore.ts`, `src/features/export/services/exportService.ts` | `PASS` |
+| `PERF-03` | Report-only Knip audit (`0` unused runtime deps; `28` unused files mostly Deno/SW/scripts; `2` devDeps; `51` exports) | `npx --yes knip --no-exit-code` | `PASS` |
+| `PERF-04` | Physical Lighthouse & mobile PWA startup/TTI profiling on iOS Safari and Android Chrome | Physical device / Lighthouse CLI verification | `PENDING MANUAL` |
