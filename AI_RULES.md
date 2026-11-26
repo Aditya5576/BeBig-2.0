@@ -1,7 +1,13 @@
 # AI RULES — Token-Efficient Engineering
 
 ## PRIME DIRECTIVE
-Produce correct changes with the minimum necessary context.
+Produce correct changes with the minimum necessary context under strict token mode:
+- **Max 25-Line Reads:** Never read full files; run `rg -n` (or `Select-String`) first, then read only 15–25 lines around the match. Never re-read a file already read/edited in the session.
+- **Batch All Edits First:** Apply all planned file edits before running `tsc`, `lint`, or `jest`—never run checks mid-way between edits.
+- **One Combined Shell Gate:** Run `npm run typecheck && npx eslint app src --no-cache && npx jest <targeted-suites> --maxWorkers=2` as ONE single command at the end (use `npx eslint app src --no-cache` instead of `npm run lint -- --no-cache`).
+- **Zero Narration & Terse Output:** Output zero status messages between tool calls. Final report must be <= 8 bullet lines with no code blocks.
+- **Single Agent & Fresh Chat:** Never spawn subagents; use one fresh chat per task.
+- **Protected Boundaries:** Never modify `app/+html.tsx`, `src/features/workout/services/workoutNotificationService.ts`, `supabase/functions/coach-agent/`, `app/coach/`, `src/features/coach/`, `supabase/functions/coach-v2/`, or untracked `unwanted files-code.md`.
 
 ## 1. CONTEXT LOADING
 Before coding:

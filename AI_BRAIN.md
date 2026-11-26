@@ -1,10 +1,11 @@
 # AI_BRAIN.md — Ultra-Low-Token Execution Rules
 
-1. **Zero Broad Reads:** NEVER read full files > 80 lines. Use `rg -n` first, then read ONLY the exact 20–40 line window around the match. Never re-read a file you already read or edited in the same session.
-2. **Batch Edits Before Running Tools:** Apply all planned file edits in a batch FIRST before running `tsc`, `lint`, or `jest`. Never run Jest after every single file edit.
-3. **Single Combined Verification Command:** Run `npm run typecheck && npm run lint -- --no-cache && npm run build:web && npx jest ...` as ONE combined gate at the end—not separate sequential runs.
-4. **Silent Execution:** Do not narrate plans, progress updates, or intermediate summaries between tool calls. Output ONLY the final concise bullet report.
-5. **One Agent Only:** Never spawn subagents.
+1. **Max 25-Line Reads:** Never read full files; run `rg -n` first, then read only 15–25 lines around the match. Never re-read a file already read/edited in the session.
+2. **Batch All Edits First:** Apply all planned file edits before running `tsc`, `lint`, or `jest`—never run checks mid-way between edits.
+3. **One Combined Shell Gate:** Run `npm run typecheck && npx eslint app src --no-cache && npx jest <targeted-suites> --maxWorkers=2` as ONE single command at the end (use `npx eslint app src --no-cache` instead of `npm run lint -- --no-cache`).
+4. **Zero Narration & Terse Output:** Output zero status messages between tool calls. Final report must be <= 8 bullet lines with no code blocks.
+5. **Single Agent & Fresh Chat:** Never spawn subagents; use one fresh chat per task.
+6. **Protected Boundaries:** Never modify `app/+html.tsx`, `src/features/workout/services/workoutNotificationService.ts`, `supabase/functions/coach-agent/`, `app/coach/`, `src/features/coach/`, `supabase/functions/coach-v2/`, or untracked `unwanted files-code.md`.
 
 ## BeBig - AI Brain
 
