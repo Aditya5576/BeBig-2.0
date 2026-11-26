@@ -109,7 +109,7 @@ describe('Production Error Monitoring & Privacy Sanitization', () => {
     // Extras sanitized
     expect(scopeMock.setExtras).toHaveBeenCalledWith({
       access_token: '[REDACTED]',
-      user_email: 'user@bebig.app'
+      user_email: '[REDACTED_EMAIL]'
     });
     
     // Level

@@ -9,6 +9,7 @@
 | Phase 04 | Performance & Bundle Optimization (iOS Safari PWA + Android Chrome PWA + Native Parity) | `IMPLEMENTED — READY FOR INDEPENDENT REVIEW` | `npm run build:web` (`5,340.25 KB` total JS across 3 chunks), `npx --yes knip --no-exit-code` |
 | Phase 05 | UI/UX & Accessibility Polish (iOS Safari PWA + Android Chrome PWA + Native Parity) | `IMPLEMENTED — READY FOR INDEPENDENT REVIEW` | `tests/AccessibilityAndTouchTargets.test.tsx`, `ActiveSetRow.tsx`, `app/workout/active.tsx` |
 | Phase 06 | Supabase & Backend Security Audit (RLS, Storage Policies, Edge Functions & Account Deletion) | `IMPLEMENTED — READY FOR INDEPENDENT REVIEW` | `tests/BackendSecurityAndRLS.test.tsx`, `supabase/migrations/`, `supabase/functions/delete-account/index.ts` |
+| Phase 07 | Testing, CI/CD & Sentry Observability | `IMPLEMENTED — READY FOR INDEPENDENT REVIEW` | `.github/workflows/ci.yml`, `src/services/monitoring/errorMonitoring.ts`, `tests/ObservabilityAndCIGates.test.tsx` |
 
 ## Phase 02 Acceptance Test Matrix (`SYNC-01` – `SYNC-08`)
 
@@ -64,3 +65,12 @@
 | `SEC-03` | Zero `SUPABASE_SERVICE_ROLE_KEY` in `app/` or `src/`; `exercisePhotoCloudService` rejects cross-user deletes and uses signed URLs only | `src/features/exercises/services/exercisePhotoCloudService.ts`, `tests/BackendSecurityAndRLS.test.tsx` | `PASS` |
 | `SEC-04` | `delete-account` Edge Function returns `401` on missing/invalid JWTs and scopes storage, DB, and `auth.admin.deleteUser` strictly to verified `user.id` | `supabase/functions/delete-account/index.ts`, `tests/BackendSecurityAndRLS.test.tsx` | `PASS` |
 | `SEC-05` | Live 2-account staging penetration test (cross-account read/write/storage/deletion probes against remote Supabase) | Remote Supabase staging project | `PENDING MANUAL` |
+
+## Phase 07 Acceptance Test Matrix (`QA-01` – `QA-04`)
+
+| ID | Invariant / Scenario | Verification Source | Status |
+|---|---|---|---|
+| `QA-01` | Sentry gracefully no-ops when `EXPO_PUBLIC_SENTRY_DSN` is absent | `src/services/monitoring/errorMonitoring.ts`, `tests/ObservabilityAndCIGates.test.tsx` | `PASS` |
+| `QA-02` | `beforeSend` / `sanitizeString` / `sanitizeObject` scrub `Authorization` headers, Bearer/JWT tokens, query tokens, and email PII | `src/services/monitoring/errorMonitoring.ts`, `tests/ObservabilityAndCIGates.test.tsx` | `PASS` |
+| `QA-03` | `.github/workflows/ci.yml` runs pinned `checkout@v4`, `setup-node@v4`, `npm ci`, `typecheck`, `lint`, and `npx jest --maxWorkers=2` without secrets | `.github/workflows/ci.yml`, `tests/ObservabilityAndCIGates.test.tsx` | `PASS` |
+| `QA-04` | Full repository Jest suite + `typecheck` + `eslint` gate | `npm run typecheck && npx eslint app src --no-cache && npx jest --maxWorkers=2` | `PASS` |

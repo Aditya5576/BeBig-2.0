@@ -52,6 +52,8 @@ export function sanitizeString(str: string): string {
   cleaned = cleaned.replace(/eyJ[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+/g, '[REDACTED_AUTH_TOKEN]');
   // Redact sensitive query parameters in URLs (e.g. apikey=..., token=..., password=..., secret=...)
   cleaned = cleaned.replace(/([?&](?:apikey|api_key|token|access_token|refresh_token|password|secret)=)[^&]*/gi, '$1[REDACTED]');
+  // Redact email addresses
+  cleaned = cleaned.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '[REDACTED_EMAIL]');
   return cleaned;
 }
 
