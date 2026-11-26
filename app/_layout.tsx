@@ -283,8 +283,24 @@ export default wrapRootLayout(function RootLayout() {
       })
       .catch(() => {});
 
+    const handleForegroundUpdateCheck = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        return;
+      }
+      activeReg?.update().catch(() => {});
+    };
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleForegroundUpdateCheck);
+    }
+    window.addEventListener('focus', handleForegroundUpdateCheck);
+
     return () => {
       isMounted = false;
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleForegroundUpdateCheck);
+      }
+      window.removeEventListener('focus', handleForegroundUpdateCheck);
       activeReg?.removeEventListener?.('updatefound', handleUpdateFound);
       navigator.serviceWorker.removeEventListener?.('controllerchange', handleControllerChange);
     };
