@@ -12,7 +12,9 @@ import { PwaUpdateCard } from '../src/components/ui/PwaUpdateCard';
 import {
   authorizeAndApplyPwaUpdate,
   canReloadNow,
+  executeAuthorizedPwaReload,
   getAuthorizedPwaReload,
+  getPwaReloadReceiptKey,
   isActiveWorkoutMounted,
   isPwaReloadAuthorized,
   registerActiveWorkoutUpdateGuard,
@@ -290,6 +292,44 @@ describe('Batch 2 Enhancements — Fuzzy Search, 14-Day Recents & Versioned PWA 
       expect(canReloadNow(controllerTarget)).toBe(true);
       unregisterLive();
       expect(canReloadNow(controllerTarget)).toBe(true);
+    });
+
+    it('keys PWA reload receipt by target build SHA/version so two consecutive updates in the same tab both reload cleanly', async () => {
+      const store = new Map<string, string>();
+      const sessionStorageStub = {
+        getItem: (k: string) => (store.has(k) ? store.get(k)! : null),
+        setItem: (k: string, v: string) => {
+          store.set(k, v);
+        },
+      };
+      const reloadSpy = jest.fn();
+      const postMessage = jest.fn();
+
+      // Build 1 authorizes and reloads
+      const worker1 = { postMessage, scriptURL: 'https://be-big-2-0.vercel.app/sw.js' };
+      await authorizeAndApplyPwaUpdate(worker1, { version: '2.7.0', sha: 'build111' });
+      const target1 = { scriptUrl: worker1.scriptURL, version: '2.7.0', sha: 'build111' };
+      expect(getPwaReloadReceiptKey(target1)).toBe('bebig_sw_reloaded_2.7.0-build111');
+      expect(
+        executeAuthorizedPwaReload(target1, { storage: sessionStorageStub, reloadFn: reloadSpy }),
+      ).toBe(true);
+      expect(reloadSpy).toHaveBeenCalledTimes(1);
+
+      // Re-firing controllerchange for the SAME build111 in the same tab MUST be blocked (loop prevention)
+      expect(
+        executeAuthorizedPwaReload(target1, { storage: sessionStorageStub, reloadFn: reloadSpy }),
+      ).toBe(false);
+      expect(reloadSpy).toHaveBeenCalledTimes(1);
+
+      // Build 2 arrives later in the SAME tab (reusing sessionStorageStub) -> MUST reload cleanly!
+      const worker2 = { postMessage, scriptURL: 'https://be-big-2-0.vercel.app/sw.js' };
+      await authorizeAndApplyPwaUpdate(worker2, { version: '2.7.0', sha: 'build222' });
+      const target2 = { scriptUrl: worker2.scriptURL, version: '2.7.0', sha: 'build222' };
+      expect(getPwaReloadReceiptKey(target2)).toBe('bebig_sw_reloaded_2.7.0-build222');
+      expect(
+        executeAuthorizedPwaReload(target2, { storage: sessionStorageStub, reloadFn: reloadSpy }),
+      ).toBe(true);
+      expect(reloadSpy).toHaveBeenCalledTimes(2);
     });
 
     it('evaluates stamped sw.js CACHE_NAME to include version and git SHA without self-replacing sentinels', () => {

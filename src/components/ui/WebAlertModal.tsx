@@ -12,7 +12,6 @@ import {
   Pressable,
   StyleSheet,
   View,
-  Platform,
 } from 'react-native';
 import { Text } from './Text';
 import { radii, spacing } from '../../constants/theme';

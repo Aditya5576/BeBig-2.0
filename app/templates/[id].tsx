@@ -44,7 +44,6 @@ export default function TemplateDetailScreen() {
   const [name, setName] = useState('');
   const [activeFocus, setActiveFocus] = useState<string>('Other');
   const [sequenceNumber, setSequenceNumber] = useState<number>(1);
-  const [allTemplates, setAllTemplates] = useState<WorkoutTemplate[]>([]);
   const [exercises, setExercises] = useState<FormExercise[]>([]);
   const [isPickerVisible, setIsPickerVisible] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -61,8 +60,6 @@ export default function TemplateDetailScreen() {
 
       try {
         const item = await templateRepository.getTemplateById(id);
-        const tpls = await templateRepository.getTemplates();
-        if (isMounted) setAllTemplates(tpls);
         if (isMounted) {
           if (item) {
             setTemplate(item);

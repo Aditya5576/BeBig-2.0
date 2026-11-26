@@ -795,6 +795,129 @@ describe('P0 Incident Regression: Active Workout Screen-Lock Durability & Recove
       expect(stored).not.toBeNull();
       expect(stored?.exercises).toHaveLength(6);
     });
+
+    it('delayed async save completing after a newer edit does not clobber sessionRef before screen lock', async () => {
+      const startTime = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+      const baseSession: WorkoutSession = {
+        id: 'session_generation_guard',
+        name: 'Generation Guard Session',
+        status: 'active',
+        startedAt: startTime,
+        ownerId: testScope.ownerId,
+        ownerType: testScope.ownerType,
+        revision: 1,
+        version: 1,
+        exercises: [
+          {
+            exerciseId: 'ex_bench',
+            exerciseName: 'Barbell Bench Press',
+            order: 0,
+            actualSets: [
+              { id: 'set_1', setNumber: 1, weight: 80, reps: 10, rir: 2, completed: true, notes: '' },
+            ],
+          },
+        ],
+      };
+      await workoutStorage.createActiveWorkout(baseSession, testScope);
+
+      useAuthStore.setState({
+        status: 'authenticated',
+        user: { id: testScope.ownerId, email: 'test@bebig.app' } as any,
+        session: { user: { id: testScope.ownerId } } as any,
+        isGuest: false,
+      });
+
+      const appStateListeners: Array<(state: AppStateStatus) => void> = [];
+      const appStateSpy = jest
+        .spyOn(AppState, 'addEventListener')
+        .mockImplementation((type: any, listener: any) => {
+          if (type === 'change' && typeof listener === 'function') {
+            appStateListeners.push(listener);
+          }
+          return { remove: jest.fn() };
+        });
+
+      const { getByTestId, getByText, unmount } = await render(<ActiveWorkoutScreen />);
+      await waitFor(() => {
+        expect(getByText('Generation Guard Session')).toBeTruthy();
+      });
+
+      let resolveSlowSave!: (val: WorkoutSession) => void;
+      const slowSavePromise = new Promise<WorkoutSession>((resolve) => {
+        resolveSlowSave = resolve;
+      });
+      const realUpdate = workoutRepository.updateActiveWorkout.bind(workoutRepository);
+      let callCount = 0;
+      const updateSpy = jest
+        .spyOn(workoutRepository, 'updateActiveWorkout')
+        .mockImplementation((sess, scopeArg, opts) => {
+          callCount += 1;
+          if (callCount === 1) {
+            return slowSavePromise;
+          }
+          return realUpdate(sess, scopeArg, opts);
+        });
+      const mirrorSpy = jest.spyOn(workoutStorage, 'writeSyncEmergencyMirror');
+
+      try {
+        // 1. Launch slow Generation 1 immediate save (Add Set)
+        await act(async () => {
+          fireEvent.press(getByTestId('add-set-ex_bench'));
+        });
+        await waitFor(() => {
+          expect(callCount).toBe(1);
+        });
+
+        // 2. While Generation 1 is still in flight, edit Set 1 notes (Generation 2)
+        await act(async () => {
+          fireEvent.press(getByTestId('set-note-toggle-ex_bench-1'));
+        });
+        await act(async () => {
+          fireEvent.changeText(getByTestId('set-notes-ex_bench-1'), 'Paused bottom rep');
+        });
+
+        // 3. Slow Generation 1 save finally resolves WITHOUT the newer note
+        await act(async () => {
+          resolveSlowSave({
+            ...baseSession,
+            revision: 2,
+            version: 2,
+            exercises: [
+              {
+                ...baseSession.exercises[0],
+                actualSets: [
+                  ...baseSession.exercises[0].actualSets,
+                  { id: 'set_2', setNumber: 2, weight: 80, reps: 10, rir: 2, completed: false },
+                ],
+              },
+            ],
+          });
+          await slowSavePromise;
+        });
+
+        // 4. Screen lock triggers synchronous emergency mirror write -> MUST still carry Generation 2 note!
+        mirrorSpy.mockClear();
+        await act(async () => {
+          for (const listener of appStateListeners) {
+            listener('background');
+          }
+          if (typeof document !== 'undefined') {
+            const visibilityEvent = new Event('visibilitychange');
+            Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+            document.dispatchEvent(visibilityEvent);
+          }
+        });
+
+        expect(mirrorSpy).toHaveBeenCalled();
+        const mirroredSession = mirrorSpy.mock.calls[0][0] as WorkoutSession;
+        expect(mirroredSession.exercises[0].actualSets[0].notes).toBe('Paused bottom rep');
+      } finally {
+        updateSpy.mockRestore();
+        mirrorSpy.mockRestore();
+        appStateSpy.mockRestore();
+        unmount();
+      }
+    });
   });
 
   // ============================================================================

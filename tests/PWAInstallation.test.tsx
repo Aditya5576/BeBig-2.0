@@ -145,8 +145,9 @@ describe('Checkpoint 5 — PWA Installation Layer', () => {
       swContent = fs.readFileSync(swPath, 'utf8');
     });
 
-    it('defines versioned cache and precaches core assets', () => {
-      expect(swContent).toContain("CACHE_NAME = 'bebig-pwa-v1'");
+    it('defines dynamic build-stamped cache name and precaches core assets', () => {
+      expect(swContent).toContain("const CACHE_VERSION = '__BEBIG_CACHE_VERSION__'");
+      expect(swContent).toContain('`bebig-pwa-v${CACHE_VERSION}`');
       expect(swContent).toContain("'/manifest.json'");
       expect(swContent).toContain("'/icons/icon-192.png'");
       expect(swContent).toContain("'/icons/apple-touch-icon.png'");
@@ -183,8 +184,8 @@ describe('Checkpoint 5 — PWA Installation Layer', () => {
       expect(swContent).toContain("cacheControl.includes('no-store')");
       expect(swContent).toContain("cacheControl.includes('private')");
 
-      // Purges all non-current caches on activate
-      expect(swContent).toContain('if (key !== CACHE_NAME)');
+      // Purges stale BeBig caches while preserving unrelated origins/caches
+      expect(swContent).toContain("if (key !== CACHE_NAME && key.startsWith('bebig-pwa-'))");
     });
 
     it('uses Network-First strategy for HTML navigation requests', () => {

@@ -2,6 +2,8 @@ import { exerciseRepository } from '../src/features/exercises/services/exerciseR
 import { exerciseNameOverrideStorage } from '../src/features/exercises/storage/exerciseNameOverrideStorage';
 import { resolveExerciseTrackingMode, TREADMILL_EXERCISE_ID } from '../src/features/exercises/exerciseTracking';
 import { clearExerciseMemoryCache } from '../src/features/exercises/storage/customExerciseStorage';
+import { guestMigrationService } from '../src/features/auth/services/guestMigrationService';
+import { platformStorage } from '../src/lib/storage';
 import { globalExerciseCatalogService } from '../src/features/exercises/services/globalExerciseCatalogService';
 import { filterCatalogueForIndianGym } from '../src/features/exercises/data/gymEquipmentFilter';
 import { Exercise } from '../src/features/exercises/types';
@@ -178,5 +180,40 @@ describe('Exercise Rename & Tracking Mode Safety', () => {
     } finally {
       globalSpy.mockRestore();
     }
+  });
+
+  it('migrates guest catalog name overrides on sign-in without overwriting existing account overrides and preserves guest data on readback failure', async () => {
+    const guestScope: UserScope = { ownerId: 'guest_override_mig_1', ownerType: 'guest' };
+    const authScope: UserScope = { ownerId: 'auth_override_mig_1', ownerType: 'authenticated' };
+
+    await exerciseNameOverrideStorage.clearOverrides(guestScope);
+    await exerciseNameOverrideStorage.clearOverrides(authScope);
+
+    // Account already renamed Barbell Bench Press; guest renamed both Barbell Bench Press (conflict) & Barbell Squat (new)
+    await exerciseNameOverrideStorage.setOverride('seed-bench-press', 'Account Competition Bench', authScope);
+    await exerciseNameOverrideStorage.setOverride('seed-bench-press', 'Guest Bench', guestScope);
+    await exerciseNameOverrideStorage.setOverride('seed-squat', 'Guest High Bar Squat', guestScope);
+
+    // 1. Readback failure MUST throw and leave guest overrides intact for retry
+    const getItemSpy = jest.spyOn(platformStorage, 'getItem').mockResolvedValueOnce(null);
+    await expect(
+      exerciseNameOverrideStorage.mergeOverrides(guestScope, authScope),
+    ).rejects.toThrow(/readback/i);
+    getItemSpy.mockRestore();
+    expect(await exerciseNameOverrideStorage.ensureHydrated(guestScope)).toEqual({
+      'seed-bench-press': 'Guest Bench',
+      'seed-squat': 'Guest High Bar Squat',
+    });
+
+    // 2. Full guestMigrationService migration merges non-conflicting renames, keeps existing account rename, and clears guest scope
+    await guestMigrationService.migrateGuestDataToUser(guestScope, authScope);
+
+    clearExerciseMemoryCache();
+    const migratedAuth = await exerciseNameOverrideStorage.ensureHydrated(authScope);
+    expect(migratedAuth).toEqual({
+      'seed-bench-press': 'Account Competition Bench',
+      'seed-squat': 'Guest High Bar Squat',
+    });
+    expect(await exerciseNameOverrideStorage.ensureHydrated(guestScope)).toEqual({});
   });
 });

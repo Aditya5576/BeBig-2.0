@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { SyncEntityType, EntitySyncMetadata } from './types';
+import { SyncEntityType } from './types';
 import { syncMetadataStore } from './syncMetadataStore';
 import { syncEngine } from './syncEngine';
 import { syncLifecycleManager } from './index';
@@ -39,7 +39,7 @@ export function useEntitySyncStatus(
         if (isMounted) {
           setStatus(resolved);
         }
-      } catch (error) {
+      } catch {
         // Fallback to local only if metadata unreadable
       }
     };

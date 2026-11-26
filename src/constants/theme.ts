@@ -82,10 +82,3 @@ export const colors = {
     dropSet: '#9333EA',
   },
 } as const;
-
-export const darkColors = colors.dark;
-export const lightColors = colors.light;
-
-export type ThemeColors = typeof colors.dark;
-export type SpacingKey = keyof typeof spacing;
-export type RadiiKey = keyof typeof radii;

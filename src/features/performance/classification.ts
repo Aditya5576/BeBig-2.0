@@ -12,7 +12,6 @@ import {
   ExercisePerformanceSnapshot,
   PerformanceComparison,
   PerformanceClassification,
-  PerformanceClassificationType,
 } from './types';
 
 import { comparePerformances, findPreviousPerformance } from './comparison';

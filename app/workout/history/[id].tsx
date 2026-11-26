@@ -8,7 +8,6 @@ import { templateRepository, WorkoutTemplate } from '../../../src/features/templ
 import {
   WORKOUT_FOCUS_OPTIONS,
   deriveWorkoutFocus,
-  getSuggestedSessionNumber,
   getSuggestedTemplateSessionNumber,
 } from '../../../src/features/templates/utils/templateUtils';
 import { convertWorkoutToTemplateInput } from '../summary';

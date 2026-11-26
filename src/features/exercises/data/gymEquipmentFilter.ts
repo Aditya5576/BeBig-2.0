@@ -18,54 +18,6 @@
 
 import { Exercise } from '../types';
 
-export const STANDARD_INDIAN_GYM_EQUIPMENT: readonly string[] = Object.freeze([
-  'Barbell',
-  'Olympic Barbell',
-  'EZ-Bar',
-  'SZ-Bar',
-  'Dumbbell',
-  'Dumbbells',
-  'Bench',
-  'Flat Bench',
-  'Incline Bench',
-  'Decline Bench',
-  'Cable Machine',
-  'Cable',
-  'Crossover',
-  'Pulley',
-  'Machine',
-  'Smith Machine',
-  'Leg Press',
-  'Hack Squat',
-  'Leg Extension',
-  'Leg Curl',
-  'Calf Raise Machine',
-  'Lat Pulldown',
-  'Seated Cable Row',
-  'Chest Supported Row',
-  'T-Bar Row',
-  'Chest Press Machine',
-  'Shoulder Press Machine',
-  'Pec Fly Machine',
-  'Pec Deck',
-  'Assisted Pull-up Machine',
-  'Dip Station',
-  'Pull-up Bar',
-  'Parallel Bars',
-  'Bodyweight',
-  "Captain's Chair",
-  'Roman Chair',
-  'Hyperextension Bench',
-  'Back Extension Bench',
-  'Ab Mat',
-  'Decline Ab Bench',
-  'Resistance Band',
-  'Kettlebell',
-  'Weight Belt',
-  'Lifting Straps',
-  'Foam Roller',
-]);
-
 export const NON_STANDARD_EQUIPMENT_KEYWORDS: readonly RegExp[] = Object.freeze([
   /\b(gymnastic\s*rings?|gym\s*rings?|rings?)\b/i,
   /\b(ribbons?|aerial\s*silks?|suspended\s*ribbons?)\b/i,
@@ -86,9 +38,9 @@ export interface CatalogueFilterStats {
   validVariationsCount: number;
   eligibleIndianGymCount: number;
   nonStandardEquipmentCount: number;
-  trueDuplicates: Array<{ id: string; name: string; duplicateOf: string }>;
-  nonStandardExamples: Array<{ id: string; name: string; reason: string }>;
-  validVariationExamples: Array<{ name: string; reason: string }>;
+  trueDuplicates: { id: string; name: string; duplicateOf: string }[];
+  nonStandardExamples: { id: string; name: string; reason: string }[];
+  validVariationExamples: { name: string; reason: string }[];
 }
 
 /**
@@ -156,7 +108,6 @@ export function filterCatalogueForIndianGym(
   exercises: Exercise[],
   options: {
     includeNonStandardEquipment?: boolean;
-    allowDuplicates?: boolean;
     isSearchActive?: boolean;
   } = {},
 ): {
@@ -165,16 +116,15 @@ export function filterCatalogueForIndianGym(
 } {
   const {
     includeNonStandardEquipment = false,
-    allowDuplicates = false,
     isSearchActive = false,
   } = options;
 
   const seenIds = new Set<string>();
   const seenKeys = new Map<string, Exercise>();
   const filtered: Exercise[] = [];
-  const trueDuplicates: Array<{ id: string; name: string; duplicateOf: string }> = [];
-  const nonStandardExamples: Array<{ id: string; name: string; reason: string }> = [];
-  const validVariationExamples: Array<{ name: string; reason: string }> = [];
+  const trueDuplicates: { id: string; name: string; duplicateOf: string }[] = [];
+  const nonStandardExamples: { id: string; name: string; reason: string }[] = [];
+  const validVariationExamples: { name: string; reason: string }[] = [];
 
   let nonStandardEquipmentCount = 0;
   let trueDuplicatesCount = 0;

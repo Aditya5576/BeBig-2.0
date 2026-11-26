@@ -49,24 +49,6 @@ export function showWebAlert(
 }
 
 /**
- * Trigger an alert.
- * On web: updates WebAlertStore to display the BeBig WebAlertModal.
- * On native: delegates to React Native's native Alert.alert dialog.
- */
-export function triggerAlert(
-  title: string,
-  message?: string,
-  buttons?: AlertButton[],
-  options?: AlertOptions
-) {
-  if (Platform.OS === 'web') {
-    showWebAlert(title, message, buttons, options);
-  } else {
-    Alert.alert(title, message, buttons, options);
-  }
-}
-
-/**
  * Installs the Alert.alert polyfill on web so all standard Alert.alert(...)
  * calls throughout the app invoke the athletic WebAlertModal instead of no-op'ing.
  */

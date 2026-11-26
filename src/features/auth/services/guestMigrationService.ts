@@ -3,10 +3,8 @@ import { guestStorage } from '../../../lib/storage';
 import { workoutStorage } from '../../workout/storage/workoutStorage';
 import { templateStorage } from '../../templates/storage/templateStorage';
 import { customExerciseStorage } from '../../exercises/storage/customExerciseStorage';
+import { exerciseNameOverrideStorage } from '../../exercises/storage/exerciseNameOverrideStorage';
 import { syncMetadataStore } from '../../../services/sync/syncMetadataStore';
-import { WorkoutSession } from '../../workout/types';
-import { WorkoutTemplate } from '../../templates/types';
-import { Exercise } from '../../exercises/types';
 
 export const guestMigrationService = {
   /**
@@ -98,6 +96,9 @@ export const guestMigrationService = {
         }
       }
 
+      // 3b. Exercise Display-Name Overrides (Catalog/Seed renames)
+      await exerciseNameOverrideStorage.mergeOverrides(guestScope, authScope);
+
       // 4. Active Workout (Local continuity only, intentionally not synced)
       const guestActiveWorkout = await workoutStorage.getActiveWorkout(guestScope);
       if (guestActiveWorkout) {
@@ -124,6 +125,7 @@ export const guestMigrationService = {
       await workoutStorage.clearAllWorkouts(guestScope);
       await templateStorage.clearTemplates(guestScope);
       await customExerciseStorage.clearCustomExercises(guestScope);
+      await exerciseNameOverrideStorage.clearOverrides(guestScope);
 
     } catch (error) {
       console.error('[GuestMigrationService] Migration failed:', error);

@@ -46,8 +46,6 @@ export const CANONICAL_ALLOWED_LICENSES = new Set<string>([
   'cc0-1.0',
 ]);
 
-export const ALLOWED_LICENSES = Array.from(CANONICAL_ALLOWED_LICENSES);
-
 export function isLicenseAllowed(licenseName: string | null | undefined): boolean {
   if (!licenseName || typeof licenseName !== 'string') return false;
   const normalized = licenseName.trim().toLowerCase().replace(/\s+/g, ' ');

@@ -393,7 +393,6 @@ export class ExerciseRepository {
 
     const finalExercises = filterCatalogueForIndianGym(rankedExercises, {
       includeNonStandardEquipment: options.equipment === 'all' || options.equipment === 'non-standard',
-      allowDuplicates: true,
       isSearchActive: hasQuery,
     }).filtered;
 
@@ -560,7 +559,6 @@ export class ExerciseRepository {
 
     let result = filterCatalogueForIndianGym(ranked, {
       includeNonStandardEquipment: options.equipment === 'all' || options.equipment === 'non-standard',
-      allowDuplicates: true,
       isSearchActive: Boolean(trimmedQuery),
     }).filtered;
 

@@ -1,7 +1,7 @@
 import { useAppTheme } from '../../src/features/theme';
 import React from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
-import { useRouter, Redirect } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { ScreenContainer, Text, Button, Card } from '../../src/components/ui';
 import {
   OnboardingHeader,
@@ -86,8 +86,6 @@ export default function PreferencesScreen() {
   const styles = createStyles(colors);
 
   const router = useRouter();
-  const authStatus = useAuthStore((state) => state.status);
-  const isGuest = useAuthStore((state) => state.isGuest);
 
   const daysPerWeek = useOnboardingStore((state) => state.daysPerWeek);
   const workoutDuration = useOnboardingStore((state) => state.workoutDuration);

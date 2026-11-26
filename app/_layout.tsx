@@ -11,6 +11,7 @@ import { CURRENT_RELEASE_NOTES, defaultReleaseHighlights } from '../src/lib/rele
 import {
   authorizeAndApplyPwaUpdate,
   canReloadNow,
+  executeAuthorizedPwaReload,
   getAuthorizedPwaReload,
   isActiveWorkoutMounted,
   PwaControllerCheckTarget,
@@ -130,26 +131,11 @@ export default wrapRootLayout(function RootLayout() {
   const lastAppliedSwRef = useRef<{ worker: ServiceWorker; version: string; sha: string } | null>(null);
   const deferredReloadTargetRef = useRef<PwaControllerCheckTarget | null>(null);
 
-  const RELOAD_GUARD_KEY = 'bebig_sw_reloaded_v270';
-
   const executeDeferredReloadIfAuthorized = (target: PwaControllerCheckTarget | null) => {
     if (!target) return false;
     if (!canReloadNow(target)) return false;
     deferredReloadTargetRef.current = null;
-    try {
-      if (typeof sessionStorage !== 'undefined') {
-        if (sessionStorage.getItem(RELOAD_GUARD_KEY)) {
-          return false;
-        }
-        sessionStorage.setItem(RELOAD_GUARD_KEY, '1');
-      }
-      if (typeof window !== 'undefined' && typeof window.location?.reload === 'function') {
-        window.location.reload();
-      }
-      return true;
-    } catch {
-      return false;
-    }
+    return executeAuthorizedPwaReload(target);
   };
 
   useEffect(() => {

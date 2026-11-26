@@ -3,6 +3,18 @@
 - Refined PR typography and history UI.
 - Stabilized Cinematic Splash Screen with BeBig Barbell Crest.
 
+## [Batches 1–3: Continuity Hardening, Dead-Code Cleanup & ESLint Hygiene] — 2026-11-26 — Option A Local Verification
+
+### Changes
+1. **Batch 1 — Active Workout Save Guard, Build-Scoped PWA Reload & Guest Rename Migration**:
+   - Added monotonic `editGenerationRef` + `(submittedSessionId, submittedGeneration)` guards on async save publication in `app/workout/active.tsx`.
+   - Scoped PWA reload receipt keys by target build version/SHA via `getPwaReloadReceiptKey` / `executeAuthorizedPwaReload` (`src/lib/pwa/pwaUpdateCoordinator.ts`, `app/_layout.tsx`).
+   - Added readback-verified `exerciseNameOverrideStorage.mergeOverrides` migration in `src/features/auth/services/guestMigrationService.ts` preserving existing account overrides on conflict.
+2. **Batch 2 — Dead-Code, Duplicate-Asset & Stale-Test Cleanup**:
+   - Deleted 11 unreachable scaffolding/legacy hook files and 2 duplicate brand assets (`assets/android-icon-foreground.png`, `assets/bebig-emblem.png`), cleaned unused exports/options, migrated `tests/Foundation.test.tsx` and `tests/Tier1ReliabilityAndZod.test.tsx`, updated obsolete PWA/concurrency assertions, and updated `RELEASE_STATE.md` to `v2.7.0`.
+3. **Batch 3 — Safe ESLint Cleanup**:
+   - Cleaned unused imports, unused bindings, unused eslint-disable directives, duplicate react-native import order in `ScreenContainer.tsx`, and `array-type` warnings across 16 target files while preserving protected boundaries.
+
 ## [Final v2.7.0 Release Fixes & Verification] — 2026-11-26
 
 ### Changes

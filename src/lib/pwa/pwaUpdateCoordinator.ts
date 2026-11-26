@@ -176,6 +176,67 @@ export function canReloadNow(
   return true;
 }
 
+export function getPwaReloadReceiptKey(
+  controllerOrScriptUrl?: PwaControllerCheckTarget | string | null,
+): string {
+  const target: PwaControllerCheckTarget =
+    typeof controllerOrScriptUrl === 'string'
+      ? { scriptUrl: controllerOrScriptUrl }
+      : controllerOrScriptUrl || {};
+
+  const targetBuildId =
+    target.targetVersion ||
+    buildTargetVersion(target.version, target.sha) ||
+    authorizedReload?.targetVersion ||
+    target.scriptUrl ||
+    authorizedReload?.workerScriptUrl ||
+    'unknown';
+
+  const sanitized = String(targetBuildId).replace(/[^a-zA-Z0-9._-]/g, '_');
+  return `bebig_sw_reloaded_${sanitized}`;
+}
+
+export function executeAuthorizedPwaReload(
+  controllerOrScriptUrl?: PwaControllerCheckTarget | string | null,
+  options?: {
+    storage?: Pick<Storage, 'getItem' | 'setItem'> | null;
+    reloadFn?: (() => void) | null;
+  },
+): boolean {
+  if (!canReloadNow(controllerOrScriptUrl)) {
+    return false;
+  }
+
+  const receiptKey = getPwaReloadReceiptKey(controllerOrScriptUrl);
+  const storage =
+    options && 'storage' in options
+      ? options.storage
+      : typeof sessionStorage !== 'undefined'
+        ? sessionStorage
+        : null;
+  const reloadFn =
+    options && 'reloadFn' in options
+      ? options.reloadFn
+      : typeof window !== 'undefined' && typeof window.location?.reload === 'function'
+        ? () => window.location.reload()
+        : null;
+
+  try {
+    if (storage) {
+      if (storage.getItem(receiptKey)) {
+        return false;
+      }
+      storage.setItem(receiptKey, '1');
+    }
+    if (reloadFn) {
+      reloadFn();
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function isPwaReloadAuthorized(
   controllerOrScriptUrl?: PwaControllerCheckTarget | string | null,
 ): boolean {

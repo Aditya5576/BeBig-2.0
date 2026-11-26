@@ -611,13 +611,13 @@ describe('iOS WebKit Exercise Crash Guard & SPA Stability', () => {
             onSelectExercises={jest.fn()}
             selectedExerciseIds={[]}
             multiSelect={true}
-            recentExercises={customWithPhotos}
+            recentExercises={[customWithPhotos[1]]}
           />
         );
 
         await waitFor(() => {
           expect(rendered.getByTestId('picker-exercise-custom_photo_1')).toBeTruthy();
-          expect(rendered.getByTestId('picker-recent-exercise-custom_photo_1')).toBeTruthy();
+          expect(rendered.getByTestId('picker-recent-exercise-custom_photo_2')).toBeTruthy();
         });
 
         // CRITICAL JETSAM INVARIANT: 0 <Image> host elements decoded in picker rows & recent rows
@@ -631,7 +631,7 @@ describe('iOS WebKit Exercise Crash Guard & SPA Stability', () => {
         };
         expect(countImageNodes(rendered.toJSON())).toBe(0);
         expect(rendered.queryByTestId('picker-thumbnail-custom_photo_1-image')).toBeNull();
-        expect(rendered.queryByTestId('picker-recent-thumbnail-custom_photo_1-image')).toBeNull();
+        expect(rendered.queryByTestId('picker-recent-thumbnail-custom_photo_2-image')).toBeNull();
       } finally {
         getCachedSpy.mockRestore();
         getExercisesSpy.mockRestore();
@@ -865,10 +865,14 @@ describe('iOS WebKit Exercise Crash Guard & SPA Stability', () => {
       }
     });
 
-    it('bumps public/sw.js to bebig-pwa-v2.6.0 with Network-First JS strategy and auto-reload in _layout.tsx', () => {
+    it('uses dynamic build-stamped cache name, Network-First JS strategy, and build-scoped reload guard', () => {
       const swPath = path.resolve(__dirname, '../public/sw.js');
       const swContent = fs.readFileSync(swPath, 'utf8');
-      expect(swContent).toContain("const CACHE_NAME = 'bebig-pwa-v2.6.0';");
+      expect(swContent).toContain("const SW_VERSION = '__BEBIG_SW_VERSION__';");
+      expect(swContent).toContain("const CACHE_VERSION = '__BEBIG_CACHE_VERSION__';");
+      expect(swContent).toContain("const SW_SHA = '__BEBIG_SW_SHA__';");
+      expect(swContent).toContain('`bebig-pwa-v${CACHE_VERSION}`');
+      expect(swContent).toContain("if (key !== CACHE_NAME && key.startsWith('bebig-pwa-'))");
       expect(swContent).toContain("url.pathname.startsWith('/_expo/static/js/')");
       // Network-First for JS bundles: fetch(request) precedes caches.match(request) in JS block
       const jsIdx = swContent.indexOf('if (isJsBundle)');
@@ -878,12 +882,15 @@ describe('iOS WebKit Exercise Crash Guard & SPA Stability', () => {
       expect(fetchIdx).toBeGreaterThan(jsIdx);
       expect(cacheFallbackIdx).toBeGreaterThan(fetchIdx);
 
-      // app/_layout.tsx wires controllerchange + sessionStorage single-reload guard
+      // app/_layout.tsx + pwaUpdateCoordinator wire controllerchange + build-scoped single-reload guard
       const layoutPath = path.resolve(__dirname, '../app/_layout.tsx');
       const layoutContent = fs.readFileSync(layoutPath, 'utf8');
+      const coordinatorPath = path.resolve(__dirname, '../src/lib/pwa/pwaUpdateCoordinator.ts');
+      const coordinatorContent = fs.readFileSync(coordinatorPath, 'utf8');
       expect(layoutContent).toContain('controllerchange');
-      expect(layoutContent).toContain('bebig_sw_reloaded_v243');
-      expect(layoutContent).toContain('reg?.update()');
+      expect(layoutContent).toContain('executeAuthorizedPwaReload');
+      expect(coordinatorContent).toContain('bebig_sw_reloaded_${sanitized}');
+      expect(layoutContent).toContain('reg.update()');
     });
   });
 });

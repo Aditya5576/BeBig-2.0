@@ -39,6 +39,3 @@ export function clampText(value: string | null | undefined, maxLength: number): 
   }
   return cleaned.slice(0, maxLength);
 }
-
-export const RIR_MIN = DOMAIN_LIMITS.RIR_MIN;
-export const RIR_MAX = DOMAIN_LIMITS.RIR_MAX;

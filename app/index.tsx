@@ -3,7 +3,6 @@ import { Redirect } from 'expo-router';
 import { StartupSplash } from '../src/components/ui';
 import { useAuthStore, resolveAuthenticatedUserRoute } from '../src/features/auth';
 import { useOnboardingStore } from '../src/features/onboarding';
-import { profileService } from '../src/features/profile';
 import { guestStorage } from '../src/lib/storage';
 
 export interface IndexProps {

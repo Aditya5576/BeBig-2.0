@@ -1,12 +1,12 @@
 # BeBig 2.0 — Release State
 
-## Production (Live Release — `v2.6.0`)
+## Production (Live Release — `v2.7.0`)
 
 - **URL**: https://be-big-2-0.vercel.app
-- **Live Version**: `v2.6.0` (`package.json`, `app.json`, `/sw.js` `bebig-pwa-v2.6.0`)
-- **Live Release Commit**: `e596a04` (tag `v2.6.0`)
-- **Vercel Production Deployment**: `be-big-2-0-db9zk45ch-aditya-works.vercel.app` (`● Ready`, 4m build, 45 static routes, `/sw.js` serving `bebig-pwa-v2.6.0`)
-- **Previous Verified Releases**: `v2.5.2` (`96849ee`), `v2.5.1` (`2d74de3`), `v2.5.0` (`68c7c38`), `v2.4.4` (`6be31bb`), `v2.4.3` (`2f88fd2`), `v2.4.2` (`0afb94b`)
+- **Live Version**: `v2.7.0` (`package.json`, `app.json`, `/sw.js` `SW_VERSION='2.7.0'`, `CACHE_VERSION='2.7.0-c4b6a1072336b6aacf864425a6ebd8034561c860'`)
+- **Live Release Commit**: `c4b6a10` (`tag: bebig-pwa-v2.7.0`)
+- **Vercel Production Deployment**: `GvyRayNKD3zJ61VWH7Y4VM7od3Gy` (`be-big-2-0`, `success`, 45 static routes, entry bundle `entry-f9f9b7b8c601c3f96dc656a2d83f265a.js`, `/sw.js` build-stamped `bebig-pwa-v2.7.0-c4b6a1072336b6aacf864425a6ebd8034561c860`)
+- **Previous Verified Releases**: `v2.6.1` (`79ff62f`), `v2.6.0` (`e596a04`), `v2.5.2` (`96849ee`), `v2.5.1` (`2d74de3`), `v2.5.0` (`68c7c38`), `v2.4.4` (`6be31bb`), `v2.4.3` (`2f88fd2`), `v2.4.2` (`0afb94b`)
 - **Supabase Production Project**: `BeBig 2.0` (`gkkvxfroxthvbiecramm`, `ap-northeast-1`)
   - Applied SQL Migrations:
     - `20261118120000_atomic_super_admin_guard.sql`
@@ -24,7 +24,16 @@
     - `coach-v2` (paused, untouched at v2)
 - **Deployment Method**: Automatic Vercel deployment on `main` branch push + explicit Supabase CLI deployments
 
-## Key Enhancements in `v2.6.0` (Server-Side Wger Catalog, expo-image Caching, Zod Validation & CI Hardening)
+## Key Enhancements in `v2.7.0` (Treadmill Mode, 0–4 RIR Keypad & PWA/UX Reliability)
+
+- **Special Treadmill Exercise & Standard 0–4 RIR**:
+  - Dedicated `trackingMode: 'treadmill'` (`seed-treadmill`) logging incline %, speed (kph), and duration (MM:SS) alongside strength Weight/Reps/0–4 RIR keypad.
+- **Fuzzy Search, Exercise Rename & 14-Day Recents**:
+  - Gym-synonym/typo-tolerant search (`exerciseSearch.ts`), user-scoped display-name overrides (`exerciseNameOverrideStorage.ts`), and rolling 14-day recent exercises (`recentExercisesService.ts`).
+- **Safe PWA Update Card & Revision-Bound Reload**:
+  - Build-stamped Service Worker (`SW_VERSION='2.7.0'`, `CACHE_VERSION='2.7.0-<sha>'`), `<PwaUpdateCard>` suppressed during active workouts, and active-workout reload guard.
+
+## Previously Shipped Highlights (`v2.6.0` — Server-Side Wger Catalog, expo-image Caching, Zod Validation & CI Hardening)
 
 - **Tier 2 Server-Side Wger Catalog & Ingestion**:
   - `public.wger_exercise_catalog` remote PostgreSQL table with full attribution fields (`license_name`, `license_author`, `attribution_text`).

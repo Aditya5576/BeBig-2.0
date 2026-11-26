@@ -5,8 +5,6 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { ScreenContainer, Text, Button, Card } from '../../src/components/ui';
 import { authService, useAuthStore, resolveAuthenticatedUserRoute } from '../../src/features/auth';
-import { profileService } from '../../src/features/profile';
-import { useOnboardingStore } from '../../src/features/onboarding';
 import { spacing } from '../../src/constants/theme';
 
 export default function AuthCallbackScreen() {

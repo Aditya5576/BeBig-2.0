@@ -5,8 +5,19 @@
  */
 
 import React, { useEffect, useRef } from 'react';
-import { StyleSheet, ViewStyle, StyleProp, Animated, Platform } from 'react-native';
+import {
+  StyleSheet,
+  ViewStyle,
+  StyleProp,
+  Animated,
+  Platform,
+  ScrollView,
+  FlatList,
+  ScrollViewProps,
+  FlatListProps,
+} from 'react-native';
 import { SafeAreaView, Edge, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSegments } from 'expo-router';
 import { spacing } from '../../constants/theme';
 import { useAppTheme } from '../../features/theme';
 
@@ -17,8 +28,6 @@ export interface ScreenContainerProps {
   disableAnimation?: boolean;
   noPaddingHorizontal?: boolean;
 }
-
-import { useSegments } from 'expo-router';
 
 export function useBottomContentInset() {
   let insets = { top: 0, bottom: 0, left: 0, right: 0 };
@@ -42,7 +51,7 @@ export function useBottomContentInset() {
       firstSegment === 'admin' ||
       !firstSegment ||
       (firstSegment === 'workout' && secondSegment === 'active');
-  } catch (e) {
+  } catch {
     // Fallback if useSegments fails (e.g. outside of routing context)
   }
   
@@ -53,8 +62,6 @@ export function useBottomContentInset() {
   // BottomNavBar Base (64) + Safe Area + Workout Button overlap clearance (18) + Visual spacing (16)
   return 64 + Math.max(insets.bottom, 12) + 34; 
 }
-
-import { ScrollView, FlatList, ScrollViewProps, FlatListProps } from 'react-native';
 
 export function ScreenScrollView({ style, contentContainerStyle, ...props }: ScrollViewProps) {
   const bottomInset = useBottomContentInset();

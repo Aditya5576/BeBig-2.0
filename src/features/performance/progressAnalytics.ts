@@ -335,7 +335,7 @@ export function calculateProgressAnalytics(
 
   // Calculate Personal Records count across history
   let totalPRsCount = 0;
-  for (const [_, snaps] of snapshotsMap.entries()) {
+  for (const snaps of snapshotsMap.values()) {
     let bestWeight = 0;
     let bestReps = 0;
     for (const s of snaps) {
@@ -421,7 +421,6 @@ export function calculateProgressAnalytics(
       for (const ex of w.exercises || []) {
         if (!isStrengthExercise(ex)) continue;
         let exSets = 0;
-        let exVol = 0;
         let topWeight = 0;
         let topWeightReps = 0;
 
@@ -431,7 +430,6 @@ export function calculateProgressAnalytics(
             focusSets++;
             const wgt = set.weight || 0;
             const vol = wgt * set.reps;
-            exVol += vol;
             focusVolume += vol;
 
             if (wgt > topWeight || (wgt === topWeight && set.reps > topWeightReps)) {

@@ -108,7 +108,10 @@ describe('Active Workout Concurrency & Serialization', () => {
     const promiseB = workoutStorage.saveActiveWorkout(createMockSession('s1', 'B'), scope);
 
     await expect(promiseA).rejects.toThrow('Simulated failure for A');
-    await expect(promiseB).resolves.toBeUndefined();
+    await expect(promiseB).resolves.toMatchObject({
+      ok: true,
+      workout: expect.objectContaining({ id: 's1', name: 'B' }),
+    });
 
     expect(executionOrder).toEqual(['A', 'B']);
   });

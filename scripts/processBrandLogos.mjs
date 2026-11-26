@@ -2,14 +2,17 @@
  * BeBig 2.0 — Brand Asset Processor
  *
  * Strips baked-in checkerboard backgrounds and corner watermarks from source assets:
- * - `assets/Logo Name.png` -> `assets/bebig-logo-name.png` & `assets/splash-icon.png`
- * - `assets/only logo.png` -> `assets/bebig-only-logo.png` & `assets/bebig-emblem.png`
+ * - Inputs:
+ *   - `assets/Logo Name.png` (emblem + wordmark)
+ *   - `assets/only logo.png` (emblem mark only)
  *
- * Generates calibrated app and PWA icons:
+ * Generates calibrated app, splash, and PWA icons:
+ * - `assets/bebig-logo-name.png`, `assets/splash-icon.png`, `assets/splash-athlete.png`
+ * - `assets/bebig-only-logo.png`
  * - `assets/icon.png` (1024x1024 opaque #090D16 for iOS App Store)
- * - `assets/adaptive-icon.png` & `assets/android-icon-foreground.png` (1024x1024 transparent)
+ * - `assets/adaptive-icon.png` (1024x1024 transparent Android adaptive foreground)
  * - `assets/favicon.png` & `public/favicon.png` (48x48)
- * - `public/icons/icon-192.png` & `public/icons/icon-512.png`
+ * - `public/icons/icon-192.png`, `public/icons/icon-512.png`, `icon-maskable-192.png`, `icon-maskable-512.png`
  * - `public/apple-touch-icon.png` & `public/icons/apple-touch-icon.png` (180x180 on #090D16)
  */
 
@@ -156,12 +159,9 @@ async function main() {
   // 2. Process Only Logo (Emblem Only)
   const onlyLogoResult = await cleanSourceImage(onlyLogoSource, { isOnlyLogo: true });
   const bebigOnlyLogoPath = path.join(ASSETS_DIR, 'bebig-only-logo.png');
-  const bebigEmblemPath = path.join(ASSETS_DIR, 'bebig-emblem.png');
 
   fs.writeFileSync(bebigOnlyLogoPath, onlyLogoResult.buffer);
-  fs.writeFileSync(bebigEmblemPath, onlyLogoResult.buffer);
   console.log(`✓ Wrote ${bebigOnlyLogoPath}`);
-  console.log(`✓ Wrote ${bebigEmblemPath}`);
 
   // 3. Generate App Store Icon: 1024x1024 opaque #090D16 background with centered emblem
   const iconEmblemSize = 640;
@@ -204,8 +204,7 @@ async function main() {
     .toBuffer();
 
   fs.writeFileSync(path.join(ASSETS_DIR, 'adaptive-icon.png'), adaptiveIconBuffer);
-  fs.writeFileSync(path.join(ASSETS_DIR, 'android-icon-foreground.png'), adaptiveIconBuffer);
-  console.log(`✓ Wrote assets/adaptive-icon.png & android-icon-foreground.png`);
+  console.log(`✓ Wrote assets/adaptive-icon.png`);
 
   // 5. Generate Favicons (48x48)
   const faviconBuffer = await sharp(onlyLogoResult.buffer)

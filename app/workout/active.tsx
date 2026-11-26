@@ -72,6 +72,7 @@ export default function ActiveWorkoutScreen() {
     [session?.exercises],
   );
   const sessionRef = useRef<WorkoutSession | null>(null);
+  const editGenerationRef = useRef(0);
   const isMountedRef = useRef(true);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Guard: true once the workout is completed or discarded so that the
@@ -130,6 +131,8 @@ export default function ActiveWorkoutScreen() {
       cancelDebouncedSave();
       const sessionToSave = targetSession || sessionRef.current;
       if (!sessionToSave) return null;
+      const submittedSessionId = sessionToSave.id;
+      const submittedGeneration = editGenerationRef.current;
       try {
         // Discard tombstone check: prevent resurrecting discarded session
         const isDiscarded = await workoutRepository.isSessionDiscarded(sessionToSave.id);
@@ -138,9 +141,15 @@ export default function ActiveWorkoutScreen() {
           return null;
         }
         const saved = await workoutRepository.updateActiveWorkout(sessionToSave, undefined, options);
-        if (saved && !workoutCompletedRef.current && isMountedRef.current) {
+        const isSameCurrentGeneration =
+          sessionRef.current?.id === submittedSessionId &&
+          editGenerationRef.current === submittedGeneration;
+        if (saved && !workoutCompletedRef.current && isMountedRef.current && isSameCurrentGeneration) {
           sessionRef.current = saved;
           setSession(saved);
+        }
+        if (!isSameCurrentGeneration && sessionRef.current) {
+          return sessionRef.current;
         }
         return saved || sessionToSave;
       } catch (err) {
@@ -161,6 +170,7 @@ export default function ActiveWorkoutScreen() {
     ) => {
       const nextRev = Math.max(Number(newSession.revision ?? 0), Number(newSession.version ?? 0)) + 1;
       const sessionWithRev = { ...newSession, revision: nextRev, version: nextRev };
+      editGenerationRef.current += 1;
       setSession(sessionWithRev);
       sessionRef.current = sessionWithRev;
       await flushActiveWorkout(sessionWithRev, options);
@@ -172,6 +182,7 @@ export default function ActiveWorkoutScreen() {
     (newSession: WorkoutSession) => {
       const nextRev = Math.max(Number(newSession.revision ?? 0), Number(newSession.version ?? 0)) + 1;
       const sessionWithRev = { ...newSession, revision: nextRev, version: nextRev };
+      editGenerationRef.current += 1;
       setSession(sessionWithRev);
       sessionRef.current = sessionWithRev;
 
@@ -184,6 +195,8 @@ export default function ActiveWorkoutScreen() {
         debounceTimerRef.current = null;
         const sessionToSave = sessionRef.current;
         if (!sessionToSave || workoutCompletedRef.current) return;
+        const submittedSessionId = sessionToSave.id;
+        const submittedGeneration = editGenerationRef.current;
         try {
           const isDiscarded = await workoutRepository.isSessionDiscarded(sessionToSave.id);
           if (isDiscarded) {
@@ -191,7 +204,10 @@ export default function ActiveWorkoutScreen() {
             return;
           }
           const saved = await workoutRepository.updateActiveWorkout(sessionToSave);
-          if (saved && !workoutCompletedRef.current) {
+          const isSameCurrentGeneration =
+            sessionRef.current?.id === submittedSessionId &&
+            editGenerationRef.current === submittedGeneration;
+          if (saved && !workoutCompletedRef.current && isMountedRef.current && isSameCurrentGeneration) {
             sessionRef.current = saved;
             setSession(saved);
           }
@@ -336,6 +352,7 @@ export default function ActiveWorkoutScreen() {
 
           // If storage contains a different active workout session than currently mounted
           if (!sessionRef.current || sessionRef.current.id !== active.id) {
+            editGenerationRef.current += 1;
             setSession(active);
             sessionRef.current = active;
             workoutCompletedRef.current = false;
@@ -347,6 +364,7 @@ export default function ActiveWorkoutScreen() {
             const inMemoryExercisesCount = currentInMemory.exercises?.length ?? 0;
 
             if (storedSeq > inMemorySeq && storedExercisesCount >= inMemoryExercisesCount) {
+              editGenerationRef.current += 1;
               setSession(active);
               sessionRef.current = active;
             }
@@ -547,6 +565,7 @@ export default function ActiveWorkoutScreen() {
           active = await workoutRepository.updateActiveWorkout(active);
         }
 
+        editGenerationRef.current += 1;
         setSession(active);
         sessionRef.current = active;
       } catch {

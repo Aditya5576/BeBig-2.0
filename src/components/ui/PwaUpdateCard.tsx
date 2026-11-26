@@ -35,7 +35,6 @@ export function PwaUpdateCard({
 
   let hasBottomNav = true;
   try {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
     const segments = useSegments() as string[];
     const first = segments?.[0];
     const second = segments?.[1];

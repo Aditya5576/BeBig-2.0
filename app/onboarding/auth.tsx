@@ -12,7 +12,6 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ScreenContainer, Text, Button, Card, Input, Icon, BrandLogoBadge } from '../../src/components/ui';
 import { useOnboardingStore } from '../../src/features/onboarding';
 import { authService, useAuthStore, resolveAuthenticatedUserRoute, mapAuthError } from '../../src/features/auth';
-import { profileService } from '../../src/features/profile';
 import { supabase, isSupabaseConfigured } from '../../src/lib/supabase';
 import { getAuthRedirectUrl } from '../../src/features/auth/utils/redirect';
 import { spacing, radii } from '../../src/constants/theme';

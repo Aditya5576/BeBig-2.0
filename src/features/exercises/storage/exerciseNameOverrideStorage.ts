@@ -1,4 +1,4 @@
-import { platformStorage } from '../../../lib/storage';
+import { platformStorage } from '../../../lib/storage/platformStorage';
 import { getCurrentUserScope, getUserScopedKey, UserScope } from '../../auth/utils/userScope';
 import { DOMAIN_LIMITS } from '../../../constants/domainLimits';
 import {
@@ -22,7 +22,7 @@ registerExerciseMemoryCacheCleaner(() => {
 function enqueueScopedWrite<T>(namespace: string, task: () => Promise<T>): Promise<T> {
   const previous = writeQueues.get(namespace) ?? Promise.resolve();
   const next = previous.catch(() => undefined).then(task);
-  const tracked = next.finally(() => {
+  const tracked = next.catch(() => undefined).finally(() => {
     if (writeQueues.get(namespace) === tracked) {
       writeQueues.delete(namespace);
     }
@@ -164,6 +164,62 @@ export const exerciseNameOverrideStorage = {
       await platformStorage.removeItem(storageKey);
       memoryByNamespace.delete(namespace);
       hydratedNamespaces.delete(namespace);
+    });
+  },
+
+  /**
+   * Migrates display-name overrides from sourceScope into targetScope, preserving any
+   * existing targetScope overrides on conflict, verifying destination readback from storage.
+   */
+  async mergeOverrides(
+    sourceScope: UserScope,
+    targetScope: UserScope,
+  ): Promise<{ migratedCount: number; totalCount: number }> {
+    const sourceOverrides = await exerciseNameOverrideStorage.ensureHydrated(sourceScope);
+    const sourceEntries = Object.entries(sourceOverrides);
+    if (sourceEntries.length === 0) {
+      return { migratedCount: 0, totalCount: 0 };
+    }
+
+    const targetNamespace = resolveExerciseScopeNamespace(targetScope);
+    const targetStorageKey =
+      getUserScopedKey(BASE_EXERCISE_NAME_OVERRIDES_KEY, targetScope) ||
+      BASE_EXERCISE_NAME_OVERRIDES_KEY;
+
+    return enqueueScopedWrite(targetNamespace, async () => {
+      const targetExisting = await exerciseNameOverrideStorage.ensureHydrated(targetScope);
+      let migratedCount = 0;
+      const merged: Record<string, string> = { ...targetExisting };
+
+      for (const [exerciseId, displayName] of sourceEntries) {
+        if (!(exerciseId in merged)) {
+          merged[exerciseId] = displayName;
+          migratedCount += 1;
+        }
+      }
+
+      if (migratedCount > 0) {
+        await platformStorage.setItem(targetStorageKey, JSON.stringify(merged));
+      }
+
+      // Verify destination readback matches every migrated key before caller clears sourceScope
+      const rawReadback = await platformStorage.getItem(targetStorageKey);
+      const parsedReadback = rawReadback ? sanitizeOverridesMap(JSON.parse(rawReadback)) : {};
+      for (const [exerciseId, expectedName] of Object.entries(merged)) {
+        if (parsedReadback[exerciseId] !== expectedName) {
+          throw new Error(
+            `[ExerciseNameOverrideStorage] Destination readback verification failed for "${exerciseId}".`,
+          );
+        }
+      }
+
+      memoryByNamespace.set(targetNamespace, parsedReadback);
+      hydratedNamespaces.add(targetNamespace);
+
+      return {
+        migratedCount,
+        totalCount: Object.keys(parsedReadback).length,
+      };
     });
   },
 

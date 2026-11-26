@@ -4,11 +4,11 @@
  * Verifies:
  * 1. Zod runtime schema validation for untrusted external Wger API payloads.
  * 2. Zod runtime schema validation for local sync metadata storage hydration.
- * 3. Narrow Zustand selector isolation in useAdminAuth preventing superfluous re-renders.
+ * 3. Narrow Zustand selector isolation & fail-closed gating in useAdminAccess.
  */
 
 import React from 'react';
-import { render, act } from '@testing-library/react-native';
+import { render, act, cleanup, waitFor } from '@testing-library/react-native';
 import {
   mapWgerToExercise,
   wgerItemSchema,
@@ -19,7 +19,7 @@ import {
   getSyncMetadataKey,
 } from '../src/services/sync/syncMetadataStore';
 import { platformStorage } from '../src/lib/storage/platformStorage';
-import { useAdminAuth } from '../src/hooks/useAdminAuth';
+import { useAdminAccess, adminService } from '../src/features/admin';
 import { useAuthStore } from '../src/features/auth';
 import { UserScope } from '../src/features/auth/utils/userScope';
 
@@ -176,16 +176,23 @@ describe('Tier 1 Reliability & Zod Runtime Boundary Validation', () => {
     });
   });
 
-  describe('3. Narrow Zustand Selector Isolation — useAdminAuth', () => {
-    it('returns role: none and isLoading: false for unauthenticated users', async () => {
+  afterEach(async () => {
+    jest.restoreAllMocks();
+    await cleanup();
+  });
+
+  describe('3. Narrow Zustand Selector Isolation — useAdminAccess', () => {
+    it('fails closed with role: none, isAdmin: false, and isLoading: false for unauthenticated and guest users', async () => {
+      const checkSpy = jest.spyOn(adminService, 'checkAdminAccess');
       useAuthStore.setState({
         user: null,
         status: 'unauthenticated',
+        isGuest: false,
       });
 
       let hookOutput: any = null;
       function TestConsumer() {
-        hookOutput = useAdminAuth();
+        hookOutput = useAdminAccess();
         return null;
       }
 
@@ -193,34 +200,56 @@ describe('Tier 1 Reliability & Zod Runtime Boundary Validation', () => {
       expect(hookOutput).not.toBeNull();
       expect(hookOutput.role).toBe('none');
       expect(hookOutput.isLoading).toBe(false);
-      expect(hookOutput.hasAdminAccess).toBe(false);
+      expect(hookOutput.isAdmin).toBe(false);
+      expect(checkSpy).not.toHaveBeenCalled();
+
+      await act(async () => {
+        useAuthStore.setState({
+          user: { id: 'guest_user_1' } as any,
+          status: 'authenticated',
+          isGuest: true,
+        });
+      });
+      await waitFor(() => {
+        expect(hookOutput.isAdmin).toBe(false);
+        expect(hookOutput.isLoading).toBe(false);
+      });
+      expect(checkSpy).not.toHaveBeenCalled();
     });
 
     it('does not trigger re-renders when unrelated auth store properties mutate', async () => {
+      jest.spyOn(adminService, 'checkAdminAccess').mockResolvedValue({
+        isAdmin: true,
+        role: 'admin',
+      });
       useAuthStore.setState({
         user: { id: 'admin_user_stable_1', email: 'admin@bebig.app' } as any,
         status: 'authenticated',
         isGuest: false,
+        error: null,
       });
 
       let renderCount = 0;
       let hookOutput: any = null;
       function TestConsumer() {
         renderCount++;
-        hookOutput = useAdminAuth();
+        hookOutput = useAdminAccess();
         return null;
       }
 
       await render(<TestConsumer />);
-      const initialRenders = renderCount;
+      await waitFor(() => {
+        expect(hookOutput.isLoading).toBe(false);
+        expect(hookOutput.isAdmin).toBe(true);
+      });
+      const rendersAfterResolve = renderCount;
 
-      // Mutate an unrelated property in useAuthStore (isGuest flag change)
+      // Mutate an unrelated property in useAuthStore (error) while status, user.id, and isGuest remain stable
       await act(async () => {
-        useAuthStore.setState({ isGuest: true });
+        useAuthStore.setState({ error: 'unrelated transient warning' });
       });
 
-      // Hook output must not trigger extra re-renders because user.id and status remained stable
-      expect(renderCount).toBe(initialRenders);
+      expect(renderCount).toBe(rendersAfterResolve);
     });
   });
 });
