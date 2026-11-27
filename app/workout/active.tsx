@@ -227,8 +227,13 @@ export default function ActiveWorkoutScreen() {
     };
 
     const handleBackgroundFlush = () => {
+      const current = sessionRef.current;
+      if (!current || workoutCompletedRef.current) return;
       writeSyncEmergencyMirror();
-      void flushActiveWorkout();
+      void flushActiveWorkout(current, {
+        allowExerciseRemoval: true,
+        allowEmptyOverwrites: (current.exercises?.length ?? 0) === 0,
+      });
     };
 
     const subscription = AppState.addEventListener('change', (nextAppState) => {

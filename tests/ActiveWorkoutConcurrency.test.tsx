@@ -115,4 +115,67 @@ describe('Active Workout Concurrency & Serialization', () => {
 
     expect(executionOrder).toEqual(['A', 'B']);
   });
+
+  it('TEST 4: TEMPLATE REMOVAL + BACKGROUND FLUSH - removed template exercises stay deleted after background flush & rehydration', async () => {
+    const store = new Map<string, string>();
+    (platformStorage.setItem as jest.Mock).mockImplementation(async (key: string, value: string) => {
+      store.set(key, value);
+    });
+    (platformStorage as any).getItem = jest.fn(async (key: string) => store.get(key) ?? null);
+    (platformStorage.removeItem as jest.Mock).mockImplementation(async (key: string) => {
+      store.delete(key);
+    });
+
+    const templateSession: WorkoutSession = {
+      ...createMockSession('tpl_session_1', 'Push Day'),
+      sourceTemplateId: 'tpl_push_1',
+      revision: 1,
+      version: 1,
+      exercises: [
+        {
+          exerciseId: 'ex_bench',
+          exerciseName: 'Bench Press',
+          order: 0,
+          actualSets: [{ id: 's1', setNumber: 1, weight: 80, reps: 8, completed: true }],
+        },
+        {
+          exerciseId: 'ex_fly',
+          exerciseName: 'Machine Fly',
+          order: 1,
+          actualSets: [{ id: 's2', setNumber: 1, weight: 40, reps: 12, completed: false }],
+        },
+      ],
+    };
+
+    await workoutStorage.createActiveWorkout(templateSession, scope, { forceDiscardExisting: true });
+
+    // User removes Machine Fly and adds Incline Dumbbell Press, then locks phone (background flush)
+    const mutatedSession: WorkoutSession = {
+      ...templateSession,
+      revision: 2,
+      version: 2,
+      exercises: [
+        templateSession.exercises[0],
+        {
+          exerciseId: 'ex_incline_db',
+          exerciseName: 'Incline Dumbbell Press',
+          order: 1,
+          actualSets: [{ id: 's3', setNumber: 1, weight: 30, reps: 10, completed: true }],
+        },
+      ],
+    };
+
+    const saveRes = await workoutStorage.saveActiveWorkout(mutatedSession, scope, {
+      allowExerciseRemoval: true,
+      allowEmptyOverwrites: false,
+    });
+    expect(saveRes.ok).toBe(true);
+
+    // Rehydrate on wake/resume
+    const rehydrated = await workoutStorage.getActiveWorkout(scope);
+    expect(rehydrated).not.toBeNull();
+    expect(rehydrated?.exercises.map((e) => e.exerciseId)).toEqual(['ex_bench', 'ex_incline_db']);
+    expect(rehydrated?.exercises.some((e) => e.exerciseId === 'ex_fly')).toBe(false);
+    expect(rehydrated?.exercises[1].actualSets[0].weight).toBe(30);
+  });
 });
